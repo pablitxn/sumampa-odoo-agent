@@ -136,6 +136,11 @@
         grid-template-columns: 1fr auto;
         gap: 10px;
       }
+      .send-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
       button {
         border: none;
         border-radius: 999px;
@@ -156,9 +161,21 @@
         opacity: 0.5;
         cursor: not-allowed;
       }
+      .spinner {
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        border: 2px solid rgba(255, 255, 255, 0.35);
+        border-top-color: white;
+        animation: spin 700ms linear infinite;
+      }
       @keyframes rise {
         from { opacity: 0; transform: translateY(6px); }
         to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
       }
       @media (min-width: 640px) {
         body {
@@ -195,7 +212,12 @@
           <textarea id="messageInput" data-copy-placeholder="message_placeholder"></textarea>
           <div class="actions">
             <div></div>
-            <button id="sendBtn" type="button" data-copy-text="send_button"></button>
+            <button id="sendBtn" type="button">
+              <span class="send-wrap">
+                <span id="sendSpinner" class="spinner" hidden></span>
+                <span id="sendLabel" data-copy-text="send_button"></span>
+              </span>
+            </button>
           </div>
         </div>
       </section>
@@ -206,6 +228,8 @@
       const COPY = window.PURCHASE_INVOICE_DEMO_COPY || {};
       const messages = document.getElementById("messages");
       const sendBtn = document.getElementById("sendBtn");
+      const sendSpinner = document.getElementById("sendSpinner");
+      const sendLabel = document.getElementById("sendLabel");
       const resetBtn = document.getElementById("resetBtn");
       const messageInput = document.getElementById("messageInput");
       const invoiceImage = document.getElementById("invoiceImage");
@@ -257,14 +281,23 @@
         statusLine.hidden = !text;
       }
 
-      function buildForm() {
+      function setPendingState(isPending) {
+        sendBtn.disabled = isPending;
+        resetBtn.disabled = isPending;
+        messageInput.disabled = isPending;
+        invoiceImage.disabled = isPending;
+        sendSpinner.hidden = !isPending;
+        sendLabel.textContent = isPending ? t("sending_status") : t("send_button");
+      }
+
+      function buildForm(text, files) {
         const form = new FormData();
-        form.append("message", messageInput.value);
+        form.append("message", text);
         if (sessionId) form.append("session_id", sessionId);
         for (const [key, value] of Object.entries(runtimeContext)) {
           form.append(key, value);
         }
-        for (const file of Array.from(invoiceImage.files || [])) {
+        for (const file of files) {
           form.append("invoice_images", file);
         }
         return form;
@@ -312,14 +345,17 @@
           return;
         }
 
+        const form = buildForm(text, files);
         setStatus("");
         addMessage("user", buildUserTurnText(text, files));
-        sendBtn.disabled = true;
+        messageInput.value = "";
+        invoiceImage.value = "";
+        setPendingState(true);
 
         try {
           const response = await fetch("/api/v1/odoo/purchase-chat/messages", {
             method: "POST",
-            body: buildForm(),
+            body: form,
           });
           const payload = await response.json();
           if (!response.ok) {
@@ -327,13 +363,12 @@
           }
           sessionId = payload.session_id;
           addMessage("agent", payload.assistant_message || "");
-          messageInput.value = "";
-          invoiceImage.value = "";
           setStatus("");
         } catch (error) {
+          messageInput.value = text;
           setStatus(error.message || t("turn_processing_failed"));
         } finally {
-          sendBtn.disabled = false;
+          setPendingState(false);
         }
       }
 
@@ -343,6 +378,7 @@
         messageInput.value = "";
         invoiceImage.value = "";
         setStatus("");
+        setPendingState(false);
       }
 
       sendBtn.addEventListener("click", sendTurn);
