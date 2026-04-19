@@ -481,7 +481,7 @@ class PurchaseChatService:
             await self._reply_response(
                 session_id=session.session_id,
                 stage="awaiting_resolution",
-                event="resolution_updated",
+                event="awaiting_resolution",
                 user_message=message,
                 proposal=proposal,
             ),
@@ -521,6 +521,12 @@ class PurchaseChatService:
         last_apply_result: ApplyPurchaseInvoiceProposalResult | None = None,
         details: dict[str, object] | None = None,
     ) -> PurchaseChatResponse:
+        reply_details = _reply_details(
+            stage=stage,
+            proposal=proposal,
+            last_apply_result=last_apply_result,
+            explicit_details=details,
+        )
         assistant_message = await self._assistant.reply(
             PurchaseChatReplyRequest(
                 stage=stage,
@@ -528,7 +534,7 @@ class PurchaseChatService:
                 user_message=user_message,
                 proposal=proposal,
                 last_apply_result=last_apply_result,
-                details=details or {},
+                details=reply_details,
             )
         )
         return PurchaseChatResponse(
@@ -580,3 +586,40 @@ def _current_last_apply_result(
     session: PurchaseChatSession,
 ) -> ApplyPurchaseInvoiceProposalResult | None:
     return session.price_result or session.stock_result or session.bill_result
+
+
+def _reply_details(
+    *,
+    stage: str,
+    proposal: PurchaseInvoiceProposalResult | None,
+    last_apply_result: ApplyPurchaseInvoiceProposalResult | None,
+    explicit_details: dict[str, object] | None,
+) -> dict[str, object]:
+    pending_line_numbers = (
+        [
+            line.line_number
+            for line in proposal.lines
+            if line.product_resolution.status not in {"exact", "manual"}
+        ]
+        if proposal is not None
+        else []
+    )
+    supplier_resolution_status = (
+        proposal.supplier_resolution.status
+        if proposal is not None and proposal.supplier_resolution is not None
+        else None
+    )
+    details: dict[str, object] = {
+        "has_active_proposal": proposal is not None,
+        "should_not_request_invoice_again": proposal is not None and stage != "awaiting_invoice",
+        "supplier_resolution_status": supplier_resolution_status,
+        "pending_line_numbers": pending_line_numbers,
+        "pending_line_count": len(pending_line_numbers),
+        "odoo_mode": proposal.mode if proposal is not None else None,
+        "last_operation_applied": (
+            last_apply_result.applied if last_apply_result is not None else None
+        ),
+    }
+    if explicit_details:
+        details.update(explicit_details)
+    return details

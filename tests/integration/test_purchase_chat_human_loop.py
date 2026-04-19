@@ -601,6 +601,87 @@ async def test_purchase_chat_resolution_message_focuses_on_lines_when_supplier_i
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_purchase_chat_keeps_active_invoice_context_during_side_question_in_resolution_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    extracted = ExtractedPurchaseInvoiceDocument.model_validate(
+        {
+            "supplier_name": "JULIO M PALACIOS",
+            "supplier_vat": "20179786151",
+            "invoice_number": "0001-00000022",
+            "invoice_date": "2026-04-18",
+            "document_type": "Factura A",
+            "currency": "ARS",
+            "lines": [
+                {
+                    "description": "PRODUCTO SIN MATCH LINEA",
+                    "quantity": 1,
+                    "unit_price_gross": 1210.0,
+                    "vat_rate": 21.0,
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(
+        DryRunOdooClient,
+        "_partners",
+        [
+            {
+                "id": 900,
+                "display_name": "JULIO M PALACIOS",
+                "vat": "20179786151",
+                "email": "julio@example.test",
+            }
+        ],
+    )
+    monkeypatch.setattr(DryRunOdooClient, "_products", [])
+    monkeypatch.setattr(DryRunOdooClient, "_stock_by_product_id", {})
+
+    assistant = _test_assistant()
+    service = PurchaseChatService(
+        odoo=DryRunOdooClient(invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted)),
+        assistant=assistant,
+    )
+
+    uploaded = await service.run_turn(
+        PurchaseChatMessageCommand(
+            message="te paso la factura",
+            attachments=[
+                InvoiceAttachment(
+                    filename="lines-only.jpeg",
+                    content_type="image/jpeg",
+                    content_bytes=b"image-does-not-matter",
+                )
+            ],
+            context=PurchaseChatContext(
+                journal_id=301,
+                markup_percentage=30.0,
+            ),
+        )
+    )
+
+    follow_up = await service.run_turn(
+        PurchaseChatMessageCommand(
+            session_id=uploaded.session_id,
+            message="fijate ahora, tenes conexion a odoo?",
+            context=PurchaseChatContext(
+                journal_id=301,
+                markup_percentage=30.0,
+            ),
+        )
+    )
+
+    assert follow_up.stage == "awaiting_resolution"
+    assert assistant.reply_requests[-1].event == "awaiting_resolution"
+    assert assistant.reply_requests[-1].proposal is not None
+    assert assistant.reply_requests[-1].details["has_active_proposal"] is True
+    assert assistant.reply_requests[-1].details["should_not_request_invoice_again"] is True
+    assert assistant.reply_requests[-1].details["pending_line_count"] == 1
+    assert assistant.reply_requests[-1].details["supplier_resolution_status"] == "exact"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_purchase_chat_snapshots_are_stable_between_turns(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

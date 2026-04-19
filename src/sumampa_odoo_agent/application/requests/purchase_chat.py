@@ -131,6 +131,7 @@ class PurchaseChatReplyRequest(BaseModel):
     ]
     event: Literal[
         "awaiting_invoice",
+        "awaiting_resolution",
         "missing_context",
         "analysis_requires_resolution",
         "analysis_ready_for_invoice_confirmation",
