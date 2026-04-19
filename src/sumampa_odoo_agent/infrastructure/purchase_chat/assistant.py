@@ -7,6 +7,7 @@ import os
 
 from openai import AsyncOpenAI
 
+from sumampa_odoo_agent.application.llm_specs import load_llm_spec
 from sumampa_odoo_agent.application.requests.odoo import (
     ApplyPurchaseInvoiceProposalResult,
     PurchaseInvoiceProposalResult,
@@ -25,11 +26,15 @@ class OpenAIPurchaseChatAssistant:
         model: str,
         api_key_env_var: str,
         base_url: str | None = None,
+        decide_system_spec: str = "purchase_chat/decide_system.md",
+        reply_system_spec: str = "purchase_chat/reply_system.md",
         client: AsyncOpenAI | None = None,
     ) -> None:
         self._model = model
         self._api_key_env_var = api_key_env_var
         self._base_url = base_url
+        self._decide_system_spec = decide_system_spec
+        self._reply_system_spec = reply_system_spec
         self._client = client
 
     async def decide(
@@ -51,15 +56,7 @@ class OpenAIPurchaseChatAssistant:
                     "content": [
                         {
                             "type": "input_text",
-                            "text": (
-                                "Sos el cerebro conversacional de un flujo de compras para Odoo y WhatsApp. "
-                                "Tu trabajo acá es interpretar el mensaje del usuario y devolver sólo una decisión estructurada. "
-                                "No redactes mensajes al usuario en esta etapa. "
-                                "Nunca inventes IDs. Si elegís candidatos o creación de faltantes, usá únicamente los IDs o líneas presentes en el contexto. "
-                                "Usá action=review_resolution para resolver proveedor/productos o aceptar la resolución actual. "
-                                "Usá confirm_invoice/confirm_stock/confirm_prices sólo cuando la intención del usuario sea inequívoca. "
-                                "Si el usuario sólo conversa, pregunta algo general o no alcanza para ejecutar nada, devolvé reply_only o await_invoice según corresponda."
-                            ),
+                            "text": load_llm_spec(self._decide_system_spec),
                         }
                     ],
                 },
@@ -105,14 +102,7 @@ class OpenAIPurchaseChatAssistant:
                     "content": [
                         {
                             "type": "input_text",
-                            "text": (
-                                "Sos un asistente conversacional de compras para Odoo y WhatsApp. "
-                                "Tu trabajo acá es redactar el próximo mensaje al usuario en español rioplatense, breve y operativo. "
-                                "Usá sólo los hechos presentes en el contexto estructurado. "
-                                "No inventes resultados, IDs ni warnings. "
-                                "Si faltan resoluciones, pedí sólo lo mínimo necesario. "
-                                "Si una operación se aplicó o fue bloqueada, resumí eso con claridad."
-                            ),
+                            "text": load_llm_spec(self._reply_system_spec),
                         }
                     ],
                 },

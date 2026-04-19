@@ -36,12 +36,8 @@ class AgentSettings(BaseModel):
     model: str = "gpt-5.4-mini"
     api_key_env_var: str = "OPENAI_API_KEY"
     base_url: str | None = None
-    system_prompt: str = Field(
-        default=(
-            "Sos un asistente operativo de Sumampa para Odoo. "
-            "Priorizas seguridad operacional, pasos concretos y validaciones previas."
-        )
-    )
+    system_prompt_spec: str = "agent/system.md"
+    system_prompt_override: str | None = None
 
 
 class InvoiceExtractionSettings(BaseModel):
@@ -50,6 +46,7 @@ class InvoiceExtractionSettings(BaseModel):
     api_key_env_var: str = "OPENAI_API_KEY"
     base_url: str | None = None
     max_output_tokens: int = 3000
+    prompt_spec: str = "invoice_extraction/purchase_invoice.md"
 
 
 class PurchaseChatSettings(BaseModel):
@@ -57,6 +54,8 @@ class PurchaseChatSettings(BaseModel):
     model: str = "gpt-5.4"
     api_key_env_var: str = "OPENAI_API_KEY"
     base_url: str | None = None
+    decide_system_spec: str = "purchase_chat/decide_system.md"
+    reply_system_spec: str = "purchase_chat/reply_system.md"
 
 
 class SessionStoreSettings(BaseModel):
@@ -120,9 +119,39 @@ def _apply_env_overrides(settings: AppSettings) -> AppSettings:
     if purchase_chat_model:
         updates.setdefault("purchase_chat", {})["model"] = purchase_chat_model
 
+    purchase_chat_decide_system_spec = os.environ.get(
+        "ORCHID_PURCHASE_CHAT_DECIDE_SYSTEM_SPEC"
+    )
+    if purchase_chat_decide_system_spec:
+        updates.setdefault("purchase_chat", {})["decide_system_spec"] = (
+            purchase_chat_decide_system_spec
+        )
+
+    purchase_chat_reply_system_spec = os.environ.get(
+        "ORCHID_PURCHASE_CHAT_REPLY_SYSTEM_SPEC"
+    )
+    if purchase_chat_reply_system_spec:
+        updates.setdefault("purchase_chat", {})["reply_system_spec"] = (
+            purchase_chat_reply_system_spec
+        )
+
     agent_mode = os.environ.get("ORCHID_AGENT_MODE")
     if agent_mode:
         updates.setdefault("agent", {})["mode"] = agent_mode
+
+    agent_system_prompt_spec = os.environ.get("ORCHID_AGENT_SYSTEM_PROMPT_SPEC")
+    if agent_system_prompt_spec:
+        updates.setdefault("agent", {})["system_prompt_spec"] = agent_system_prompt_spec
+
+    agent_system_prompt_override = os.environ.get("ORCHID_AGENT_SYSTEM_PROMPT_OVERRIDE")
+    if agent_system_prompt_override:
+        updates.setdefault("agent", {})["system_prompt_override"] = (
+            agent_system_prompt_override
+        )
+
+    invoice_prompt_spec = os.environ.get("ORCHID_INVOICE_EXTRACTION_PROMPT_SPEC")
+    if invoice_prompt_spec:
+        updates.setdefault("invoice_extraction", {})["prompt_spec"] = invoice_prompt_spec
 
     odoo_mode = os.environ.get("ORCHID_ODOO_MODE")
     if odoo_mode:

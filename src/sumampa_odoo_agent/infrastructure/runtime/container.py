@@ -117,6 +117,7 @@ async def build_container(
             api_key_env_var=settings.invoice_extraction.api_key_env_var,
             base_url=settings.invoice_extraction.base_url,
             max_output_tokens=settings.invoice_extraction.max_output_tokens,
+            prompt_spec=settings.invoice_extraction.prompt_spec,
         )
     else:
         raise RuntimeError(
@@ -127,6 +128,8 @@ async def build_container(
             model=settings.purchase_chat.model,
             api_key_env_var=settings.purchase_chat.api_key_env_var,
             base_url=settings.purchase_chat.base_url,
+            decide_system_spec=settings.purchase_chat.decide_system_spec,
+            reply_system_spec=settings.purchase_chat.reply_system_spec,
         )
     else:
         raise RuntimeError(f"Unsupported purchase chat mode: {settings.purchase_chat.mode}")
@@ -187,7 +190,8 @@ async def build_container(
         if settings.agent.mode == "openai":
             agent_backend = MicrosoftAgentFrameworkOpenAIService(
                 model=settings.agent.model,
-                system_prompt=settings.agent.system_prompt,
+                system_prompt=settings.agent.system_prompt_override,
+                system_prompt_spec=settings.agent.system_prompt_spec,
                 api_key_env_var=settings.agent.api_key_env_var,
                 odoo=odoo_backend,
                 base_url=settings.agent.base_url,

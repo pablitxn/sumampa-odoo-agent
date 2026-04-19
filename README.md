@@ -25,6 +25,7 @@ POC inicial para operar Odoo con una app Python basada en FastAPI, límites hexa
 
 - `src/sumampa_odoo_agent/domain` contratos y puertos
 - `src/sumampa_odoo_agent/application` requests, handlers y buses
+- `src/sumampa_odoo_agent/application/llm_specs` prompts/schemas textuales versionados para agent, extracción y chat
 - `src/sumampa_odoo_agent/infrastructure` runtime, Odoo backend y agent backend
 - `src/sumampa_odoo_agent/adapters` HTTP y MCP
 
@@ -135,7 +136,8 @@ ORCHID_ENV=integration uv run sumampa_odoo_agent --reload
 - `config/appsettings.integration.json` apunta a un Odoo 19 local por `jsonrpc`, usa extracción/chat reales, activa persistencia híbrida de sesiones y deja el módulo agent deshabilitado por defecto
 - `config/appsettings.production.json` cambia a `jsonrpc` para Odoo, `openai` para el agent, `openai` para extracción de facturas, `openai` para el planner conversacional y persistencia híbrida de sesiones
 - `.env.example` documenta la variable mínima para el provider
-- Overrides útiles por entorno: `ORCHID_INVOICE_EXTRACTION_MODE`, `ORCHID_PURCHASE_CHAT_MODE`, `ORCHID_AGENT_MODE`, `ORCHID_ODOO_MODE`, `ORCHID_ODOO_BASE_URL`, `ORCHID_ODOO_DATABASE`, `ORCHID_ODOO_USERNAME`, `ORCHID_ODOO_PASSWORD`, `ORCHID_PURCHASE_RESOLUTION_MEMORY_PATH`, `ORCHID_SESSION_STORE_MODE`, `ORCHID_SESSION_STORE_POSTGRES_DSN`, `ORCHID_SESSION_STORE_REDIS_URL`, `ORCHID_SESSION_STORE_REDIS_TTL_SECONDS`
+- Las instrucciones de sistema y prompts versionados viven en `src/sumampa_odoo_agent/application/llm_specs/`
+- Overrides útiles por entorno: `ORCHID_INVOICE_EXTRACTION_MODE`, `ORCHID_INVOICE_EXTRACTION_PROMPT_SPEC`, `ORCHID_PURCHASE_CHAT_MODE`, `ORCHID_PURCHASE_CHAT_DECIDE_SYSTEM_SPEC`, `ORCHID_PURCHASE_CHAT_REPLY_SYSTEM_SPEC`, `ORCHID_AGENT_MODE`, `ORCHID_AGENT_SYSTEM_PROMPT_SPEC`, `ORCHID_AGENT_SYSTEM_PROMPT_OVERRIDE`, `ORCHID_ODOO_MODE`, `ORCHID_ODOO_BASE_URL`, `ORCHID_ODOO_DATABASE`, `ORCHID_ODOO_USERNAME`, `ORCHID_ODOO_PASSWORD`, `ORCHID_PURCHASE_RESOLUTION_MEMORY_PATH`, `ORCHID_SESSION_STORE_MODE`, `ORCHID_SESSION_STORE_POSTGRES_DSN`, `ORCHID_SESSION_STORE_REDIS_URL`, `ORCHID_SESSION_STORE_REDIS_TTL_SECONDS`
 
 ## Persistencia de sesiones
 

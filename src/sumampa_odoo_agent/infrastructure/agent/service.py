@@ -6,6 +6,7 @@ import os
 from importlib.metadata import version as package_version
 from typing import Annotated, Any
 
+from sumampa_odoo_agent.application.llm_specs import load_llm_spec
 from sumampa_odoo_agent.domain.ports.odoo_port import OdooPort
 from sumampa_odoo_agent.domain.ports.session_store_port import SessionStorePort
 
@@ -35,14 +36,15 @@ class MicrosoftAgentFrameworkOpenAIService:
         self,
         *,
         model: str,
-        system_prompt: str,
+        system_prompt: str | None = None,
+        system_prompt_spec: str = "agent/system.md",
         api_key_env_var: str,
         odoo: OdooPort | None = None,
         base_url: str | None = None,
         session_store: SessionStorePort,
     ) -> None:
         self._model = model
-        self._system_prompt = system_prompt
+        self._system_prompt = system_prompt or load_llm_spec(system_prompt_spec)
         self._api_key_env_var = api_key_env_var
         self._base_url = base_url
         self._odoo = odoo
