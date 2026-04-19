@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -13,6 +15,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 INTEGRATION_ROOT = Path(__file__).parent
 PURCHASE_INVOICE_FIXTURES_DIR = INTEGRATION_ROOT / "fixtures" / "purchase_invoices"
 PURCHASE_INVOICE_SNAPSHOTS_DIR = INTEGRATION_ROOT / "fixtures" / "purchase_invoice_extractions"
+SESSION_STORE_POSTGRES_DSN = os.environ.get("SESSION_STORE_POSTGRES_DSN", "")
+SESSION_STORE_REDIS_URL = "redis://127.0.0.1:6379/0"
 
 
 def _load_api_key_from_project_env() -> str | None:
@@ -71,3 +75,46 @@ def odoo19_env() -> dict[str, str]:
         env=env,
     )
     return env
+
+
+def _wait_for_tcp(host: str, port: int, *, timeout_seconds: float = 30.0) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    last_error: OSError | None = None
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=1.0):
+                return
+        except OSError as exc:
+            last_error = exc
+            time.sleep(0.5)
+    raise RuntimeError(
+        f"No se pudo conectar a {host}:{port} dentro de {timeout_seconds}s"
+    ) from last_error
+
+
+@pytest.fixture(scope="session")
+def session_store_env() -> dict[str, str]:
+    if os.environ.get("RUN_SESSION_STORE_INTEGRATION") != "1":
+        pytest.skip("Seteá RUN_SESSION_STORE_INTEGRATION=1 para correr integración Postgres+Redis.")
+
+    docker_info = subprocess.run(
+        ["docker", "info"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if docker_info.returncode != 0:
+        pytest.skip("Docker no está disponible para los tests de integración del session store.")
+
+    subprocess.run(
+        ["docker", "compose", "up", "-d", "postgres", "redis"],
+        cwd=PROJECT_ROOT,
+        check=True,
+    )
+    _wait_for_tcp("127.0.0.1", 5432)
+    _wait_for_tcp("127.0.0.1", 6379)
+
+    return {
+        "postgres_dsn": SESSION_STORE_POSTGRES_DSN,
+        "redis_url": SESSION_STORE_REDIS_URL,
+    }

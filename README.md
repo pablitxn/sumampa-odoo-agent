@@ -152,6 +152,13 @@ docker compose up -d postgres redis
 ORCHID_SESSION_STORE_MODE=hybrid uv run sumampa_odoo_agent --reload
 ```
 
+Para validar el store híbrido contra Postgres+Redis reales:
+
+```bash
+cd ~/repos/sumampa-odoo-agent
+RUN_SESSION_STORE_INTEGRATION=1 PYTHONPATH=src uv run pytest -q tests/integration/db
+```
+
 ## Capacidades actuales
 
 - Buscar partners por nombre, email o CUIT
