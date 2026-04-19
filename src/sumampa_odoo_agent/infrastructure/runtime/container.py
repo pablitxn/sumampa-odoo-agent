@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from sumampa_odoo_agent.application.bus import CommandBus, QueryBus
@@ -53,10 +54,14 @@ from sumampa_odoo_agent.domain.ports.invoice_extractor_port import PurchaseInvoi
 from sumampa_odoo_agent.domain.ports.purchase_chat_assistant_port import (
     PurchaseChatAssistantPort,
 )
+from sumampa_odoo_agent.domain.ports.session_store_port import SessionStorePort
 from sumampa_odoo_agent.infrastructure.agent.service import (
     DisabledAgentService,
     MicrosoftAgentFrameworkOpenAIService,
 )
+from sumampa_odoo_agent.infrastructure.db import HybridSessionStore, InMemorySessionStore
+from sumampa_odoo_agent.infrastructure.db.postgres import PostgresSessionStore
+from sumampa_odoo_agent.infrastructure.db.redis import RedisSessionCache
 from sumampa_odoo_agent.infrastructure.extraction.service import (
     OpenAIPurchaseInvoiceExtractor,
 )
@@ -81,6 +86,11 @@ class ApplicationContainer:
     module_manifest: dict[str, ModuleMetadata]
     command_bus: CommandBus
     query_bus: QueryBus
+    closers: tuple[Callable[[], Awaitable[None]], ...] = ()
+
+    async def aclose(self) -> None:
+        for closer in reversed(self.closers):
+            await closer()
 
 
 async def build_container(
@@ -97,6 +107,9 @@ async def build_container(
     invoice_extractor: PurchaseInvoiceExtractorPort
     purchase_chat_assistant: PurchaseChatAssistantPort
     resolution_memory = PurchaseResolutionMemoryStore.from_env()
+    closers: list[Callable[[], Awaitable[None]]] = []
+    session_store = await _build_session_store(settings)
+    closers.append(session_store.aclose)
 
     if settings.invoice_extraction.mode == "openai":
         invoice_extractor = OpenAIPurchaseInvoiceExtractor(
@@ -149,10 +162,14 @@ async def build_container(
         )
         command_bus.register(
             PurchaseChatMessageCommand,
-            PurchaseChatMessageCommandHandler(
-                PurchaseChatService(odoo_backend, purchase_chat_assistant)
-            ),
-        )
+                PurchaseChatMessageCommandHandler(
+                    PurchaseChatService(
+                        odoo_backend,
+                        purchase_chat_assistant,
+                        session_store=session_store,
+                    )
+                ),
+            )
         query_bus.register(SearchPartnersQuery, SearchPartnersQueryHandler(odoo_backend))
         query_bus.register(SearchProductsQuery, SearchProductsQueryHandler(odoo_backend))
         query_bus.register(SearchJournalsQuery, SearchJournalsQueryHandler(odoo_backend))
@@ -174,6 +191,7 @@ async def build_container(
                 api_key_env_var=settings.agent.api_key_env_var,
                 odoo=odoo_backend,
                 base_url=settings.agent.base_url,
+                session_store=session_store,
             )
         elif settings.agent.mode == "disabled":
             agent_backend = DisabledAgentService()
@@ -187,4 +205,22 @@ async def build_container(
         module_manifest=module_manifest,
         command_bus=command_bus,
         query_bus=query_bus,
+        closers=tuple(closers),
     )
+
+
+async def _build_session_store(settings: AppSettings) -> SessionStorePort:
+    mode = settings.session_store.mode
+    if mode == "memory":
+        return InMemorySessionStore()
+    if mode == "hybrid":
+        primary = PostgresSessionStore(dsn=settings.session_store.postgres_dsn)
+        cache = RedisSessionCache(
+            url=settings.session_store.redis_url,
+            key_prefix=settings.session_store.redis_key_prefix,
+            ttl_seconds=settings.session_store.redis_ttl_seconds,
+        )
+        store = HybridSessionStore(primary=primary, cache=cache)
+        await store.ensure_schema()
+        return store
+    raise RuntimeError(f"Unsupported session store mode: {mode}")

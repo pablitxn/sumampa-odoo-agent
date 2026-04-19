@@ -1,1 +1,5 @@
-"""Legacy namespace kept empty on purpose."""
+"""Redis adapters."""
+
+from .session_cache import RedisSessionCache
+
+__all__ = ["RedisSessionCache"]

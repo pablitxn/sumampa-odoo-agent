@@ -7,6 +7,9 @@ from importlib.metadata import version as package_version
 from typing import Annotated, Any
 
 from sumampa_odoo_agent.domain.ports.odoo_port import OdooPort
+from sumampa_odoo_agent.domain.ports.session_store_port import SessionStorePort
+
+AGENT_SESSION_NAMESPACE = "agent"
 
 
 class DisabledAgentService:
@@ -36,13 +39,14 @@ class MicrosoftAgentFrameworkOpenAIService:
         api_key_env_var: str,
         odoo: OdooPort | None = None,
         base_url: str | None = None,
+        session_store: SessionStorePort,
     ) -> None:
         self._model = model
         self._system_prompt = system_prompt
         self._api_key_env_var = api_key_env_var
         self._base_url = base_url
         self._odoo = odoo
-        self._sessions: dict[str, Any] = {}
+        self._session_store = session_store
 
     async def run(
         self,
@@ -70,20 +74,31 @@ class MicrosoftAgentFrameworkOpenAIService:
         if not isinstance(agent, Agent):
             raise RuntimeError("Failed to create Microsoft Agent Framework agent")
 
-        session = None
-        if session_id:
-            session = self._sessions.get(session_id)
-            if session is None:
-                session = agent.create_session(session_id=session_id)
-                self._sessions[session_id] = session
+        session = await self._load_or_create_session(agent=agent, session_id=session_id)
 
         message = prompt if not context else f"{prompt}\n\nContexto JSON:\n{context!r}"
         response = await agent.run(message, session=session)
+        await self._session_store.save(
+            namespace=AGENT_SESSION_NAMESPACE,
+            session_id=session.session_id,
+            payload=session.to_dict(),
+        )
         return {
             "mode": "microsoft-agent-framework-openai",
-            "session_id": getattr(session, "session_id", session_id),
+            "session_id": session.session_id,
             "text": getattr(response, "text", str(response)),
         }
+
+    async def _load_or_create_session(self, *, agent: Any, session_id: str | None) -> Any:
+        AgentSession = _load_agent_session_type()
+        if session_id:
+            payload = await self._session_store.load(
+                namespace=AGENT_SESSION_NAMESPACE,
+                session_id=session_id,
+            )
+            if payload is not None:
+                return AgentSession.from_dict(payload)
+        return agent.create_session(session_id=session_id)
 
 
 def _load_openai_chat_client() -> type[Any]:
@@ -102,6 +117,17 @@ def _load_agent_type() -> type[Any]:
     from agent_framework._agents import Agent
 
     return Agent
+
+
+def _load_agent_session_type() -> type[Any]:
+    import agent_framework
+
+    if not hasattr(agent_framework, "__version__"):
+        agent_framework.__version__ = package_version("agent-framework")
+
+    from agent_framework import AgentSession
+
+    return AgentSession
 
 
 def _tool_names(*, include_odoo: bool) -> list[str]:

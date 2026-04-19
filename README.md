@@ -132,10 +132,25 @@ ORCHID_ENV=integration uv run sumampa_odoo_agent --reload
 ## Configuración
 
 - `config/appsettings.development.json` usa `dry-run`, extracción OpenAI y deja el módulo agent deshabilitado por defecto
-- `config/appsettings.integration.json` apunta a un Odoo 19 local por `jsonrpc`, usa extracción/chat reales y deja el módulo agent deshabilitado por defecto
-- `config/appsettings.production.json` cambia a `jsonrpc` para Odoo, `openai` para el agent, `openai` para extracción de facturas y `openai` para el planner conversacional
+- `config/appsettings.integration.json` apunta a un Odoo 19 local por `jsonrpc`, usa extracción/chat reales, activa persistencia híbrida de sesiones y deja el módulo agent deshabilitado por defecto
+- `config/appsettings.production.json` cambia a `jsonrpc` para Odoo, `openai` para el agent, `openai` para extracción de facturas, `openai` para el planner conversacional y persistencia híbrida de sesiones
 - `.env.example` documenta la variable mínima para el provider
-- Overrides útiles por entorno: `ORCHID_INVOICE_EXTRACTION_MODE`, `ORCHID_PURCHASE_CHAT_MODE`, `ORCHID_AGENT_MODE`, `ORCHID_ODOO_MODE`, `ORCHID_ODOO_BASE_URL`, `ORCHID_ODOO_DATABASE`, `ORCHID_ODOO_USERNAME`, `ORCHID_ODOO_PASSWORD`, `ORCHID_PURCHASE_RESOLUTION_MEMORY_PATH`
+- Overrides útiles por entorno: `ORCHID_INVOICE_EXTRACTION_MODE`, `ORCHID_PURCHASE_CHAT_MODE`, `ORCHID_AGENT_MODE`, `ORCHID_ODOO_MODE`, `ORCHID_ODOO_BASE_URL`, `ORCHID_ODOO_DATABASE`, `ORCHID_ODOO_USERNAME`, `ORCHID_ODOO_PASSWORD`, `ORCHID_PURCHASE_RESOLUTION_MEMORY_PATH`, `ORCHID_SESSION_STORE_MODE`, `ORCHID_SESSION_STORE_POSTGRES_DSN`, `ORCHID_SESSION_STORE_REDIS_URL`, `ORCHID_SESSION_STORE_REDIS_TTL_SECONDS`
+
+## Persistencia de sesiones
+
+- `purchase_chat` persiste `stage`, contexto, propuesta y resultados parciales.
+- El módulo `agent` persiste el `AgentSession` serializado del Microsoft Agent Framework.
+- En modo `hybrid`, Postgres es la fuente de verdad y Redis funciona como cache `write-through`.
+- Si reiniciás la API con el mismo `session_id`, el flujo puede retomar donde había quedado.
+- En `development`, el default sigue siendo `memory` para no exigir Postgres/Redis siempre.
+- Para probar persistencia híbrida localmente, levantá primero:
+
+```bash
+cd ~/repos/sumampa-odoo-agent
+docker compose up -d postgres redis
+ORCHID_SESSION_STORE_MODE=hybrid uv run sumampa_odoo_agent --reload
+```
 
 ## Capacidades actuales
 

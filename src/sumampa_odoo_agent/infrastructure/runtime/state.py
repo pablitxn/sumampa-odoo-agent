@@ -80,6 +80,7 @@ async def shutdown_runtime() -> None:
     _RuntimeHolder.state = None
     if state is None:
         return
+    await state.container.aclose()
 
 
 def get_runtime_state() -> RuntimeState:

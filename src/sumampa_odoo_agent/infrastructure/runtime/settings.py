@@ -59,6 +59,14 @@ class PurchaseChatSettings(BaseModel):
     base_url: str | None = None
 
 
+class SessionStoreSettings(BaseModel):
+    mode: str = "memory"
+    postgres_dsn: str = ''
+    redis_url: str = "redis://127.0.0.1:6379/0"
+    redis_ttl_seconds: int = Field(default=86400, ge=60)
+    redis_key_prefix: str = "sumampa:session"
+
+
 class AppSettings(BaseModel):
     service: ServiceSettings
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
@@ -66,6 +74,7 @@ class AppSettings(BaseModel):
     agent: AgentSettings = Field(default_factory=AgentSettings)
     invoice_extraction: InvoiceExtractionSettings = Field(default_factory=InvoiceExtractionSettings)
     purchase_chat: PurchaseChatSettings = Field(default_factory=PurchaseChatSettings)
+    session_store: SessionStoreSettings = Field(default_factory=SessionStoreSettings)
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -138,6 +147,26 @@ def _apply_env_overrides(settings: AppSettings) -> AppSettings:
     odoo_timeout_seconds = os.environ.get("ORCHID_ODOO_TIMEOUT_SECONDS")
     if odoo_timeout_seconds:
         updates.setdefault("odoo", {})["timeout_seconds"] = float(odoo_timeout_seconds)
+
+    session_store_mode = os.environ.get("ORCHID_SESSION_STORE_MODE")
+    if session_store_mode:
+        updates.setdefault("session_store", {})["mode"] = session_store_mode
+
+    session_store_postgres_dsn = os.environ.get("ORCHID_SESSION_STORE_POSTGRES_DSN")
+    if session_store_postgres_dsn:
+        updates.setdefault("session_store", {})["postgres_dsn"] = session_store_postgres_dsn
+
+    session_store_redis_url = os.environ.get("ORCHID_SESSION_STORE_REDIS_URL")
+    if session_store_redis_url:
+        updates.setdefault("session_store", {})["redis_url"] = session_store_redis_url
+
+    session_store_redis_ttl = os.environ.get("ORCHID_SESSION_STORE_REDIS_TTL_SECONDS")
+    if session_store_redis_ttl:
+        updates.setdefault("session_store", {})["redis_ttl_seconds"] = int(session_store_redis_ttl)
+
+    session_store_redis_prefix = os.environ.get("ORCHID_SESSION_STORE_REDIS_KEY_PREFIX")
+    if session_store_redis_prefix:
+        updates.setdefault("session_store", {})["redis_key_prefix"] = session_store_redis_prefix
 
     if not updates:
         return settings
