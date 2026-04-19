@@ -1,0 +1,23 @@
+{
+  "supplier_requires_human_confirmation": "El proveedor requiere confirmacion humana antes de cargar la factura.",
+  "supplier_missing_match": "No se encontro un proveedor claro en Odoo para esta factura.",
+  "line_requires_product_confirmation": "La linea {line_number} requiere confirmar producto en Odoo: '{description}'.",
+  "line_missing_match": "No se encontro match claro en Odoo para '{description}'.",
+  "assumption_sale_price": "La propuesta comercial calcula el nuevo precio sobre costo neto sin IVA.",
+  "assumption_openai_extraction": "La extraccion principal puede correr con GPT-5.4 usando salida estructurada.",
+  "assumption_extractor_decoupled": "La interfaz del extractor queda desacoplada para reemplazarla mas adelante por OCR barato si conviene.",
+  "assumption_resolution_against_odoo": "La resolucion de proveedor y productos se hace contra Odoo con candidatos y confirmacion humana.",
+  "extracted_subtotal_mismatch": "El subtotal neto extraido no coincide con la suma de lineas.",
+  "extracted_vat_mismatch": "El IVA total extraido no coincide con la suma de lineas.",
+  "extracted_total_mismatch": "El total extraido no coincide con la suma de lineas.",
+  "blocker_missing_supplier_id": "Falta supplier_id para crear la factura de compra en Odoo.",
+  "blocker_missing_journal_id": "Falta journal_id para crear la factura de compra en Odoo.",
+  "blocker_unresolved_lines_vendor_bill": "Hay lineas sin producto resuelto o marcadas como nuevas; no puedo cargar la factura hasta resolverlas.",
+  "blocker_missing_stock_locations": "Faltan picking_type_id/location_id/location_dest_id para actualizar stock.",
+  "blocker_unresolved_lines_stock_receipt": "Hay lineas sin producto resuelto o marcadas como nuevas; no puedo generar la recepción de stock.",
+  "warning_unresolved_lines_product_updates": "Hay lineas sin producto resuelto; esas lineas no van a actualizar costo/precio.",
+  "warning_new_products_require_guided_creation": "Hay productos marcados como nuevos. Hoy eso sigue requiriendo alta guiada antes de aplicar cambios.",
+  "warning_new_supplier_require_guided_creation": "El proveedor quedó marcado como nuevo. Hoy eso sigue requiriendo alta guiada antes de aplicar cambios.",
+  "duplicate_vendor_bill_exact": "Ya existe una factura de compra similar en Odoo ({document_name}, fecha {invoice_date}, total {amount_total}).",
+  "duplicate_vendor_bill_by_reference": "Ya existe una factura de compra similar en Odoo ({document_name}). Coincide en proveedor y número/referencia, así que no la cargo hasta revisar la diferencia de total/fecha."
+}

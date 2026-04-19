@@ -6,6 +6,7 @@ from typing import Any, ClassVar
 
 import httpx
 
+from sumampa_odoo_agent.application.message_specs import render_message
 from sumampa_odoo_agent.application.requests.odoo import (
     AnalyzePurchaseInvoiceCommand,
     ApplyPurchaseInvoiceProposalCommand,
@@ -262,7 +263,9 @@ class DryRunOdooClient:
             missing.append("lines")
         warnings = []
         if query.move_type != "out_invoice":
-            warnings.append(f"move_type actual: {query.move_type}")
+            warnings.append(
+                _odoo_validation_message("move_type_actual", move_type=query.move_type)
+            )
         return OdooValidationResult(
             mode="dry-run",
             operation="invoice",
@@ -290,7 +293,12 @@ class DryRunOdooClient:
 
         warnings: list[str] = []
         if query.wsfe_service and query.wsfe_service.casefold() != "wsfev1":
-            warnings.append(f"wsfe_service actual: {query.wsfe_service}")
+            warnings.append(
+                _odoo_validation_message(
+                    "wsfe_service_actual",
+                    wsfe_service=query.wsfe_service,
+                )
+            )
 
         expected_letter = _expected_ar_document_letter(
             emitter_taxpayer_type=query.emitter_taxpayer_type,
@@ -298,14 +306,23 @@ class DryRunOdooClient:
         )
         if expected_letter and query.document_letter and query.document_letter.upper() != expected_letter:
             warnings.append(
-                f"Letra esperada {expected_letter}, pero vino {query.document_letter.upper()}."
+                _odoo_validation_message(
+                    "document_letter_mismatch",
+                    expected_letter=expected_letter,
+                    document_letter=query.document_letter.upper(),
+                )
             )
         if expected_letter and not query.document_letter:
-            warnings.append(f"Falta definir letra de comprobante; sugerida: {expected_letter}.")
+            warnings.append(
+                _odoo_validation_message(
+                    "document_letter_missing",
+                    expected_letter=expected_letter,
+                )
+            )
         if not query.partner_vat and not query.partner_doc_type:
-            warnings.append("Falta CUIT o tipo de documento del receptor.")
+            warnings.append(_odoo_validation_message("partner_tax_id_or_doc_type_missing"))
         if not query.email_to:
-            warnings.append("No hay email destino para el envio posterior de la factura.")
+            warnings.append(_odoo_validation_message("email_to_missing"))
 
         return OdooValidationResult(
             mode="dry-run",
@@ -625,17 +642,17 @@ class OdooJsonRpcClient:
         for row in rows:
             amount_total = float(row.get("amount_total") or 0.0)
             if abs(amount_total - expected_total) <= 1.0:
-                return (
-                    "Ya existe una factura de compra similar en Odoo "
-                    f"({row.get('name') or row.get('ref') or 'sin nombre'}, "
-                    f"fecha {row.get('invoice_date') or 'sin fecha'}, total {amount_total:.2f})."
+                return _purchase_invoice_message(
+                    "duplicate_vendor_bill_exact",
+                    document_name=row.get("name") or row.get("ref") or "sin nombre",
+                    invoice_date=row.get("invoice_date") or "sin fecha",
+                    amount_total=f"{amount_total:.2f}",
                 )
 
         first = rows[0]
-        return (
-            "Ya existe una factura de compra similar en Odoo "
-            f"({first.get('name') or first.get('ref') or 'sin nombre'}). "
-            "Coincide en proveedor y número/referencia, así que no la cargo hasta revisar la diferencia de total/fecha."
+        return _purchase_invoice_message(
+            "duplicate_vendor_bill_by_reference",
+            document_name=first.get("name") or first.get("ref") or "sin nombre",
         )
 
     async def search_partners(self, query: SearchPartnersQuery) -> OdooSearchResult:
@@ -984,15 +1001,29 @@ class OdooJsonRpcClient:
         )
         warnings: list[str] = []
         if query.wsfe_service and query.wsfe_service.casefold() != "wsfev1":
-            warnings.append(f"wsfe_service actual: {query.wsfe_service}")
+            warnings.append(
+                _odoo_validation_message(
+                    "wsfe_service_actual",
+                    wsfe_service=query.wsfe_service,
+                )
+            )
         if expected_letter and query.document_letter and query.document_letter.upper() != expected_letter:
             warnings.append(
-                f"Letra esperada {expected_letter}, pero vino {query.document_letter.upper()}."
+                _odoo_validation_message(
+                    "document_letter_mismatch",
+                    expected_letter=expected_letter,
+                    document_letter=query.document_letter.upper(),
+                )
             )
         if expected_letter and not query.document_letter:
-            warnings.append(f"Falta definir letra de comprobante; sugerida: {expected_letter}.")
+            warnings.append(
+                _odoo_validation_message(
+                    "document_letter_missing",
+                    expected_letter=expected_letter,
+                )
+            )
         if not query.partner_vat and not query.partner_doc_type:
-            warnings.append("Falta CUIT o tipo de documento del receptor.")
+            warnings.append(_odoo_validation_message("partner_tax_id_or_doc_type_missing"))
 
         return OdooValidationResult(
             mode="jsonrpc",
@@ -1253,25 +1284,21 @@ def _build_purchase_invoice_proposal(
 def _purchase_apply_blockers(command: ApplyPurchaseInvoiceProposalCommand) -> list[str]:
     blockers: list[str] = []
     if command.create_vendor_bill and not command.supplier_id:
-        blockers.append("Falta supplier_id para crear la factura de compra en Odoo.")
+        blockers.append(_purchase_invoice_message("blocker_missing_supplier_id"))
     if command.create_vendor_bill and not command.journal_id:
-        blockers.append("Falta journal_id para crear la factura de compra en Odoo.")
+        blockers.append(_purchase_invoice_message("blocker_missing_journal_id"))
     if command.create_vendor_bill and any(
         line.product_match.product_id is None for line in command.proposal.lines
     ):
-        blockers.append(
-            "Hay lineas sin producto resuelto o marcadas como nuevas; no puedo cargar la factura hasta resolverlas."
-        )
+        blockers.append(_purchase_invoice_message("blocker_unresolved_lines_vendor_bill"))
     if command.create_stock_receipt and not (
         command.picking_type_id and command.location_id and command.location_dest_id
     ):
-        blockers.append("Faltan picking_type_id/location_id/location_dest_id para actualizar stock.")
+        blockers.append(_purchase_invoice_message("blocker_missing_stock_locations"))
     if command.create_stock_receipt and any(
         line.product_match.product_id is None for line in command.proposal.lines
     ):
-        blockers.append(
-            "Hay lineas sin producto resuelto o marcadas como nuevas; no puedo generar la recepción de stock."
-        )
+        blockers.append(_purchase_invoice_message("blocker_unresolved_lines_stock_receipt"))
     return blockers
 
 
@@ -1281,21 +1308,27 @@ def _purchase_apply_warnings(command: ApplyPurchaseInvoiceProposalCommand) -> li
     if command.update_products and any(
         line.product_match.product_id is None for line in command.proposal.lines
     ):
-        warnings.append(
-            "Hay lineas sin producto resuelto; esas lineas no van a actualizar costo/precio."
-        )
+        warnings.append(_purchase_invoice_message("warning_unresolved_lines_product_updates"))
     if any(line.product_resolution.status == "new" for line in command.proposal.lines):
         warnings.append(
-            "Hay productos marcados como nuevos. Hoy eso sigue requiriendo alta guiada antes de aplicar cambios."
+            _purchase_invoice_message("warning_new_products_require_guided_creation")
         )
     if (
         command.proposal.supplier_resolution is not None
         and command.proposal.supplier_resolution.status == "new"
     ):
         warnings.append(
-            "El proveedor quedó marcado como nuevo. Hoy eso sigue requiriendo alta guiada antes de aplicar cambios."
+            _purchase_invoice_message("warning_new_supplier_require_guided_creation")
         )
     return warnings
+
+
+def _purchase_invoice_message(key: str, **context: object) -> str:
+    return render_message("purchase_invoice.json", key, **context)
+
+
+def _odoo_validation_message(key: str, **context: object) -> str:
+    return render_message("odoo_validation.json", key, **context)
 
 
 def _purchase_apply_operations(command: ApplyPurchaseInvoiceProposalCommand) -> list[OdooMutationPlan]:

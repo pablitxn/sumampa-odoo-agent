@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from sumampa_odoo_agent.application.message_specs import render_message
 from sumampa_odoo_agent.application.requests.odoo import (
     PurchaseInvoiceProductCandidate,
     PurchaseInvoiceProductMatch,
@@ -49,9 +50,11 @@ class ResolvePurchaseInvoiceEntitiesUseCase:
         )
 
         if supplier_resolution.status == "candidate":
-            warnings.append("El proveedor requiere confirmacion humana antes de cargar la factura.")
+            warnings.append(
+                _purchase_invoice_message("supplier_requires_human_confirmation")
+            )
         if supplier_resolution.status == "missing":
-            warnings.append("No se encontro un proveedor claro en Odoo para esta factura.")
+            warnings.append(_purchase_invoice_message("supplier_missing_match"))
 
         for line_number, raw_line in enumerate(request.extracted.lines, start=1):
             quantity = float(raw_line.quantity)
@@ -72,10 +75,19 @@ class ResolvePurchaseInvoiceEntitiesUseCase:
 
             if product_resolution.status == "candidate":
                 warnings.append(
-                    f"La linea {line_number} requiere confirmar producto en Odoo: '{raw_line.description}'."
+                    _purchase_invoice_message(
+                        "line_requires_product_confirmation",
+                        line_number=line_number,
+                        description=str(raw_line.description),
+                    )
                 )
             if product_resolution.status == "missing":
-                warnings.append(f"No se encontro match claro en Odoo para '{raw_line.description}'.")
+                warnings.append(
+                    _purchase_invoice_message(
+                        "line_missing_match",
+                        description=str(raw_line.description),
+                    )
+                )
 
             stock_after_update = None
             if product_match.product_id is not None and product_match.current_stock is not None:
@@ -128,10 +140,10 @@ class ResolvePurchaseInvoiceEntitiesUseCase:
             needs_user_resolution=needs_user_resolution,
             warnings=warnings + proposal_total_warnings(request.extracted, untaxed, vat_total),
             assumptions=[
-                "La propuesta comercial calcula el nuevo precio sobre costo neto sin IVA.",
-                "La extraccion principal puede correr con GPT-5.4 usando salida estructurada.",
-                "La interfaz del extractor queda desacoplada para reemplazarla mas adelante por OCR barato si conviene.",
-                "La resolucion de proveedor y productos se hace contra Odoo con candidatos y confirmacion humana.",
+                _purchase_invoice_message("assumption_sale_price"),
+                _purchase_invoice_message("assumption_openai_extraction"),
+                _purchase_invoice_message("assumption_extractor_decoupled"),
+                _purchase_invoice_message("assumption_resolution_against_odoo"),
             ],
         )
 
@@ -214,12 +226,16 @@ def proposal_total_warnings(extracted: Any, untaxed: float, vat_total: float) ->
     if extracted_totals is None:
         return warnings
     if abs(extracted_totals.untaxed - round_money(untaxed)) > 1.0:
-        warnings.append("El subtotal neto extraido no coincide con la suma de lineas.")
+        warnings.append(_purchase_invoice_message("extracted_subtotal_mismatch"))
     if abs(extracted_totals.vat - round_money(vat_total)) > 1.0:
-        warnings.append("El IVA total extraido no coincide con la suma de lineas.")
+        warnings.append(_purchase_invoice_message("extracted_vat_mismatch"))
     if abs(extracted_totals.total - round_money(untaxed + vat_total)) > 1.0:
-        warnings.append("El total extraido no coincide con la suma de lineas.")
+        warnings.append(_purchase_invoice_message("extracted_total_mismatch"))
     return warnings
+
+
+def _purchase_invoice_message(key: str, **context: object) -> str:
+    return render_message("purchase_invoice.json", key, **context)
 
 
 def _resolve_supplier(

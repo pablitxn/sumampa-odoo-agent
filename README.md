@@ -26,6 +26,7 @@ POC inicial para operar Odoo con una app Python basada en FastAPI, límites hexa
 - `src/sumampa_odoo_agent/domain` contratos y puertos
 - `src/sumampa_odoo_agent/application` requests, handlers y buses
 - `src/sumampa_odoo_agent/application/llm_specs` prompts/schemas textuales versionados para agent, extracción y chat
+- `src/sumampa_odoo_agent/application/message_specs` copy canónico versionado para warnings, blockers y mensajes de dominio no-LLM
 - `src/sumampa_odoo_agent/infrastructure` runtime, Odoo backend y agent backend
 - `src/sumampa_odoo_agent/adapters` HTTP y MCP
 
