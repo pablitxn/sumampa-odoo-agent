@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sumampa Compras Chat</title>
+    <style>
+      :root {
+        --bg: #f6f0e7;
+        --panel: rgba(255, 251, 245, 0.92);
+        --ink: #201913;
+        --muted: #72675d;
+        --line: #dccfbe;
+        --accent: #bf5b30;
+        --accent-dark: #8d3d1d;
+        --bubble-user: #2c241e;
+        --bubble-agent: #fffaf3;
+        --ok: #2e7047;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 0% 0%, #ffd7bf 0, transparent 28rem),
+          linear-gradient(180deg, #efe4d6, var(--bg));
+      }
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 24px;
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        gap: 18px;
+      }
+      .sidebar, .chat {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        box-shadow: 0 14px 48px rgba(60, 36, 14, 0.08);
+        backdrop-filter: blur(8px);
+      }
+      .sidebar { padding: 22px; }
+      .chat {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        min-height: 84vh;
+      }
+      h1, h2 { margin: 0 0 10px; font-family: "IBM Plex Serif", Georgia, serif; }
+      .lede { color: var(--muted); line-height: 1.45; margin-bottom: 18px; }
+      label {
+        display: block;
+        font-size: 0.9rem;
+        color: var(--muted);
+        margin-bottom: 12px;
+      }
+      input, textarea, button {
+        width: 100%;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        padding: 12px 14px;
+        font: inherit;
+        color: var(--ink);
+        background: #fffdfa;
+      }
+      input[type="file"] { padding: 10px; }
+      textarea {
+        resize: vertical;
+        min-height: 84px;
+      }
+      button {
+        border: none;
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+        background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+      }
+      .ghost-button {
+        background: #fff7ee;
+        color: var(--accent-dark);
+        border: 1px solid var(--line);
+      }
+      button:disabled { opacity: 0.45; cursor: not-allowed; }
+      .head {
+        padding: 18px 22px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      .messages {
+        padding: 18px 22px;
+        overflow: auto;
+        display: grid;
+        gap: 14px;
+        align-content: start;
+      }
+      .composer {
+        border-top: 1px solid var(--line);
+        padding: 16px 18px 18px;
+        display: grid;
+        gap: 12px;
+      }
+      .msg {
+        max-width: 88%;
+        padding: 14px 16px;
+        border-radius: 18px;
+        line-height: 1.45;
+        animation: rise 180ms ease;
+      }
+      .msg.user {
+        margin-left: auto;
+        color: #fffaf1;
+        background: var(--bubble-user);
+      }
+      .msg.agent {
+        background: var(--bubble-agent);
+        border: 1px solid var(--line);
+      }
+      .meta {
+        font-size: 0.8rem;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .pill {
+        display: inline-flex;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: #f0d2c1;
+        color: #6d2f11;
+        font-size: 0.78rem;
+        margin-right: 6px;
+        margin-bottom: 6px;
+      }
+      .ok { color: var(--ok); }
+      .proposal {
+        margin-top: 10px;
+        border-top: 1px dashed var(--line);
+        padding-top: 10px;
+      }
+      .proposal-line {
+        padding: 8px 0;
+        border-top: 1px dashed #eadfd2;
+      }
+      .toolbar {
+        display: grid;
+        grid-template-columns: 1fr 180px;
+        gap: 10px;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 0.8rem;
+        background: #211a15;
+        color: #f9ecde;
+        padding: 12px;
+        border-radius: 14px;
+        overflow: auto;
+      }
+      @keyframes rise {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @media (max-width: 960px) {
+        .shell { grid-template-columns: 1fr; }
+        .chat { min-height: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <h1>Compras conversacional</h1>
+        <p class="lede">
+          Podés hablar natural, subir una factura, validar extracción y recién después confirmar
+          carga en Odoo y actualización de precios.
+        </p>
+        <label>Proveedor esperado
+          <input id="supplierName" type="text" placeholder="Acme Proveedor SA" />
+        </label>
+        <label>CUIT esperado
+          <input id="supplierVat" type="text" placeholder="30-12345678-9" />
+        </label>
+        <label>Markup %
+          <input id="markupPercentage" type="number" min="0" step="0.5" value="30" />
+        </label>
+        <label>Supplier ID Odoo
+          <input id="supplierId" type="number" min="1" placeholder="102" />
+        </label>
+        <label>Journal ID compras
+          <input id="journalId" type="number" min="1" placeholder="301" />
+        </label>
+        <label>Picking type ID
+          <input id="pickingTypeId" type="number" min="1" placeholder="502" />
+        </label>
+        <label>Location origen ID
+          <input id="locationId" type="number" min="1" placeholder="603" />
+        </label>
+        <label>Location destino ID
+          <input id="locationDestId" type="number" min="1" placeholder="601" />
+        </label>
+        <label>
+          <input id="createStockReceipt" type="checkbox" />
+          Incluir también el paso de recepción de stock
+        </label>
+        <button id="loadDefaultsBtn" type="button" class="ghost-button">Cargar defaults locales</button>
+      </aside>
+
+      <section class="chat">
+        <div class="head">
+          <h2>Chat de compras</h2>
+          <div class="meta" id="stageLabel">Sesión nueva</div>
+        </div>
+        <div class="messages" id="messages"></div>
+        <div class="composer">
+          <label>Adjuntar factura
+            <input id="invoiceImage" type="file" accept="image/*,.pdf" />
+          </label>
+          <textarea id="messageInput" placeholder="Ejemplo: hola, te paso una factura nueva / sí, cargala / sí, actualizá precios"></textarea>
+          <div class="toolbar">
+            <button id="sendBtn">Enviar</button>
+            <button id="resetBtn" type="button">Nueva sesión</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const messages = document.getElementById("messages");
+      const stageLabel = document.getElementById("stageLabel");
+      const sendBtn = document.getElementById("sendBtn");
+      const resetBtn = document.getElementById("resetBtn");
+      const loadDefaultsBtn = document.getElementById("loadDefaultsBtn");
+      const messageInput = document.getElementById("messageInput");
+      const invoiceImage = document.getElementById("invoiceImage");
+      let sessionId = null;
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function addMessage(role, html) {
+        const node = document.createElement("article");
+        node.className = `msg ${role}`;
+        node.innerHTML = html;
+        messages.appendChild(node);
+        messages.scrollTop = messages.scrollHeight;
+      }
+
+      function renderProposal(proposal) {
+        if (!proposal) return "";
+        const warnings = proposal.warnings.length
+          ? proposal.warnings.map((warning) => `<span class="pill">${escapeHtml(warning)}</span>`).join("")
+          : `<span class="pill ok">Sin alertas fuertes</span>`;
+        const lines = proposal.lines.map((line) => `
+          <div class="proposal-line">
+            <strong>${escapeHtml(line.description)}</strong><br />
+            qty ${line.quantity} | IVA ${line.vat_rate}% | costo neto $${line.unit_price_net} | venta sugerida $${line.suggested_sale_price}<br />
+            match: ${escapeHtml(line.product_match.display_name || "sin match")} (${Math.round((line.product_match.confidence || 0) * 100)}%)
+          </div>
+        `).join("");
+        return `
+          <div class="proposal">
+            <div><strong>${escapeHtml(proposal.document_type || "Factura")}</strong> ${escapeHtml(proposal.invoice_number || "s/n")} | ${escapeHtml(proposal.invoice_date || "sin fecha")}</div>
+            <div>Proveedor: ${escapeHtml(proposal.supplier_name || "sin proveedor")} | Total $${proposal.totals.total}</div>
+            <div style="margin-top:8px">${warnings}</div>
+            ${lines}
+          </div>
+        `;
+      }
+
+      function renderApplyResult(result) {
+        if (!result) return "";
+        return `
+          <details style="margin-top:10px">
+            <summary>Operaciones Odoo</summary>
+            <pre>${escapeHtml(JSON.stringify(result, null, 2))}</pre>
+          </details>
+        `;
+      }
+
+      function appendAgentResponse(payload) {
+        stageLabel.textContent = `Etapa: ${payload.stage} | sesión ${payload.session_id}`;
+        const html = `
+          <div class="meta">Agente</div>
+          ${escapeHtml(payload.assistant_message).replaceAll("\n", "<br />")}
+          ${renderProposal(payload.proposal)}
+          ${renderApplyResult(payload.last_apply_result)}
+        `;
+        addMessage("agent", html);
+      }
+
+      function buildForm() {
+        const form = new FormData();
+        form.append("message", messageInput.value);
+        if (sessionId) form.append("session_id", sessionId);
+        form.append("supplier_name", document.getElementById("supplierName").value);
+        form.append("supplier_vat", document.getElementById("supplierVat").value);
+        form.append("markup_percentage", document.getElementById("markupPercentage").value || "30");
+        form.append("supplier_id", document.getElementById("supplierId").value);
+        form.append("journal_id", document.getElementById("journalId").value);
+        form.append("picking_type_id", document.getElementById("pickingTypeId").value);
+        form.append("location_id", document.getElementById("locationId").value);
+        form.append("location_dest_id", document.getElementById("locationDestId").value);
+        form.append("create_stock_receipt", document.getElementById("createStockReceipt").checked ? "true" : "false");
+        if (invoiceImage.files[0]) form.append("invoice_image", invoiceImage.files[0]);
+        return form;
+      }
+
+      async function fetchFirstHit(path, query) {
+        const response = await fetch(`${path}?query=${encodeURIComponent(query)}&limit=1`);
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.message || `Falló lookup ${path}`);
+        if (!payload.hits?.length) throw new Error(`Sin resultados para ${query} en ${path}`);
+        return payload.hits[0];
+      }
+
+      async function loadLocalDefaults() {
+        loadDefaultsBtn.disabled = true;
+        try {
+          const [journal, pickingType, vendorLocation, stockLocation] = await Promise.all([
+            fetchFirstHit("/api/v1/odoo/journals/search", "purchase"),
+            fetchFirstHit("/api/v1/odoo/picking-types/search", "incoming"),
+            fetchFirstHit("/api/v1/odoo/locations/search", "Vendors"),
+            fetchFirstHit("/api/v1/odoo/locations/search", "Stock"),
+          ]);
+          document.getElementById("journalId").value = journal.id;
+          document.getElementById("pickingTypeId").value = pickingType.id;
+          document.getElementById("locationId").value = vendorLocation.id;
+          document.getElementById("locationDestId").value = stockLocation.id;
+          addMessage("agent", `
+            <div class="meta">Sistema</div>
+            Cargué defaults del backend activo.<br />
+            journal ${journal.id}, picking ${pickingType.id}, origen ${vendorLocation.id}, destino ${stockLocation.id}.
+          `);
+        } catch (error) {
+          addMessage("agent", `<strong>Error cargando defaults</strong><br />${escapeHtml(error.message)}`);
+        } finally {
+          loadDefaultsBtn.disabled = false;
+        }
+      }
+
+      async function sendTurn() {
+        const text = messageInput.value.trim();
+        const file = invoiceImage.files[0];
+        if (!text && !file) {
+          addMessage("agent", "<strong>Falta input.</strong><br />Mandame un mensaje o adjuntá una factura.");
+          return;
+        }
+        addMessage("user", `
+          <div class="meta">Vos</div>
+          ${text ? `${escapeHtml(text).replaceAll("\n", "<br />")}` : ""}
+          ${file ? `<div class="pill">${escapeHtml(file.name)}</div>` : ""}
+        `);
+        sendBtn.disabled = true;
+        try {
+          const response = await fetch("/api/v1/odoo/purchase-chat/messages", {
+            method: "POST",
+            body: buildForm(),
+          });
+          const payload = await response.json();
+          if (!response.ok) throw new Error(payload.message || "No se pudo procesar el turno.");
+          sessionId = payload.session_id;
+          appendAgentResponse(payload);
+          messageInput.value = "";
+          invoiceImage.value = "";
+        } catch (error) {
+          addMessage("agent", `<strong>Error</strong><br />${escapeHtml(error.message)}`);
+        } finally {
+          sendBtn.disabled = false;
+        }
+      }
+
+      sendBtn.addEventListener("click", sendTurn);
+      messageInput.addEventListener("keydown", (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") sendTurn();
+      });
+      resetBtn.addEventListener("click", () => {
+        sessionId = null;
+        messages.innerHTML = "";
+        stageLabel.textContent = "Sesión nueva";
+        messageInput.value = "";
+        invoiceImage.value = "";
+        addMessage("agent", `
+          <div class="meta">Agente</div>
+          Arranquemos cuando quieras. Subime una factura y te voy guiando paso a paso.
+        `);
+      });
+      loadDefaultsBtn.addEventListener("click", loadLocalDefaults);
+
+      addMessage("agent", `
+        <div class="meta">Agente</div>
+        Arranquemos cuando quieras. Subime una factura y te voy guiando paso a paso.
+      `);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "modules": {
+    "core": {
+      "required": true,
+      "description": "Base module with health and capability endpoints.",
+      "depends_on": [],
+      "commons_extras": [],
+      "api_endpoints": [
+        "GET /health",
+        "GET /api/v1/capabilities"
+      ],
+      "mcp_tools": [],
+      "prune_paths": []
+    },
+    "odoo": {
+      "required": false,
+      "description": "High-value Odoo write operations for products, invoices and deliveries.",
+      "depends_on": [
+        "core"
+      ],
+      "commons_extras": [],
+      "api_endpoints": [
+        "GET /api/v1/odoo/partners/search",
+        "GET /api/v1/odoo/products/search",
+        "GET /api/v1/odoo/journals/search",
+        "GET /api/v1/odoo/taxes/search",
+        "GET /api/v1/odoo/picking-types/search",
+        "GET /api/v1/odoo/locations/search",
+        "GET /api/v1/odoo/invoices/validate",
+        "GET /api/v1/odoo/invoices/validate-argentina",
+        "GET /api/v1/odoo/deliveries/validate",
+        "POST /api/v1/odoo/purchase-invoices/proposals",
+        "POST /api/v1/odoo/purchase-invoices/apply",
+        "POST /api/v1/odoo/products",
+        "POST /api/v1/odoo/invoices",
+        "POST /api/v1/odoo/deliveries"
+      ],
+      "mcp_tools": [
+        "odoo_search_partners",
+        "odoo_search_products",
+        "odoo_search_journals",
+        "odoo_search_taxes",
+        "odoo_search_picking_types",
+        "odoo_search_locations",
+        "odoo_validate_invoice_draft",
+        "odoo_validate_argentina_invoice_draft",
+        "odoo_validate_delivery_draft",
+        "odoo_create_product",
+        "odoo_create_invoice",
+        "odoo_create_delivery"
+      ],
+      "prune_paths": []
+    },
+    "agent": {
+      "required": false,
+      "description": "Microsoft Agent Framework based operator assistant.",
+      "depends_on": [
+        "core"
+      ],
+      "commons_extras": [],
+      "api_endpoints": [
+        "POST /api/v1/agent/runs"
+      ],
+      "mcp_tools": [
+        "agent_run"
+      ],
+      "prune_paths": []
+    }
+  }
+}

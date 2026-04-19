@@ -1,0 +1,82 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sumampa-odoo-agent"
+version = "0.1.0"
+description = "FastAPI + MCP scaffold for Odoo operations using strict hexagonal boundaries"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "pydantic>=2.0",
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.32.0",
+  "python-multipart>=0.0.9",
+  "mcp>=1.0.0",
+  "httpx>=0.28.0",
+  "openai>=2.31.0",
+  "agent-framework>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.24",
+  "pytest-cov>=6.0",
+  "ruff>=0.8.0",
+  "mypy>=1.13.0",
+  "httpx>=0.28.0",
+]
+
+[project.scripts]
+sumampa_odoo_agent = "sumampa_odoo_agent.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sumampa_odoo_agent"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "ASYNC", "RUF"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["src"]
+markers = [
+  "unit: unit tests",
+  "integration: integration tests requiring external services",
+  "e2e: end-to-end tests",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_configs = true
+show_error_codes = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+  "agent_framework.*",
+  "mcp.*",
+  "uvicorn.*",
+]
+ignore_missing_imports = true

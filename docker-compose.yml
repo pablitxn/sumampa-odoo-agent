@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: sumampa-odoo-agent-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sumampa_odoo_agent}
+      POSTGRES_USER: ${POSTGRES_USER:-orchid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    ports:
+    - 127.0.0.1:5432:5432
+    volumes:
+    - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U ${POSTGRES_USER:-orchid} -d ${POSTGRES_DB:-sumampa_odoo_agent}
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    entrypoint:
+    - /bin/sh
+    - -ec
+    - test -n "$${POSTGRES_PASSWORD}" || { echo "Set private database credentials"
+      >&2; exit 1; }; exec docker-entrypoint.sh "$@"
+    - --
+    command:
+    - postgres
+  redis:
+    image: redis:7
+    container_name: sumampa-odoo-agent-redis
+    ports:
+    - 127.0.0.1:6379:6379
+    command:
+    - redis-server
+    - --appendonly
+    - 'yes'
+    volumes:
+    - redis_data:/data
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - ping
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  postgres_data: null
+  redis_data: null

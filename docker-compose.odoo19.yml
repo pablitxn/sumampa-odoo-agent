@@ -1,0 +1,49 @@
+services:
+  odoo-postgres:
+    image: postgres:16
+    container_name: sumampa-odoo-agent-odoo19-postgres
+    environment:
+      POSTGRES_DB: ${ODOO_POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${ODOO_POSTGRES_USER:-odoo}
+      POSTGRES_PASSWORD: ${ODOO_DB_PASSWORD:-}
+    ports:
+    - 127.0.0.1:5433:5432
+    volumes:
+    - odoo19_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U ${ODOO_POSTGRES_USER:-odoo} -d ${ODOO_POSTGRES_DB:-postgres}
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    entrypoint:
+    - /bin/sh
+    - -ec
+    - test -n "$${POSTGRES_PASSWORD}" || { echo "Set private database credentials"
+      >&2; exit 1; }; exec docker-entrypoint.sh "$@"
+    - --
+    command:
+    - postgres
+  odoo19:
+    image: odoo:19.0
+    container_name: sumampa-odoo-agent-odoo19
+    depends_on:
+      odoo-postgres:
+        condition: service_healthy
+    environment:
+      HOST: odoo-postgres
+      PORT: 5432
+      USER: ${ODOO_POSTGRES_USER:-odoo}
+      PASSWORD: ${ODOO_DB_PASSWORD:-}
+    ports:
+    - 127.0.0.1:8069:8069
+    volumes:
+    - ./config/odoo/odoo.integration.conf:/etc/odoo/odoo.conf:ro
+    - odoo19_data:/var/lib/odoo
+    command:
+    - odoo
+    - --config=/etc/odoo/odoo.conf
+volumes:
+  odoo19_postgres_data: null
+  odoo19_data: null
