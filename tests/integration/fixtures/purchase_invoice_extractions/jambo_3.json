@@ -1,0 +1,43 @@
+{
+  "supplier_name": "JAMBO S.A.",
+  "supplier_vat": "30-64419307-8",
+  "invoice_number": "00011-00066932",
+  "invoice_date": "15/04/26",
+  "document_type": "RECIBO",
+  "currency": "ARS",
+  "subtotal_untaxed": null,
+  "total_vat": null,
+  "total_amount": 2000000.0,
+  "lines": [
+    {
+      "description": "54353",
+      "quantity": 1.0,
+      "unit_price_gross": 434296.05,
+      "vat_rate": 2.0
+    },
+    {
+      "description": "54602",
+      "quantity": 1.0,
+      "unit_price_gross": 217535.0,
+      "vat_rate": 0.0
+    },
+    {
+      "description": "54676",
+      "quantity": 1.0,
+      "unit_price_gross": 55800.05,
+      "vat_rate": 0.0
+    },
+    {
+      "description": "54854",
+      "quantity": 1.0,
+      "unit_price_gross": 362217.88,
+      "vat_rate": 0.0
+    },
+    {
+      "description": "55053",
+      "quantity": 1.0,
+      "unit_price_gross": 927126.0,
+      "vat_rate": 0.0
+    }
+  ]
+}

@@ -1,0 +1,133 @@
+{
+  "supplier_name": "JULIO M. PALACIOS",
+  "supplier_vat": "20-17978615-1",
+  "invoice_number": "0005-00425424",
+  "invoice_date": "13/4/2026",
+  "document_type": "Factura A",
+  "currency": "ARS",
+  "subtotal_untaxed": 198080.33,
+  "total_vat": 47539.29,
+  "total_amount": 245619.62,
+  "lines": [
+    {
+      "description": "PURE DE TOMATE ARCOR X 520 GR.",
+      "quantity": 36.0,
+      "unit_price_gross": 650.23,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "MENTA CRISTAL X 810 GR.",
+      "quantity": 1.0,
+      "unit_price_gross": 7795.79,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "MENTA YERBA CRISTAL X 405 GR.",
+      "quantity": 1.0,
+      "unit_price_gross": 3897.89,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "GATITOS X 485 GRS.",
+      "quantity": 1.0,
+      "unit_price_gross": 843.7,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "RODAJAS SURTIDAS x 1 kg.",
+      "quantity": 1.0,
+      "unit_price_gross": 8457.74,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "BASTON VIENA ARCOR X 470 GR.",
+      "quantity": 1.0,
+      "unit_price_gross": 2832.2,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "PAPA CRUNCH X 20 UNID.",
+      "quantity": 1.0,
+      "unit_price_gross": 11947.98,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "CROULITAS MAS GRANDES x 169 gr.",
+      "quantity": 10.0,
+      "unit_price_gross": 1037.65,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "CROLLITAS 3x100 gr OFERTA",
+      "quantity": 22.0,
+      "unit_price_gross": 1037.65,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "RUMBA BAGLEY x 110 GR.",
+      "quantity": 10.0,
+      "unit_price_gross": 864.71,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "TURUFAS X 139G",
+      "quantity": 10.0,
+      "unit_price_gross": 749.42,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "SONRISA MINI 100 x 8.80 gr.",
+      "quantity": 10.0,
+      "unit_price_gross": 813.83,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "CHOC BARRITA AGUILA 24X14GR",
+      "quantity": 1.0,
+      "unit_price_gross": 15189.78,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "ATUN EN AC. LA CAMP. x 170 gr.",
+      "quantity": 6.0,
+      "unit_price_gross": 3423.42,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "MANA LIM /LIM x 152G",
+      "quantity": 10.0,
+      "unit_price_gross": 893.54,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "MANA REM x 152G",
+      "quantity": 10.0,
+      "unit_price_gross": 893.54,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "MANA CHOYAL x 152G",
+      "quantity": 10.0,
+      "unit_price_gross": 893.54,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "MANA SABOR VAINILLA x 136 GR.",
+      "quantity": 10.0,
+      "unit_price_gross": 691.76,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "MANA LIV LIMON x 136 gr.",
+      "quantity": 10.0,
+      "unit_price_gross": 691.76,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "MANA LIV LECHE x 136 gr.",
+      "quantity": 10.0,
+      "unit_price_gross": 691.76,
+      "vat_rate": 21.0
+    }
+  ]
+}

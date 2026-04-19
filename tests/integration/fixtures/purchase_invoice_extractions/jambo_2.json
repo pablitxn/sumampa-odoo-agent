@@ -1,0 +1,25 @@
+{
+  "supplier_name": "Jambo S.A.",
+  "supplier_vat": "30644193078",
+  "invoice_number": "0021-00055056",
+  "invoice_date": "14-04-26",
+  "document_type": "Factura A",
+  "currency": "ARS",
+  "subtotal_untaxed": 6144000.27,
+  "total_vat": 1290240.06,
+  "total_amount": 7434240.33,
+  "lines": [
+    {
+      "description": "Grasa Pastelgras x 20 kg",
+      "quantity": 60.0,
+      "unit_price_gross": 102400.0,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "Grasa Pastelgras x 20 kg",
+      "quantity": 27.0,
+      "unit_price_gross": 0.01,
+      "vat_rate": 21.0
+    }
+  ]
+}

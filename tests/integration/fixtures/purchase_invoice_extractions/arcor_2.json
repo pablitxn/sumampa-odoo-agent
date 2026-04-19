@@ -1,0 +1,25 @@
+{
+  "supplier_name": "JULIO M. PALACIOS",
+  "supplier_vat": "20-11978615-1",
+  "invoice_number": "0005-00425425",
+  "invoice_date": "13/4/2026",
+  "document_type": "FA2",
+  "currency": "ARS",
+  "subtotal_untaxed": 16775.4,
+  "total_vat": 3522.83,
+  "total_amount": 20298.23,
+  "lines": [
+    {
+      "description": "MERENGADAS FRUT. x 88 gr.",
+      "quantity": 10.0,
+      "unit_price_gross": 812.83,
+      "vat_rate": 21.0
+    },
+    {
+      "description": "HOGARE\u00d1AS 7 SEMILLAS x 189 gr.",
+      "quantity": 10.0,
+      "unit_price_gross": 864.71,
+      "vat_rate": 21.0
+    }
+  ]
+}
