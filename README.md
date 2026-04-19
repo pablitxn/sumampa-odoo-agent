@@ -92,11 +92,39 @@ cd ~/repos/sumampa-odoo-agent
 uv run python scripts/reset_odoo_integration.py
 ```
 
+Si querés hacer todo junto para la demo local de compras, con un solo comando:
+
+```bash
+cd ~/repos/sumampa-odoo-agent
+uv run python scripts/run_purchase_chat_demo.py
+```
+
+Eso hace:
+
+- reset duro del Odoo local,
+- reseed de partners/productos/aliases,
+- levanta la API en `ORCHID_ENV=integration`,
+- deja la demo disponible en `http://127.0.0.1:8000/demo/purchase-invoices`.
+
+Por default fuerza `ORCHID_SESSION_STORE_MODE=memory` para no depender además de Postgres/Redis del app. Si querés conservar sesiones híbridas:
+
+```bash
+cd ~/repos/sumampa-odoo-agent
+uv run python scripts/run_purchase_chat_demo.py --session-store-mode hybrid
+```
+
 Si sólo querés rebootstrapear sobre el stack ya levantado, sin tirar volúmenes:
 
 ```bash
 cd ~/repos/sumampa-odoo-agent
 uv run python scripts/reset_odoo_integration.py --soft
+```
+
+Y si querés el one-shot pero sin tirar volúmenes:
+
+```bash
+cd ~/repos/sumampa-odoo-agent
+uv run python scripts/run_purchase_chat_demo.py --soft-reset
 ```
 
 Para inspeccionar rápido los IDs/defaults del entorno local seedado:
