@@ -54,12 +54,11 @@ from sumampa_odoo_agent.domain.ports.purchase_chat_assistant_port import (
     PurchaseChatAssistantPort,
 )
 from sumampa_odoo_agent.infrastructure.agent.service import (
+    DisabledAgentService,
     MicrosoftAgentFrameworkOpenAIService,
-    StubAgentService,
 )
 from sumampa_odoo_agent.infrastructure.extraction.service import (
     OpenAIPurchaseInvoiceExtractor,
-    StubPurchaseInvoiceExtractor,
 )
 from sumampa_odoo_agent.infrastructure.odoo.client import DryRunOdooClient, OdooJsonRpcClient
 from sumampa_odoo_agent.infrastructure.odoo.resolution_memory import (
@@ -67,7 +66,6 @@ from sumampa_odoo_agent.infrastructure.odoo.resolution_memory import (
 )
 from sumampa_odoo_agent.infrastructure.purchase_chat.assistant import (
     OpenAIPurchaseChatAssistant,
-    StubPurchaseChatAssistant,
 )
 from sumampa_odoo_agent.infrastructure.purchase_chat.service import PurchaseChatService
 from sumampa_odoo_agent.infrastructure.runtime.modules import ModuleMetadata
@@ -96,8 +94,8 @@ async def build_container(
     command_bus = CommandBus()
     query_bus = QueryBus()
     odoo_backend: OdooJsonRpcClient | DryRunOdooClient | None = None
-    invoice_extractor: PurchaseInvoiceExtractorPort = StubPurchaseInvoiceExtractor()
-    purchase_chat_assistant: PurchaseChatAssistantPort = StubPurchaseChatAssistant()
+    invoice_extractor: PurchaseInvoiceExtractorPort
+    purchase_chat_assistant: PurchaseChatAssistantPort
     resolution_memory = PurchaseResolutionMemoryStore.from_env()
 
     if settings.invoice_extraction.mode == "openai":
@@ -107,12 +105,18 @@ async def build_container(
             base_url=settings.invoice_extraction.base_url,
             max_output_tokens=settings.invoice_extraction.max_output_tokens,
         )
+    else:
+        raise RuntimeError(
+            f"Unsupported invoice extraction mode: {settings.invoice_extraction.mode}"
+        )
     if settings.purchase_chat.mode == "openai":
         purchase_chat_assistant = OpenAIPurchaseChatAssistant(
             model=settings.purchase_chat.model,
             api_key_env_var=settings.purchase_chat.api_key_env_var,
             base_url=settings.purchase_chat.base_url,
         )
+    else:
+        raise RuntimeError(f"Unsupported purchase chat mode: {settings.purchase_chat.mode}")
 
     if "odoo" in enabled_modules:
         if settings.odoo.mode == "jsonrpc":
@@ -171,8 +175,10 @@ async def build_container(
                 odoo=odoo_backend,
                 base_url=settings.agent.base_url,
             )
+        elif settings.agent.mode == "disabled":
+            agent_backend = DisabledAgentService()
         else:
-            agent_backend = StubAgentService(odoo=odoo_backend)
+            raise RuntimeError(f"Unsupported agent mode: {settings.agent.mode}")
         command_bus.register(RunAgentCommand, RunAgentCommandHandler(agent_backend))
 
     return ApplicationContainer(

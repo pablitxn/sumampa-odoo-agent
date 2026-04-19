@@ -15,61 +15,6 @@ from sumampa_odoo_agent.application.requests.odoo import (
 )
 
 
-class StubPurchaseInvoiceExtractor:
-    """Deterministic extractor for local development and tests."""
-
-    async def extract(
-        self,
-        command: AnalyzePurchaseInvoiceCommand,
-    ) -> ExtractedPurchaseInvoiceDocument:
-        stem = command.filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ").strip() or "factura"
-        supplier = command.supplier_name or "Proveedor Demo SA"
-        invoice_number = f"{stem[:18].upper()}-001"
-        lines: list[dict[str, Any]] = [
-            {
-                "description": "Bombilla inox",
-                "quantity": 24.0,
-                "unit_price_gross": 9.68,
-                "vat_rate": 21.0,
-            },
-            {
-                "description": "Yerba seleccion",
-                "quantity": 40.0,
-                "unit_price_gross": 6.63,
-                "vat_rate": 10.5,
-            },
-        ]
-        if "mate" in stem.casefold():
-            lines = [
-                {
-                    "description": "Mate camionero",
-                    "quantity": 12.0,
-                    "unit_price_gross": 17.55,
-                    "vat_rate": 21.0,
-                },
-                {
-                    "description": "Bombilla inox",
-                    "quantity": 12.0,
-                    "unit_price_gross": 9.68,
-                    "vat_rate": 21.0,
-                },
-            ]
-        return ExtractedPurchaseInvoiceDocument.model_validate(
-            {
-                "supplier_name": supplier,
-                "supplier_vat": command.supplier_vat,
-                "invoice_number": invoice_number,
-                "invoice_date": "2026-04-15",
-                "document_type": "Factura A",
-                "currency": "ARS",
-                "subtotal_untaxed": 432.0,
-                "total_vat": 65.52,
-                "total_amount": 497.52,
-                "lines": lines,
-            }
-        )
-
-
 class OpenAIPurchaseInvoiceExtractor:
     """Structured multimodal extraction using OpenAI Responses API."""
 
@@ -101,10 +46,7 @@ class OpenAIPurchaseInvoiceExtractor:
             input=[
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "input_text", "text": _purchase_invoice_prompt(command)},
-                        {"type": "input_image", "image_url": _to_data_url(command)},
-                    ],
+                    "content": _purchase_invoice_input(command),
                 }
             ],
         )
@@ -132,10 +74,11 @@ def _purchase_invoice_prompt(command: AnalyzePurchaseInvoiceCommand) -> str:
         supplier_hint.append(f"CUIT esperado del proveedor: {command.supplier_vat}.")
     hints = " ".join(supplier_hint)
     return (
-        "Extrae una factura de compra argentina desde la imagen. "
+        "Extrae una factura de compra argentina desde una o varias fotos del mismo comprobante. "
         "Devolve exclusivamente los campos del schema con structured output estricto. "
         "No inventes lineas ni valores. "
         "Si un dato no es legible, usa null en campos opcionales. "
+        "Las imágenes pueden ser distintas fotos del frente, pie o distintas secciones de la misma factura física; tomalas como un único documento. "
         "Extrae razon social, CUIT del proveedor, numero de factura, fecha, tipo de comprobante, moneda, subtotal neto, IVA total y total final si aparecen. "
         "Para cada linea usa descripcion tal como aparece, cantidad, precio unitario final de la factura y alicuota IVA. "
         "Si hay bonificacion o descuento ya incluido en el precio de linea, devuelve el precio neto final de esa linea tal como queda en la factura. "
@@ -144,10 +87,17 @@ def _purchase_invoice_prompt(command: AnalyzePurchaseInvoiceCommand) -> str:
     )
 
 
-def _to_data_url(command: AnalyzePurchaseInvoiceCommand) -> str:
-    content_type = command.content_type or mimetypes.guess_type(command.filename)[0] or "image/jpeg"
-    encoded = base64.b64encode(command.image_bytes).decode("ascii")
-    return f"data:{content_type};base64,{encoded}"
+def _purchase_invoice_input(command: AnalyzePurchaseInvoiceCommand) -> list[dict[str, str]]:
+    content: list[dict[str, str]] = [{"type": "input_text", "text": _purchase_invoice_prompt(command)}]
+    for attachment in command.attachments:
+        content.append({"type": "input_image", "image_url": _to_data_url(attachment.filename, attachment.content_type, attachment.content_bytes)})
+    return content
+
+
+def _to_data_url(filename: str, content_type: str | None, content_bytes: bytes) -> str:
+    resolved_content_type = content_type or mimetypes.guess_type(filename)[0] or "image/jpeg"
+    encoded = base64.b64encode(content_bytes).decode("ascii")
+    return f"data:{resolved_content_type};base64,{encoded}"
 
 
 def _extract_parsed_content(response: Any) -> Any | None:

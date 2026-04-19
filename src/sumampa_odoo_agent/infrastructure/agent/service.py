@@ -9,11 +9,8 @@ from typing import Annotated, Any
 from sumampa_odoo_agent.domain.ports.odoo_port import OdooPort
 
 
-class StubAgentService:
-    """Deterministic agent placeholder for local development."""
-
-    def __init__(self, *, odoo: OdooPort | None = None) -> None:
-        self._odoo = odoo
+class DisabledAgentService:
+    """Explicit runtime disabled state for the agent module."""
 
     async def run(
         self,
@@ -22,17 +19,10 @@ class StubAgentService:
         context: dict[str, Any],
         session_id: str | None = None,
     ) -> dict[str, Any]:
-        return {
-            "mode": "stub",
-            "text": (
-                "Agent scaffold listo. Todavia no hay provider LLM configurado, "
-                "asi que esta respuesta es deterministica."
-            ),
-            "prompt": prompt,
-            "session_id": session_id,
-            "context": context,
-            "available_tools": _tool_names(include_odoo=self._odoo is not None),
-        }
+        del prompt, context, session_id
+        raise RuntimeError(
+            "El módulo agent está deshabilitado. Configurá ORCHID_AGENT_MODE=openai para usarlo."
+        )
 
 
 class MicrosoftAgentFrameworkOpenAIService:

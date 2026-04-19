@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from sumampa_odoo_agent.adapters.dependencies import ContainerDep
 from sumampa_odoo_agent.application.requests.odoo import (
@@ -15,6 +15,7 @@ from sumampa_odoo_agent.application.requests.odoo import (
     CreateInvoiceCommand,
     CreatePartnerCommand,
     CreateProductCommand,
+    InvoiceAttachment,
     OdooOperationResult,
     OdooSearchResult,
     OdooValidationResult,
@@ -167,17 +168,20 @@ async def validate_delivery_draft(
 
 @router.post("/purchase-invoices/proposals", response_model=PurchaseInvoiceProposalResult)
 async def analyze_purchase_invoice(
-    invoice_image: Annotated[UploadFile, File(...)],
+    invoice_images: Annotated[list[UploadFile] | None, File()] = None,
+    invoice_image: Annotated[UploadFile | None, File()] = None,
     supplier_name: Annotated[str | None, Form()] = None,
     supplier_vat: Annotated[str | None, Form()] = None,
     markup_percentage: Annotated[float, Form()] = 30.0,
     container: ContainerDep = None,  # type: ignore[assignment]
 ) -> PurchaseInvoiceProposalResult:
-    image_bytes = await invoice_image.read()
+    attachments = await _read_invoice_attachments(
+        invoice_images=invoice_images,
+        invoice_image=invoice_image,
+        required=True,
+    )
     request = AnalyzePurchaseInvoiceCommand(
-        filename=invoice_image.filename or "factura-compra.jpg",
-        content_type=invoice_image.content_type,
-        image_bytes=image_bytes,
+        attachments=attachments,
         supplier_name=supplier_name,
         supplier_vat=supplier_vat,
         markup_percentage=markup_percentage,
@@ -206,16 +210,19 @@ async def purchase_chat_message(
     markup_percentage: Annotated[float | None, Form()] = None,
     supplier_name: Annotated[str | None, Form()] = None,
     supplier_vat: Annotated[str | None, Form()] = None,
+    invoice_images: Annotated[list[UploadFile] | None, File()] = None,
     invoice_image: Annotated[UploadFile | None, File()] = None,
     container: ContainerDep = None,  # type: ignore[assignment]
 ) -> PurchaseChatResponse:
-    image_bytes = await invoice_image.read() if invoice_image is not None else None
+    attachments = await _read_invoice_attachments(
+        invoice_images=invoice_images,
+        invoice_image=invoice_image,
+        required=False,
+    )
     request = PurchaseChatMessageCommand(
         session_id=session_id,
         message=message,
-        image_bytes=image_bytes,
-        filename=invoice_image.filename if invoice_image else None,
-        content_type=invoice_image.content_type if invoice_image else None,
+        attachments=attachments,
         context=PurchaseChatContext(
             supplier_id=supplier_id,
             journal_id=journal_id,
@@ -261,3 +268,28 @@ async def create_delivery(
     container: ContainerDep,
 ) -> OdooOperationResult:
     return await container.command_bus.dispatch(command)
+
+
+async def _read_invoice_attachments(
+    *,
+    invoice_images: list[UploadFile] | None,
+    invoice_image: UploadFile | None,
+    required: bool,
+) -> list[InvoiceAttachment]:
+    files: list[UploadFile] = []
+    if invoice_images:
+        files.extend(invoice_images)
+    if invoice_image is not None:
+        files.append(invoice_image)
+
+    attachments = [
+        InvoiceAttachment(
+            filename=upload.filename or "factura-compra.jpg",
+            content_type=upload.content_type,
+            content_bytes=await upload.read(),
+        )
+        for upload in files
+    ]
+    if required and not attachments:
+        raise HTTPException(status_code=422, detail="At least one invoice image is required.")
+    return attachments

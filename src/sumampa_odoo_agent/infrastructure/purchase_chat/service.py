@@ -2,17 +2,11 @@
 
 from __future__ import annotations
 
-import re
-import unicodedata
 from dataclasses import dataclass, field
 from uuid import uuid4
 
 from sumampa_odoo_agent.application.requests.odoo import (
-    AnalyzePurchaseInvoiceCommand,
-    ApplyPurchaseInvoiceProposalCommand,
     ApplyPurchaseInvoiceProposalResult,
-    CreatePartnerCommand,
-    CreateProductCommand,
     PurchaseInvoiceProposalLine,
     PurchaseInvoiceProposalResult,
 )
@@ -21,19 +15,21 @@ from sumampa_odoo_agent.application.requests.purchase_chat import (
     PurchaseChatMessageCommand,
     PurchaseChatResponse,
 )
+from sumampa_odoo_agent.application.use_cases import (
+    AnalyzePurchaseInvoiceInput,
+    ApplyPurchaseChatResolutionInput,
+    ConfirmPriceUpdatesInput,
+    ConfirmPurchaseInvoiceInput,
+    ConfirmStockReceiptInput,
+    PurchaseChatResolutionUseCase,
+    PurchaseChatWorkflowUseCases,
+    looks_positive,
+    proposal_has_resolution_blockers,
+)
 from sumampa_odoo_agent.domain.ports.odoo_port import OdooPort
 from sumampa_odoo_agent.domain.ports.purchase_chat_assistant_port import (
     PurchaseChatAssistantPort,
 )
-
-SUPPLIER_ID_RE = re.compile(r"\bproveedor\s+(\d+)\b")
-SUPPLIER_NEW_RE = re.compile(r"\bproveedor\s+nuevo\b")
-SUPPLIER_CREATE_RE = re.compile(r"\b(?:crear|alta)\s+proveedor\b")
-CREATE_NEW_ITEMS_RE = re.compile(r"\b(?:crear|alta)\s+nuevos\b")
-LINE_PRODUCT_RE = re.compile(r"\blinea\s+(\d+)\s+producto\s+(\d+)\b")
-LINE_NEW_RE = re.compile(r"\blinea\s+(\d+)\s+nuevo\b")
-LINE_CREATE_RE = re.compile(r"\blinea\s+(\d+)\s+crear\b")
-CREATE_LINE_RE = re.compile(r"\bcrear\s+linea\s+(\d+)\b")
 
 
 @dataclass(slots=True)
@@ -53,9 +49,19 @@ class PurchaseChatSession:
 
 
 class PurchaseChatService:
-    def __init__(self, odoo: OdooPort, assistant: PurchaseChatAssistantPort) -> None:
+    def __init__(
+        self,
+        odoo: OdooPort,
+        assistant: PurchaseChatAssistantPort,
+        workflow_use_cases: PurchaseChatWorkflowUseCases | None = None,
+        resolution_use_case: PurchaseChatResolutionUseCase | None = None,
+    ) -> None:
         self._odoo = odoo
         self._assistant = assistant
+        self._workflow_use_cases = workflow_use_cases or PurchaseChatWorkflowUseCases(odoo)
+        self._resolution_use_case = resolution_use_case or PurchaseChatResolutionUseCase(
+            self._workflow_use_cases
+        )
         self._sessions: dict[str, PurchaseChatSession] = {}
 
     async def run_turn(self, command: PurchaseChatMessageCommand) -> PurchaseChatResponse:
@@ -63,12 +69,10 @@ class PurchaseChatService:
         session.context = _merge_context(session.context, command.context)
         message = command.message.strip()
 
-        if command.image_bytes:
-            session.proposal = await self._odoo.analyze_purchase_invoice(
-                AnalyzePurchaseInvoiceCommand(
-                    filename=command.filename or "factura.jpg",
-                    content_type=command.content_type,
-                    image_bytes=command.image_bytes,
+        if command.attachments:
+            session.proposal = await self._workflow_use_cases.analyze_purchase_invoice(
+                AnalyzePurchaseInvoiceInput(
+                    attachments=command.attachments,
                     supplier_name=session.context.supplier_name,
                     supplier_vat=session.context.supplier_vat,
                     markup_percentage=session.context.markup_percentage or 30.0,
@@ -134,17 +138,10 @@ class PurchaseChatService:
                 )
             if decision.intent == "confirm_invoice":
                 try:
-                    bill_result = await self._odoo.apply_purchase_invoice_proposal(
-                        ApplyPurchaseInvoiceProposalCommand(
+                    bill_result = await self._workflow_use_cases.confirm_purchase_invoice(
+                        ConfirmPurchaseInvoiceInput(
                             supplier_id=session.context.supplier_id,
                             journal_id=session.context.journal_id,
-                            create_vendor_bill=True,
-                            update_products=False,
-                            learn_resolutions=True,
-                            create_stock_receipt=False,
-                            picking_type_id=session.context.picking_type_id,
-                            location_id=session.context.location_id,
-                            location_dest_id=session.context.location_dest_id,
                             proposal=session.proposal,
                         )
                     )
@@ -211,18 +208,14 @@ class PurchaseChatService:
         if session.stage == "awaiting_stock_confirmation":
             if decision.intent == "confirm_stock":
                 try:
-                    stock_result = await self._odoo.apply_purchase_invoice_proposal(
-                        ApplyPurchaseInvoiceProposalCommand(
+                    stock_result = await self._workflow_use_cases.confirm_stock_receipt(
+                        ConfirmStockReceiptInput(
                             supplier_id=session.context.supplier_id,
                             journal_id=session.context.journal_id,
-                            create_vendor_bill=False,
-                            update_products=False,
-                            learn_resolutions=False,
-                            create_stock_receipt=True,
+                            proposal=session.proposal,
                             picking_type_id=session.context.picking_type_id,
                             location_id=session.context.location_id,
                             location_dest_id=session.context.location_dest_id,
-                            proposal=session.proposal,
                         )
                     )
                 except RuntimeError as exc:
@@ -286,14 +279,10 @@ class PurchaseChatService:
         if session.stage == "awaiting_price_confirmation":
             if decision.intent == "confirm_prices":
                 try:
-                    price_result = await self._odoo.apply_purchase_invoice_proposal(
-                        ApplyPurchaseInvoiceProposalCommand(
+                    price_result = await self._workflow_use_cases.confirm_price_updates(
+                        ConfirmPriceUpdatesInput(
                             supplier_id=session.context.supplier_id,
                             journal_id=session.context.journal_id,
-                            create_vendor_bill=False,
-                            update_products=True,
-                            learn_resolutions=False,
-                            create_stock_receipt=False,
                             proposal=session.proposal,
                         )
                     )
@@ -367,8 +356,14 @@ class PurchaseChatService:
         proposal = session.proposal
         assert proposal is not None
 
-        normalized = _normalize_resolution_text(message)
-        if _looks_reset(normalized):
+        resolution = await self._resolution_use_case.apply(
+            ApplyPurchaseChatResolutionInput(
+                proposal=proposal,
+                message=message,
+            )
+        )
+
+        if resolution.reset_requested:
             session.stage = "awaiting_invoice"
             session.proposal = None
             return PurchaseChatResponse(
@@ -377,22 +372,20 @@ class PurchaseChatService:
                 assistant_message="Listo, descarto esta factura. Cuando quieras mandame otra.",
             )
 
-        changes = _apply_resolution_commands(proposal, normalized)
-        created_summary, creation_error = await self._apply_creation_commands(session, normalized)
-        if creation_error is not None:
+        if resolution.error_message is not None:
             return PurchaseChatResponse(
                 session_id=session.session_id,
                 stage="awaiting_resolution",
                 assistant_message=(
-                    f"{creation_error}\n"
+                    f"{resolution.error_message}\n"
                     f"{_resolution_message(proposal)}"
                 ),
                 proposal=proposal,
             )
         _sync_context_from_proposal(session)
 
-        if _looks_positive(normalized):
-            if _proposal_has_resolution_blockers(proposal):
+        if looks_positive(resolution.normalized_message):
+            if resolution.has_blockers:
                 return PurchaseChatResponse(
                     session_id=session.session_id,
                     stage="awaiting_resolution",
@@ -402,44 +395,44 @@ class PurchaseChatService:
                     ),
                     proposal=proposal,
                 )
-            proposal.needs_user_resolution = False
-            session.stage = "awaiting_invoice_confirmation"
-            return PurchaseChatResponse(
-                session_id=session.session_id,
-                stage="awaiting_invoice_confirmation",
-                assistant_message=(
-                    "Tomo la resolución actual como válida.\n"
-                    f"{_proposal_message(proposal)}"
-                ),
-                proposal=proposal,
-            )
+            if resolution.ready_for_confirmation:
+                session.stage = "awaiting_invoice_confirmation"
+                return PurchaseChatResponse(
+                    session_id=session.session_id,
+                    stage="awaiting_invoice_confirmation",
+                    assistant_message=(
+                        "Tomo la resolución actual como válida.\n"
+                        f"{_proposal_message(proposal)}"
+                    ),
+                    proposal=proposal,
+                )
 
-        if changes or created_summary is not None:
-            if _proposal_has_resolution_blockers(proposal):
+        if resolution.changed or resolution.created_summary is not None:
+            if resolution.has_blockers:
                 return PurchaseChatResponse(
                     session_id=session.session_id,
                     stage="awaiting_resolution",
                     assistant_message=(
-                        f"{created_summary}\n" if created_summary else ""
+                        f"{resolution.created_summary}\n" if resolution.created_summary else ""
                     ) + (
                         "Registré esos cambios, pero todavía quedan items para revisar.\n"
                         f"{_resolution_message(proposal)}"
                     ),
                     proposal=proposal,
                 )
-            proposal.needs_user_resolution = False
-            session.stage = "awaiting_invoice_confirmation"
-            return PurchaseChatResponse(
-                session_id=session.session_id,
-                stage="awaiting_invoice_confirmation",
-                assistant_message=(
-                    f"{created_summary}\n" if created_summary else ""
-                ) + (
-                    "Registré esas resoluciones.\n"
-                    f"{_proposal_message(proposal)}"
-                ),
-                proposal=proposal,
-            )
+            if resolution.ready_for_confirmation:
+                session.stage = "awaiting_invoice_confirmation"
+                return PurchaseChatResponse(
+                    session_id=session.session_id,
+                    stage="awaiting_invoice_confirmation",
+                    assistant_message=(
+                        f"{resolution.created_summary}\n" if resolution.created_summary else ""
+                    ) + (
+                        "Registré esas resoluciones.\n"
+                        f"{_proposal_message(proposal)}"
+                    ),
+                    proposal=proposal,
+                )
 
         return PurchaseChatResponse(
             session_id=session.session_id,
@@ -459,208 +452,9 @@ class PurchaseChatService:
             self._sessions[resolved] = session
         return session
 
-    async def _apply_creation_commands(
-        self,
-        session: PurchaseChatSession,
-        normalized: str,
-    ) -> tuple[str | None, str | None]:
-        proposal = session.proposal
-        assert proposal is not None
-
-        created_messages: list[str] = []
-        create_all_new = bool(CREATE_NEW_ITEMS_RE.search(normalized))
-        create_supplier_explicitly = bool(SUPPLIER_CREATE_RE.search(normalized))
-        line_numbers_to_create = _line_numbers_to_create(normalized)
-        if create_all_new:
-            line_numbers_to_create.update(
-                line.line_number
-                for line in proposal.lines
-                if line.product_resolution.status == "new"
-            )
-
-        if (
-            proposal.supplier_resolution is not None
-            and (
-                create_supplier_explicitly
-                or (create_all_new and proposal.supplier_resolution.status == "new")
-            )
-            and proposal.supplier_resolution.status not in {"exact", "manual"}
-        ):
-            resolution = proposal.supplier_resolution
-            try:
-                result = await self._odoo.create_partner(
-                    CreatePartnerCommand(
-                        name=resolution.selected_display_name
-                        or resolution.extracted_name
-                        or "Proveedor sin nombre",
-                        vat=resolution.selected_vat or resolution.extracted_vat,
-                        supplier_rank=1,
-                    )
-                )
-            except RuntimeError as exc:
-                return None, (
-                    "No pude crear el proveedor nuevo en Odoo todavía.\n"
-                    f"{_odoo_runtime_error_message(exc)}"
-                )
-            resolution.status = "manual"
-            resolution.selected_partner_id = int(result.record_id or 0) or None
-            resolution.selected_display_name = str(result.payload.get("name") or resolution.selected_display_name)
-            resolution.selected_vat = str(result.payload.get("vat")) if result.payload.get("vat") else None
-            session.context.supplier_id = resolution.selected_partner_id
-            created_messages.append(
-                f"Creé el proveedor {resolution.selected_display_name} con ID {resolution.selected_partner_id}."
-            )
-
-        for line_number in sorted(line_numbers_to_create):
-            line = _proposal_line_by_number(proposal.lines, line_number)
-            if line is None or line.product_resolution.status in {"exact", "manual"}:
-                continue
-            try:
-                result = await self._odoo.create_product(
-                    CreateProductCommand(
-                        name=line.description,
-                        default_code=_suggest_product_default_code(line),
-                        list_price=line.suggested_sale_price,
-                        standard_price=line.unit_price_net,
-                        description_sale=line.description,
-                    )
-                )
-            except RuntimeError as exc:
-                return None, (
-                    f"No pude crear el producto nuevo de la línea {line.line_number} en Odoo todavía.\n"
-                    f"{_odoo_runtime_error_message(exc)}"
-                )
-            product_id = int(result.record_id or 0) or None
-            line.product_resolution.status = "manual"
-            line.product_resolution.selected_product_id = product_id
-            line.product_resolution.selected_display_name = str(result.payload.get("name") or line.description)
-            line.product_resolution.selected_default_code = (
-                str(result.payload.get("default_code")) if result.payload.get("default_code") else None
-            )
-            line.product_match.product_id = product_id
-            line.product_match.display_name = line.product_resolution.selected_display_name
-            line.product_match.default_code = line.product_resolution.selected_default_code
-            line.product_match.current_cost = float(result.payload.get("standard_price") or line.unit_price_net)
-            line.product_match.current_sale_price = float(
-                result.payload.get("list_price") or line.suggested_sale_price
-            )
-            line.product_match.current_stock = 0.0
-            line.product_match.confidence = 1.0
-            line.stock_after_update = line.quantity
-            created_messages.append(
-                f"Creé el producto de la línea {line.line_number} con ID {product_id}."
-            )
-
-        proposal.needs_user_resolution = _proposal_needs_manual_review(proposal)
-        if not created_messages:
-            return None, None
-        return " ".join(created_messages), None
-
 
 def _proposal_needs_resolution(proposal: PurchaseInvoiceProposalResult) -> bool:
     return proposal.needs_user_resolution
-
-
-def _proposal_has_resolution_blockers(proposal: PurchaseInvoiceProposalResult) -> bool:
-    if proposal.supplier_resolution and proposal.supplier_resolution.status in {"missing", "new"}:
-        return True
-    return any(line.product_resolution.status in {"missing", "new"} for line in proposal.lines)
-
-
-def _apply_resolution_commands(proposal: PurchaseInvoiceProposalResult, normalized: str) -> bool:
-    changed = False
-
-    supplier_match = SUPPLIER_ID_RE.search(normalized)
-    if supplier_match and proposal.supplier_resolution is not None:
-        partner_id = int(supplier_match.group(1))
-        candidate = next(
-            (item for item in proposal.supplier_resolution.candidates if item.partner_id == partner_id),
-            None,
-        )
-        proposal.supplier_resolution.status = "manual"
-        proposal.supplier_resolution.selected_partner_id = partner_id
-        proposal.supplier_resolution.selected_display_name = (
-            candidate.display_name if candidate else f"Proveedor #{partner_id}"
-        )
-        proposal.supplier_resolution.selected_vat = candidate.vat if candidate else None
-        changed = True
-
-    if SUPPLIER_NEW_RE.search(normalized) and proposal.supplier_resolution is not None:
-        proposal.supplier_resolution.status = "new"
-        proposal.supplier_resolution.selected_partner_id = None
-        proposal.supplier_resolution.selected_display_name = (
-            proposal.supplier_resolution.extracted_name or "Proveedor nuevo"
-        )
-        proposal.supplier_resolution.selected_vat = proposal.supplier_resolution.extracted_vat
-        changed = True
-
-    for line_match in LINE_PRODUCT_RE.finditer(normalized):
-        line_number = int(line_match.group(1))
-        product_id = int(line_match.group(2))
-        line = _proposal_line_by_number(proposal.lines, line_number)
-        if line is None:
-            continue
-        candidate = next(
-            (item for item in line.product_resolution.candidates if item.product_id == product_id),
-            None,
-        )
-        line.product_resolution.status = "manual"
-        line.product_resolution.selected_product_id = product_id
-        line.product_resolution.selected_display_name = (
-            candidate.display_name if candidate else f"Producto #{product_id}"
-        )
-        line.product_resolution.selected_default_code = candidate.default_code if candidate else None
-        line.product_match.product_id = product_id
-        line.product_match.display_name = line.product_resolution.selected_display_name
-        line.product_match.default_code = line.product_resolution.selected_default_code
-        if candidate is not None:
-            line.product_match.current_sale_price = candidate.current_sale_price
-            line.product_match.current_cost = candidate.current_cost
-            line.product_match.current_stock = candidate.current_stock
-            line.product_match.confidence = candidate.confidence
-        changed = True
-
-    for line_match in LINE_NEW_RE.finditer(normalized):
-        line_number = int(line_match.group(1))
-        line = _proposal_line_by_number(proposal.lines, line_number)
-        if line is None:
-            continue
-        line.product_resolution.status = "new"
-        line.product_resolution.selected_product_id = None
-        line.product_resolution.selected_display_name = line.description
-        line.product_resolution.selected_default_code = None
-        line.product_match.product_id = None
-        line.product_match.display_name = None
-        line.product_match.default_code = None
-        line.product_match.current_sale_price = None
-        line.product_match.current_cost = None
-        line.product_match.current_stock = None
-        line.product_match.confidence = 0.0
-        line.stock_after_update = None
-        changed = True
-
-    proposal.needs_user_resolution = _proposal_needs_manual_review(proposal)
-    return changed
-
-
-def _proposal_needs_manual_review(proposal: PurchaseInvoiceProposalResult) -> bool:
-    if proposal.supplier_resolution and proposal.supplier_resolution.status in {
-        "candidate",
-        "missing",
-        "new",
-    }:
-        return True
-    return any(
-        line.product_resolution.status in {"candidate", "missing", "new"}
-        for line in proposal.lines
-    )
-
-
-def _proposal_line_by_number(
-    lines: list[PurchaseInvoiceProposalLine],
-    line_number: int,
-) -> PurchaseInvoiceProposalLine | None:
-    return next((line for line in lines if line.line_number == line_number), None)
 
 
 def _merge_context(
@@ -818,7 +612,7 @@ def _resolution_help_message(
 
 
 def _proposal_can_accept_current_candidates(proposal: PurchaseInvoiceProposalResult) -> bool:
-    if _proposal_has_resolution_blockers(proposal):
+    if proposal_has_resolution_blockers(proposal):
         return False
     return proposal.needs_user_resolution
 
@@ -908,44 +702,3 @@ def _apply_blocked_message(
 
 def _odoo_runtime_error_message(exc: RuntimeError) -> str:
     return str(exc)
-
-
-def _normalize_resolution_text(value: str) -> str:
-    ascii_value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
-    return " ".join(
-        ascii_value.casefold()
-        .replace(",", " ")
-        .replace(".", " ")
-        .replace(":", " ")
-        .split()
-    )
-
-
-def _line_numbers_to_create(normalized: str) -> set[int]:
-    line_numbers = {int(match.group(1)) for match in LINE_CREATE_RE.finditer(normalized)}
-    line_numbers.update(int(match.group(1)) for match in CREATE_LINE_RE.finditer(normalized))
-    return line_numbers
-
-
-def _suggest_product_default_code(line: PurchaseInvoiceProposalLine) -> str | None:
-    ascii_value = (
-        unicodedata.normalize("NFKD", line.description).encode("ascii", "ignore").decode("ascii")
-    )
-    cleaned = re.sub(r"[^A-Z0-9]+", "-", ascii_value.upper()).strip("-")
-    if not cleaned:
-        return None
-    if cleaned.isdigit() and len(cleaned) <= 20:
-        return cleaned
-    base = cleaned[:18]
-    return f"AUTO-{base[:13]}" if base else None
-
-
-def _looks_positive(normalized: str) -> bool:
-    return any(
-        token in normalized
-        for token in ("si", "confirmo", "confirmar", "dale", "ok", "mandale", "avanza")
-    )
-
-
-def _looks_reset(normalized: str) -> bool:
-    return any(token in normalized for token in ("reset", "cancelar", "descartar", "no va"))

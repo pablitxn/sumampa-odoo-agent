@@ -9,62 +9,6 @@ from openai import AsyncOpenAI
 from sumampa_odoo_agent.application.requests.purchase_chat import PurchaseChatPlannerDecision
 
 
-class StubPurchaseChatAssistant:
-    async def plan(
-        self,
-        *,
-        stage: str,
-        proposal_summary: str | None,
-        user_message: str,
-    ) -> PurchaseChatPlannerDecision:
-        normalized = _normalize_text(user_message)
-        if any(token in normalized for token in ("hola", "buenas", "como va", "qué onda", "que onda")):
-            return PurchaseChatPlannerDecision(
-                intent="greet",
-                assistant_message=(
-                    "Todo bien. Cuando quieras subime una factura y la revisamos paso a paso antes de tocar Odoo."
-                ),
-            )
-        if stage == "awaiting_invoice_confirmation" and _looks_positive(normalized):
-            return PurchaseChatPlannerDecision(
-                intent="confirm_invoice",
-                assistant_message="Perfecto. Confirmo que querés cargar la factura.",
-            )
-        if stage == "awaiting_invoice_confirmation" and _looks_negative(normalized):
-            return PurchaseChatPlannerDecision(
-                intent="reject_invoice",
-                assistant_message="Bien, no cargo la factura todavía.",
-            )
-        if stage == "awaiting_stock_confirmation" and _looks_positive(normalized):
-            return PurchaseChatPlannerDecision(
-                intent="confirm_stock",
-                assistant_message="Perfecto. Avanzo con la recepción de stock.",
-            )
-        if stage == "awaiting_stock_confirmation" and _looks_negative(normalized):
-            return PurchaseChatPlannerDecision(
-                intent="reject_stock",
-                assistant_message="Listo. Dejo la factura cargada y no genero recepción por ahora.",
-            )
-        if stage == "awaiting_price_confirmation" and _looks_positive(normalized):
-            return PurchaseChatPlannerDecision(
-                intent="confirm_prices",
-                assistant_message="Perfecto. Avanzo con la actualización de precios.",
-            )
-        if stage == "awaiting_price_confirmation" and _looks_negative(normalized):
-            return PurchaseChatPlannerDecision(
-                intent="reject_prices",
-                assistant_message="Listo. Dejo la factura cargada y no actualizo precios.",
-            )
-        return PurchaseChatPlannerDecision(
-            intent="other" if stage != "awaiting_invoice" else "await_invoice",
-            assistant_message=(
-                "Contame qué necesitás y, cuando tengas la factura, adjuntala así la proceso."
-                if stage == "awaiting_invoice"
-                else "Te sigo. Si querés avanzar, confirmame explícitamente el siguiente paso."
-            ),
-        )
-
-
 class OpenAIPurchaseChatAssistant:
     def __init__(
         self,
@@ -141,32 +85,3 @@ class OpenAIPurchaseChatAssistant:
                 f"Missing API key in environment variable '{self._api_key_env_var}'"
             )
         return AsyncOpenAI(api_key=api_key, base_url=self._base_url)
-
-
-def _normalize_text(value: str) -> str:
-    return " ".join(value.casefold().replace(",", " ").replace(".", " ").split())
-
-
-def _looks_positive(normalized: str) -> bool:
-    return any(
-        token in normalized
-        for token in (
-            "si",
-            "sí",
-            "confirmo",
-            "confirmar",
-            "cargar factura",
-            "actualizar precios",
-            "dale",
-            "ok",
-            "mandale",
-            "avanza",
-        )
-    )
-
-
-def _looks_negative(normalized: str) -> bool:
-    return any(
-        token in normalized
-        for token in ("no", "revisar", "corregir", "todavia no", "todavía no", "por ahora no")
-    )

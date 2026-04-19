@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from sumampa_odoo_agent.application.requests.odoo import (
     ApplyPurchaseInvoiceProposalResult,
+    InvoiceAttachment,
     PurchaseInvoiceProposalResult,
 )
 
@@ -27,10 +28,31 @@ class PurchaseChatContext(BaseModel):
 class PurchaseChatMessageCommand(BaseModel):
     session_id: str | None = None
     message: str = ""
-    image_bytes: bytes | None = None
-    filename: str | None = None
-    content_type: str | None = None
+    attachments: list[InvoiceAttachment] = Field(default_factory=list)
     context: PurchaseChatContext = Field(default_factory=PurchaseChatContext)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _upgrade_legacy_single_attachment(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        if data.get("attachments"):
+            return data
+
+        filename = data.get("filename")
+        image_bytes = data.get("image_bytes")
+        if not filename or image_bytes in (None, b""):
+            return data
+
+        upgraded = dict(data)
+        upgraded["attachments"] = [
+            {
+                "filename": filename,
+                "content_type": data.get("content_type"),
+                "content_bytes": image_bytes,
+            }
+        ]
+        return upgraded
 
 
 class PurchaseChatResponse(BaseModel):

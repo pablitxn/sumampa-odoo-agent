@@ -32,7 +32,7 @@ class OdooSettings(BaseModel):
 
 
 class AgentSettings(BaseModel):
-    mode: str = "stub"
+    mode: str = "disabled"
     model: str = "gpt-5.4-mini"
     api_key_env_var: str = "OPENAI_API_KEY"
     base_url: str | None = None
@@ -45,7 +45,7 @@ class AgentSettings(BaseModel):
 
 
 class InvoiceExtractionSettings(BaseModel):
-    mode: str = "stub"
+    mode: str = "openai"
     model: str = "gpt-5.4"
     api_key_env_var: str = "OPENAI_API_KEY"
     base_url: str | None = None
@@ -53,7 +53,7 @@ class InvoiceExtractionSettings(BaseModel):
 
 
 class PurchaseChatSettings(BaseModel):
-    mode: str = "stub"
+    mode: str = "openai"
     model: str = "gpt-5.4"
     api_key_env_var: str = "OPENAI_API_KEY"
     base_url: str | None = None

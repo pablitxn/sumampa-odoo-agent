@@ -170,7 +170,7 @@
       <aside class="sidebar">
         <h1>Compras conversacional</h1>
         <p class="lede">
-          Podés hablar natural, subir una factura, validar extracción y recién después confirmar
+          Podés hablar natural, subir una o varias fotos de la misma factura, validar extracción y recién después confirmar
           carga en Odoo y actualización de precios.
         </p>
         <label>Proveedor esperado
@@ -212,7 +212,7 @@
         <div class="messages" id="messages"></div>
         <div class="composer">
           <label>Adjuntar factura
-            <input id="invoiceImage" type="file" accept="image/*,.pdf" />
+            <input id="invoiceImage" type="file" accept="image/*,.pdf" multiple />
           </label>
           <textarea id="messageInput" placeholder="Ejemplo: hola, te paso una factura nueva / sí, cargala / sí, actualizá precios"></textarea>
           <div class="toolbar">
@@ -305,7 +305,9 @@
         form.append("location_id", document.getElementById("locationId").value);
         form.append("location_dest_id", document.getElementById("locationDestId").value);
         form.append("create_stock_receipt", document.getElementById("createStockReceipt").checked ? "true" : "false");
-        if (invoiceImage.files[0]) form.append("invoice_image", invoiceImage.files[0]);
+        for (const file of Array.from(invoiceImage.files || [])) {
+          form.append("invoice_images", file);
+        }
         return form;
       }
 
@@ -344,15 +346,15 @@
 
       async function sendTurn() {
         const text = messageInput.value.trim();
-        const file = invoiceImage.files[0];
-        if (!text && !file) {
+        const files = Array.from(invoiceImage.files || []);
+        if (!text && files.length === 0) {
           addMessage("agent", "<strong>Falta input.</strong><br />Mandame un mensaje o adjuntá una factura.");
           return;
         }
         addMessage("user", `
           <div class="meta">Vos</div>
           ${text ? `${escapeHtml(text).replaceAll("\n", "<br />")}` : ""}
-          ${file ? `<div class="pill">${escapeHtml(file.name)}</div>` : ""}
+          ${files.map((file) => `<div class="pill">${escapeHtml(file.name)}</div>`).join("")}
         `);
         sendBtn.disabled = true;
         try {

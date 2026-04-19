@@ -1,8 +1,101 @@
 """E2E smoke tests for enabled Odoo and agent modules."""
 
+import pytest
 from fastapi.testclient import TestClient
 
 from sumampa_odoo_agent.adapters.api.main import create_app
+from sumampa_odoo_agent.application.requests.odoo import ExtractedPurchaseInvoiceDocument
+from sumampa_odoo_agent.application.requests.purchase_chat import PurchaseChatPlannerDecision
+from sumampa_odoo_agent.infrastructure.agent.service import (
+    MicrosoftAgentFrameworkOpenAIService,
+)
+from sumampa_odoo_agent.infrastructure.extraction.service import (
+    OpenAIPurchaseInvoiceExtractor,
+)
+from sumampa_odoo_agent.infrastructure.purchase_chat.assistant import (
+    OpenAIPurchaseChatAssistant,
+)
+from sumampa_odoo_agent.infrastructure.runtime.state import reset_runtime_state_for_tests
+
+
+@pytest.fixture(autouse=True)
+def patch_runtime_for_api_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ORCHID_PURCHASE_CHAT_MODE", "openai")
+    monkeypatch.setenv("ORCHID_AGENT_MODE", "disabled")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    reset_runtime_state_for_tests()
+
+    async def fake_extract(self, command):  # type: ignore[no-untyped-def]
+        supplier_name = command.supplier_name or "Proveedor Demo SA"
+        return ExtractedPurchaseInvoiceDocument.model_validate(
+            {
+                "supplier_name": supplier_name,
+                "supplier_vat": command.supplier_vat,
+                "invoice_number": "TEST-0001",
+                "invoice_date": "2026-04-19",
+                "document_type": "Factura A",
+                "currency": "ARS",
+                "subtotal_untaxed": 165.29,
+                "total_vat": 34.71,
+                "total_amount": 200.0,
+                "lines": [
+                    {
+                        "description": "Mate camionero",
+                        "quantity": 2,
+                        "unit_price_gross": 100.0,
+                        "vat_rate": 21.0,
+                    }
+                ],
+            }
+        )
+
+    async def fake_plan(self, *, stage, proposal_summary, user_message):  # type: ignore[no-untyped-def]
+        del self, proposal_summary
+        normalized = " ".join(user_message.casefold().replace(",", " ").replace(".", " ").split())
+        if any(token in normalized for token in ("hola", "buenas", "como va", "qué onda", "que onda")):
+            return PurchaseChatPlannerDecision(
+                intent="greet",
+                assistant_message="Todo bien. Cuando quieras subime una factura y la revisamos.",
+            )
+        if stage == "awaiting_invoice_confirmation" and any(
+            token in normalized for token in ("si", "sí", "confirmo", "cargar factura", "dale")
+        ):
+            return PurchaseChatPlannerDecision(
+                intent="confirm_invoice",
+                assistant_message="Perfecto. Confirmo que querés cargar la factura.",
+            )
+        if stage == "awaiting_stock_confirmation" and any(
+            token in normalized for token in ("si", "sí", "generar recepción", "dale")
+        ):
+            return PurchaseChatPlannerDecision(
+                intent="confirm_stock",
+                assistant_message="Perfecto. Avanzo con la recepción de stock.",
+            )
+        if stage == "awaiting_price_confirmation" and any(
+            token in normalized for token in ("si", "sí", "actualizar precios", "dale")
+        ):
+            return PurchaseChatPlannerDecision(
+                intent="confirm_prices",
+                assistant_message="Perfecto. Avanzo con la actualización de precios.",
+            )
+        if "no" in normalized:
+            intent = {
+                "awaiting_invoice_confirmation": "reject_invoice",
+                "awaiting_stock_confirmation": "reject_stock",
+                "awaiting_price_confirmation": "reject_prices",
+            }.get(stage, "other")
+            return PurchaseChatPlannerDecision(
+                intent=intent, assistant_message="Listo. No avanzo con ese paso por ahora."
+            )
+        return PurchaseChatPlannerDecision(
+            intent="other" if stage != "awaiting_invoice" else "await_invoice",
+            assistant_message="Contame qué necesitás y adjuntá la factura cuando quieras.",
+        )
+
+    monkeypatch.setattr(OpenAIPurchaseInvoiceExtractor, "extract", fake_extract)
+    monkeypatch.setattr(OpenAIPurchaseChatAssistant, "plan", fake_plan)
+    yield
+    reset_runtime_state_for_tests()
 
 
 def test_create_product_uses_dry_run_backend() -> None:
@@ -146,6 +239,25 @@ def test_analyze_purchase_invoice_builds_markup_proposal_from_uploaded_image() -
     assert payload["extracted_totals"]["total"] > 0
     assert payload["lines"][0]["suggested_markup_percentage"] == 30.0
     assert payload["lines"][0]["product_match"]["product_id"] is not None
+
+
+def test_analyze_purchase_invoice_accepts_multiple_images() -> None:
+    app = create_app()
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/odoo/purchase-invoices/proposals",
+            data={"supplier_name": "Sumampa SRL", "markup_percentage": "30"},
+            files=[
+                ("invoice_images", ("factura-acme-1.jpg", b"fake-image-1", "image/jpeg")),
+                ("invoice_images", ("factura-acme-2.jpg", b"fake-image-2", "image/jpeg")),
+            ],
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["mode"] == "dry-run"
+    assert payload["supplier_name"] == "Sumampa SRL"
+    assert payload["invoice_number"] == "TEST-0001"
 
 
 def test_apply_purchase_invoice_proposal_returns_product_and_bill_operations() -> None:
@@ -373,7 +485,22 @@ def test_purchase_chat_handles_small_talk_without_invoice() -> None:
     assert "factura" in payload["assistant_message"].lower()
 
 
-def test_run_agent_uses_stub_backend_by_default() -> None:
+def test_run_agent_uses_openai_backend_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ORCHID_AGENT_MODE", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    reset_runtime_state_for_tests()
+
+    async def fake_run(self, *, prompt, context, session_id=None):  # type: ignore[no-untyped-def]
+        return {
+            "mode": "microsoft-agent-framework-openai",
+            "text": "respuesta simulada para test",
+            "session_id": session_id,
+            "context": context,
+            "prompt": prompt,
+        }
+
+    monkeypatch.setattr(MicrosoftAgentFrameworkOpenAIService, "run", fake_run)
+
     app = create_app()
     with TestClient(app) as client:
         response = client.post(
@@ -386,21 +513,6 @@ def test_run_agent_uses_stub_backend_by_default() -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["mode"] == "stub"
+    assert payload["mode"] == "microsoft-agent-framework-openai"
     assert payload["session_id"] == "demo-session"
-    assert {
-        "create_partner",
-        "search_partners",
-        "search_products",
-        "search_journals",
-        "search_taxes",
-        "search_picking_types",
-        "search_locations",
-        "validate_invoice_draft",
-        "validate_argentina_invoice_draft",
-        "validate_delivery_draft",
-        "create_product",
-        "create_invoice",
-        "create_delivery",
-    } <= set(payload["available_tools"])
-    assert "scaffold" in payload["text"].lower()
+    assert "simulada" in payload["text"].lower()

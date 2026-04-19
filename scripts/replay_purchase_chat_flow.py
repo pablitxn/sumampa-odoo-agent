@@ -20,6 +20,7 @@ from bootstrap_odoo_integration import (
 from sumampa_odoo_agent.application.requests.odoo import (
     AnalyzePurchaseInvoiceCommand,
     ExtractedPurchaseInvoiceDocument,
+    InvoiceAttachment,
     SearchJournalsQuery,
     SearchLocationsQuery,
     SearchPickingTypesQuery,
@@ -29,13 +30,17 @@ from sumampa_odoo_agent.application.requests.purchase_chat import (
     PurchaseChatMessageCommand,
 )
 from sumampa_odoo_agent.infrastructure.odoo.client import OdooJsonRpcClient
-from sumampa_odoo_agent.infrastructure.purchase_chat.assistant import StubPurchaseChatAssistant
+from sumampa_odoo_agent.infrastructure.purchase_chat.assistant import (
+    OpenAIPurchaseChatAssistant,
+)
 from sumampa_odoo_agent.infrastructure.purchase_chat.service import PurchaseChatService
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOTS_DIR = (
     REPO_ROOT / "tests" / "integration" / "fixtures" / "purchase_invoice_extractions"
 )
+DEFAULT_PURCHASE_CHAT_MODEL = "gpt-5.4"
+DEFAULT_PURCHASE_CHAT_API_KEY_ENV = "OPENAI_API_KEY"
 
 
 class SnapshotPurchaseInvoiceExtractor:
@@ -70,15 +75,26 @@ async def main_async(args: argparse.Namespace) -> int:
         markup_percentage=args.markup,
         create_stock_receipt=args.create_stock_receipt,
     )
-    service = PurchaseChatService(odoo=client, assistant=StubPurchaseChatAssistant())
+    service = PurchaseChatService(
+        odoo=client,
+        assistant=OpenAIPurchaseChatAssistant(
+            model=os.environ.get("ORCHID_PURCHASE_CHAT_MODEL", DEFAULT_PURCHASE_CHAT_MODEL),
+            api_key_env_var=DEFAULT_PURCHASE_CHAT_API_KEY_ENV,
+            base_url=os.environ.get("ORCHID_PURCHASE_CHAT_BASE_URL"),
+        ),
+    )
 
     turns: list[dict[str, object]] = []
     response = await service.run_turn(
         PurchaseChatMessageCommand(
             message="te paso la factura",
-            image_bytes=b"snapshot-backed-image",
-            filename=f"{args.fixture}.jpeg",
-            content_type="image/jpeg",
+            attachments=[
+                InvoiceAttachment(
+                    filename=f"{args.fixture}.jpeg",
+                    content_type="image/jpeg",
+                    content_bytes=b"snapshot-backed-image",
+                )
+            ],
             context=context,
         )
     )

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class PartnerInput(BaseModel):
@@ -132,13 +132,40 @@ class ValidateArgentinaInvoiceDraftQuery(BaseModel):
     email_to: str | None = None
 
 
-class AnalyzePurchaseInvoiceCommand(BaseModel):
+class InvoiceAttachment(BaseModel):
     filename: str = Field(min_length=1)
     content_type: str | None = None
-    image_bytes: bytes = Field(min_length=1)
+    content_bytes: bytes = Field(min_length=1)
+
+
+class AnalyzePurchaseInvoiceCommand(BaseModel):
+    attachments: list[InvoiceAttachment] = Field(default_factory=list, min_length=1)
     supplier_name: str | None = None
     supplier_vat: str | None = None
     markup_percentage: float = Field(default=30.0, ge=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _upgrade_legacy_single_attachment(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        if data.get("attachments"):
+            return data
+
+        filename = data.get("filename")
+        image_bytes = data.get("image_bytes")
+        if not filename or image_bytes in (None, b""):
+            return data
+
+        upgraded = dict(data)
+        upgraded["attachments"] = [
+            {
+                "filename": filename,
+                "content_type": data.get("content_type"),
+                "content_bytes": image_bytes,
+            }
+        ]
+        return upgraded
 
 
 class ExtractedPurchaseInvoiceLine(BaseModel):

@@ -6,12 +6,12 @@ POC inicial para operar Odoo con una app Python basada en FastAPI, límites hexa
 
 - API FastAPI con `health` y `capabilities`
 - Endpoints Odoo para buscar entidades operativas y prevalidar facturación ARCA/AFIP antes de crear documentos
-- Flujo inicial de factura de compra por foto para proponer costos, precios y movimientos de stock
+- Flujo inicial de factura de compra por una o varias fotos para proponer costos, precios y movimientos de stock
 - Servidor MCP opcional con las mismas operaciones
 - Backend `dry-run` por defecto para trabajar sin tocar Odoo real
 - Agent con Microsoft Agent Framework listo para usar tools de lookup y alta sobre Odoo cuando se configure `OPENAI_API_KEY`
-- Extracción de facturas de compra configurable: `stub` en dev y OpenAI `gpt-5.4` en producción
-- Chat de compras configurable: `stub` en dev y OpenAI `gpt-5.4` en producción para small talk + confirmaciones guiadas
+- Extracción de facturas de compra con OpenAI `gpt-5.4`
+- Chat de compras con OpenAI `gpt-5.4` para small talk, clarificaciones y confirmaciones guiadas
 
 ## Stack
 
@@ -131,8 +131,8 @@ ORCHID_ENV=integration uv run sumampa_odoo_agent --reload
 
 ## Configuración
 
-- `config/appsettings.development.json` usa `dry-run` y `stub`
-- `config/appsettings.integration.json` apunta a un Odoo 19 local por `jsonrpc` y deja agent/chat/extracción en `stub`
+- `config/appsettings.development.json` usa `dry-run`, extracción OpenAI y deja el módulo agent deshabilitado por defecto
+- `config/appsettings.integration.json` apunta a un Odoo 19 local por `jsonrpc`, usa extracción/chat reales y deja el módulo agent deshabilitado por defecto
 - `config/appsettings.production.json` cambia a `jsonrpc` para Odoo, `openai` para el agent, `openai` para extracción de facturas y `openai` para el planner conversacional
 - `.env.example` documenta la variable mínima para el provider
 - Overrides útiles por entorno: `ORCHID_INVOICE_EXTRACTION_MODE`, `ORCHID_PURCHASE_CHAT_MODE`, `ORCHID_AGENT_MODE`, `ORCHID_ODOO_MODE`, `ORCHID_ODOO_BASE_URL`, `ORCHID_ODOO_DATABASE`, `ORCHID_ODOO_USERNAME`, `ORCHID_ODOO_PASSWORD`, `ORCHID_PURCHASE_RESOLUTION_MEMORY_PATH`
@@ -144,7 +144,7 @@ ORCHID_ENV=integration uv run sumampa_odoo_agent --reload
 - Buscar diarios, impuestos, tipos de picking y ubicaciones
 - Prevalidar borradores de factura y remito antes de crear registros
 - Prevalidar una factura electrónica argentina con chequeos de CUIT, punto de venta, letra A/B/C y datos mínimos del receptor
-- Analizar una foto de factura de proveedor y proponer actualización de costo, precio sugerido con markup y stock esperado
+- Analizar una o varias fotos de una factura de proveedor y proponer actualización de costo, precio sugerido con markup y stock esperado
 - Aplicar una propuesta de compra para preparar writes sobre productos y factura de compra
 - La extracción hoy puede correr directo con OpenAI usando schema estructurado; el contrato interno permite reemplazarla más adelante por OCR barato
 - El chat de compras puede usar OpenAI para responder natural y clasificar intenciones sin perder el gating explícito antes de escribir en Odoo
@@ -168,7 +168,7 @@ Después abrí `http://127.0.0.1:8000/demo/purchase-invoices`.
 Podés:
 
 1. saludar o hablar natural;
-2. subir una factura;
+2. subir una o varias fotos de la misma factura;
 3. usar `Cargar defaults locales` para autocompletar journal/picking/locations del backend activo;
 4. si hace falta, resolver proveedor/productos con respuestas tipo `proveedor 102`, `linea 2 producto 201`, `linea 3 nuevo`, `crear proveedor`, `linea 3 crear` o `crear nuevos`;
 5. confirmar la carga de la factura;

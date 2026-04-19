@@ -4,22 +4,27 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from sumampa_odoo_agent.application.requests.odoo import (
     AnalyzePurchaseInvoiceCommand,
     ExtractedPurchaseInvoiceDocument,
+    InvoiceAttachment,
 )
 from sumampa_odoo_agent.application.requests.purchase_chat import (
     PurchaseChatContext,
     PurchaseChatMessageCommand,
+    PurchaseChatPlannerDecision,
 )
 from sumampa_odoo_agent.infrastructure.odoo.client import DryRunOdooClient
 from sumampa_odoo_agent.infrastructure.odoo.resolution_memory import (
     PurchaseResolutionMemoryStore,
 )
-from sumampa_odoo_agent.infrastructure.purchase_chat.assistant import StubPurchaseChatAssistant
+from sumampa_odoo_agent.infrastructure.purchase_chat.assistant import (
+    OpenAIPurchaseChatAssistant,
+)
 from sumampa_odoo_agent.infrastructure.purchase_chat.service import PurchaseChatService
 
 
@@ -33,6 +38,88 @@ class SnapshotPurchaseInvoiceExtractor:
     ) -> ExtractedPurchaseInvoiceDocument:
         del command
         return self._extracted
+
+
+class _FakePlanningResponses:
+    async def parse(self, **kwargs: object) -> object:
+        payload = kwargs["input"][1]["content"][0]["text"]  # type: ignore[index]
+        stage, user_message = _parse_prompt_payload(str(payload))
+        decision = _decision_for(stage=stage, user_message=user_message)
+        return SimpleNamespace(
+            output=[
+                SimpleNamespace(
+                    type="message",
+                    content=[SimpleNamespace(parsed=decision)],
+                )
+            ]
+        )
+
+
+class _FakePlanningClient:
+    def __init__(self) -> None:
+        self.responses = _FakePlanningResponses()
+
+
+def _test_assistant() -> OpenAIPurchaseChatAssistant:
+    return OpenAIPurchaseChatAssistant(
+        model="gpt-5.4",
+        api_key_env_var="OPENAI_API_KEY",
+        client=_FakePlanningClient(),  # type: ignore[arg-type]
+    )
+
+
+def _parse_prompt_payload(payload: str) -> tuple[str, str]:
+    stage = "awaiting_invoice"
+    user_message = ""
+    for line in payload.splitlines():
+        if line.startswith("Etapa actual: "):
+            stage = line.removeprefix("Etapa actual: ").strip()
+        if line.startswith("Mensaje usuario: "):
+            user_message = line.removeprefix("Mensaje usuario: ").strip()
+    return stage, user_message
+
+
+def _decision_for(*, stage: str, user_message: str) -> PurchaseChatPlannerDecision:
+    normalized = " ".join(user_message.casefold().replace(",", " ").replace(".", " ").split())
+    if any(token in normalized for token in ("hola", "buenas", "como va", "qué onda", "que onda")):
+        return PurchaseChatPlannerDecision(
+            intent="greet",
+            assistant_message="Todo bien. Cuando quieras subime una factura y la revisamos.",
+        )
+    if stage == "awaiting_invoice_confirmation" and any(
+        token in normalized for token in ("si", "sí", "confirmo", "cargar factura", "dale")
+    ):
+        return PurchaseChatPlannerDecision(
+            intent="confirm_invoice",
+            assistant_message="Perfecto. Confirmo que querés cargar la factura.",
+        )
+    if stage == "awaiting_stock_confirmation" and any(
+        token in normalized for token in ("si", "sí", "generar recepción", "dale")
+    ):
+        return PurchaseChatPlannerDecision(
+            intent="confirm_stock",
+            assistant_message="Perfecto. Avanzo con la recepción de stock.",
+        )
+    if stage == "awaiting_price_confirmation" and any(
+        token in normalized for token in ("si", "sí", "actualizar precios", "dale")
+    ):
+        return PurchaseChatPlannerDecision(
+            intent="confirm_prices",
+            assistant_message="Perfecto. Avanzo con la actualización de precios.",
+        )
+    if "no" in normalized:
+        intent = {
+            "awaiting_invoice_confirmation": "reject_invoice",
+            "awaiting_stock_confirmation": "reject_stock",
+            "awaiting_price_confirmation": "reject_prices",
+        }.get(stage, "other")
+        return PurchaseChatPlannerDecision(
+            intent=intent, assistant_message="Listo. No avanzo con ese paso por ahora."
+        )
+    return PurchaseChatPlannerDecision(
+        intent="other" if stage != "awaiting_invoice" else "await_invoice",
+        assistant_message="Contame qué necesitás y adjuntá la factura cuando quieras.",
+    )
 
 
 def _load_snapshot(path: Path) -> ExtractedPurchaseInvoiceDocument:
@@ -70,15 +157,19 @@ async def test_purchase_chat_keeps_user_in_loop_before_mutations_and_splits_stoc
 
     service = PurchaseChatService(
         odoo=DryRunOdooClient(invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted)),
-        assistant=StubPurchaseChatAssistant(),
+        assistant=_test_assistant(),
     )
 
     first = await service.run_turn(
         PurchaseChatMessageCommand(
             message="te paso la factura",
-            image_bytes=b"image-does-not-matter",
-            filename="molinos_1.jpeg",
-            content_type="image/jpeg",
+            attachments=[
+                InvoiceAttachment(
+                    filename="molinos_1.jpeg",
+                    content_type="image/jpeg",
+                    content_bytes=b"image-does-not-matter",
+                )
+            ],
             context=PurchaseChatContext(
                 supplier_id=102,
                 journal_id=301,
@@ -188,15 +279,19 @@ async def test_purchase_chat_can_stop_after_bill_without_updating_prices(
 
     service = PurchaseChatService(
         odoo=DryRunOdooClient(invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted)),
-        assistant=StubPurchaseChatAssistant(),
+        assistant=_test_assistant(),
     )
 
     uploaded = await service.run_turn(
         PurchaseChatMessageCommand(
             message="aca va",
-            image_bytes=b"image-does-not-matter",
-            filename="jambo_2.jpeg",
-            content_type="image/jpeg",
+            attachments=[
+                InvoiceAttachment(
+                    filename="jambo_2.jpeg",
+                    content_type="image/jpeg",
+                    content_bytes=b"image-does-not-matter",
+                )
+            ],
             context=PurchaseChatContext(
                 supplier_id=102,
                 journal_id=301,
@@ -289,15 +384,19 @@ async def test_purchase_chat_keeps_new_products_blocked_until_guided_creation_ex
 
     service = PurchaseChatService(
         odoo=DryRunOdooClient(invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted)),
-        assistant=StubPurchaseChatAssistant(),
+        assistant=_test_assistant(),
     )
 
     uploaded = await service.run_turn(
         PurchaseChatMessageCommand(
             message="te paso una factura",
-            image_bytes=b"image-does-not-matter",
-            filename="nuevo.jpeg",
-            content_type="image/jpeg",
+            attachments=[
+                InvoiceAttachment(
+                    filename="nuevo.jpeg",
+                    content_type="image/jpeg",
+                    content_bytes=b"image-does-not-matter",
+                )
+            ],
             context=PurchaseChatContext(
                 supplier_id=900,
                 journal_id=301,
@@ -378,15 +477,19 @@ async def test_purchase_chat_resolution_message_focuses_on_supplier_when_only_su
 
     service = PurchaseChatService(
         odoo=DryRunOdooClient(invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted)),
-        assistant=StubPurchaseChatAssistant(),
+        assistant=_test_assistant(),
     )
 
     uploaded = await service.run_turn(
         PurchaseChatMessageCommand(
             message="te paso la factura",
-            image_bytes=b"image-does-not-matter",
-            filename="supplier-only.jpeg",
-            content_type="image/jpeg",
+            attachments=[
+                InvoiceAttachment(
+                    filename="supplier-only.jpeg",
+                    content_type="image/jpeg",
+                    content_bytes=b"image-does-not-matter",
+                )
+            ],
             context=PurchaseChatContext(
                 journal_id=301,
                 markup_percentage=30.0,
@@ -440,15 +543,19 @@ async def test_purchase_chat_resolution_message_focuses_on_lines_when_supplier_i
 
     service = PurchaseChatService(
         odoo=DryRunOdooClient(invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted)),
-        assistant=StubPurchaseChatAssistant(),
+        assistant=_test_assistant(),
     )
 
     uploaded = await service.run_turn(
         PurchaseChatMessageCommand(
             message="te paso la factura",
-            image_bytes=b"image-does-not-matter",
-            filename="lines-only.jpeg",
-            content_type="image/jpeg",
+            attachments=[
+                InvoiceAttachment(
+                    filename="lines-only.jpeg",
+                    content_type="image/jpeg",
+                    content_bytes=b"image-does-not-matter",
+                )
+            ],
             context=PurchaseChatContext(
                 journal_id=301,
                 markup_percentage=30.0,
@@ -515,7 +622,7 @@ async def test_purchase_chat_responses_are_snapshots_between_turns(
 
     service = PurchaseChatService(
         odoo=DryRunOdooClient(invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted)),
-        assistant=StubPurchaseChatAssistant(),
+        assistant=_test_assistant(),
     )
 
     uploaded = await service.run_turn(
@@ -584,15 +691,19 @@ async def test_purchase_chat_can_create_new_supplier_and_product_locally(
 
     service = PurchaseChatService(
         odoo=DryRunOdooClient(invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted)),
-        assistant=StubPurchaseChatAssistant(),
+        assistant=_test_assistant(),
     )
 
     uploaded = await service.run_turn(
         PurchaseChatMessageCommand(
             message="te paso la factura",
-            image_bytes=b"image-does-not-matter",
-            filename="nuevo-completo.jpeg",
-            content_type="image/jpeg",
+            attachments=[
+                InvoiceAttachment(
+                    filename="nuevo-completo.jpeg",
+                    content_type="image/jpeg",
+                    content_bytes=b"image-does-not-matter",
+                )
+            ],
             context=PurchaseChatContext(
                 journal_id=301,
                 markup_percentage=30.0,
@@ -702,15 +813,19 @@ async def test_purchase_chat_learns_confirmed_resolution_for_next_invoice(
             invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted),
             resolution_memory=memory,
         ),
-        assistant=StubPurchaseChatAssistant(),
+        assistant=_test_assistant(),
     )
 
     uploaded = await service.run_turn(
         PurchaseChatMessageCommand(
             message="te paso una factura",
-            image_bytes=b"image-does-not-matter",
-            filename="alias.jpeg",
-            content_type="image/jpeg",
+            attachments=[
+                InvoiceAttachment(
+                    filename="alias.jpeg",
+                    content_type="image/jpeg",
+                    content_bytes=b"image-does-not-matter",
+                )
+            ],
             context=PurchaseChatContext(
                 supplier_id=900,
                 journal_id=301,
