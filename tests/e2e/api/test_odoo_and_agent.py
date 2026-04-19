@@ -5,7 +5,10 @@ from fastapi.testclient import TestClient
 
 from sumampa_odoo_agent.adapters.api.main import create_app
 from sumampa_odoo_agent.application.requests.odoo import ExtractedPurchaseInvoiceDocument
-from sumampa_odoo_agent.application.requests.purchase_chat import PurchaseChatPlannerDecision
+from sumampa_odoo_agent.application.requests.purchase_chat import (
+    PurchaseChatReplyRequest,
+    PurchaseChatTurnDecision,
+)
 from sumampa_odoo_agent.infrastructure.agent.service import (
     MicrosoftAgentFrameworkOpenAIService,
 )
@@ -49,51 +52,22 @@ def patch_runtime_for_api_tests(monkeypatch: pytest.MonkeyPatch) -> None:
             }
         )
 
-    async def fake_plan(self, *, stage, proposal_summary, user_message):  # type: ignore[no-untyped-def]
-        del self, proposal_summary
-        normalized = " ".join(user_message.casefold().replace(",", " ").replace(".", " ").split())
-        if any(token in normalized for token in ("hola", "buenas", "como va", "qué onda", "que onda")):
-            return PurchaseChatPlannerDecision(
-                intent="greet",
-                assistant_message="Todo bien. Cuando quieras subime una factura y la revisamos.",
-            )
-        if stage == "awaiting_invoice_confirmation" and any(
-            token in normalized for token in ("si", "sí", "confirmo", "cargar factura", "dale")
-        ):
-            return PurchaseChatPlannerDecision(
-                intent="confirm_invoice",
-                assistant_message="Perfecto. Confirmo que querés cargar la factura.",
-            )
-        if stage == "awaiting_stock_confirmation" and any(
-            token in normalized for token in ("si", "sí", "generar recepción", "dale")
-        ):
-            return PurchaseChatPlannerDecision(
-                intent="confirm_stock",
-                assistant_message="Perfecto. Avanzo con la recepción de stock.",
-            )
-        if stage == "awaiting_price_confirmation" and any(
-            token in normalized for token in ("si", "sí", "actualizar precios", "dale")
-        ):
-            return PurchaseChatPlannerDecision(
-                intent="confirm_prices",
-                assistant_message="Perfecto. Avanzo con la actualización de precios.",
-            )
-        if "no" in normalized:
-            intent = {
-                "awaiting_invoice_confirmation": "reject_invoice",
-                "awaiting_stock_confirmation": "reject_stock",
-                "awaiting_price_confirmation": "reject_prices",
-            }.get(stage, "other")
-            return PurchaseChatPlannerDecision(
-                intent=intent, assistant_message="Listo. No avanzo con ese paso por ahora."
-            )
-        return PurchaseChatPlannerDecision(
-            intent="other" if stage != "awaiting_invoice" else "await_invoice",
-            assistant_message="Contame qué necesitás y adjuntá la factura cuando quieras.",
-        )
+    async def fake_decide(self, *, stage, user_message, proposal, last_apply_result):  # type: ignore[no-untyped-def]
+        del self, user_message, proposal, last_apply_result
+        if stage == "awaiting_invoice_confirmation":
+            return PurchaseChatTurnDecision(action="confirm_invoice")
+        if stage == "awaiting_stock_confirmation":
+            return PurchaseChatTurnDecision(action="confirm_stock")
+        if stage == "awaiting_price_confirmation":
+            return PurchaseChatTurnDecision(action="confirm_prices")
+        return PurchaseChatTurnDecision(action="reply_only")
+
+    async def fake_reply(self, request: PurchaseChatReplyRequest):  # type: ignore[no-untyped-def]
+        return f"event={request.event}"
 
     monkeypatch.setattr(OpenAIPurchaseInvoiceExtractor, "extract", fake_extract)
-    monkeypatch.setattr(OpenAIPurchaseChatAssistant, "plan", fake_plan)
+    monkeypatch.setattr(OpenAIPurchaseChatAssistant, "decide", fake_decide)
+    monkeypatch.setattr(OpenAIPurchaseChatAssistant, "reply", fake_reply)
     yield
     reset_runtime_state_for_tests()
 
@@ -337,7 +311,7 @@ def test_purchase_chat_flow_goes_from_invoice_to_price_update() -> None:
 
     assert third.status_code == 200
     assert third_payload["stage"] == "completed"
-    assert "Actualicé" in third_payload["assistant_message"]
+    assert third_payload["assistant_message"] == "event=price_applied"
 
 
 def test_purchase_chat_keeps_supplier_resolution_across_turns_when_form_leaves_supplier_blank() -> None:
@@ -448,7 +422,7 @@ def test_purchase_chat_flow_splits_bill_stock_and_prices_when_requested() -> Non
 
     assert fourth.status_code == 200
     assert fourth_payload["stage"] == "completed"
-    assert "Actualicé" in fourth_payload["assistant_message"]
+    assert fourth_payload["assistant_message"] == "event=price_applied"
 
 
 def test_purchase_chat_stops_in_resolution_when_supplier_is_ambiguous() -> None:
@@ -468,7 +442,7 @@ def test_purchase_chat_stops_in_resolution_when_supplier_is_ambiguous() -> None:
     payload = response.json()
     assert payload["stage"] == "awaiting_resolution"
     assert payload["proposal"]["needs_user_resolution"] is True
-    assert "proveedor" in payload["assistant_message"].lower()
+    assert payload["assistant_message"] == "event=analysis_requires_resolution"
 
 
 def test_purchase_chat_handles_small_talk_without_invoice() -> None:
@@ -482,7 +456,7 @@ def test_purchase_chat_handles_small_talk_without_invoice() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["stage"] == "awaiting_invoice"
-    assert "factura" in payload["assistant_message"].lower()
+    assert payload["assistant_message"] == "event=awaiting_invoice"
 
 
 def test_run_agent_uses_openai_backend_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:

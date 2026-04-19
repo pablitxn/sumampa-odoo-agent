@@ -12,7 +12,10 @@ from sumampa_odoo_agent.application.requests.odoo import (
 from sumampa_odoo_agent.application.requests.purchase_chat import (
     PurchaseChatContext,
     PurchaseChatMessageCommand,
-    PurchaseChatPlannerDecision,
+    PurchaseChatReplyRequest,
+    PurchaseChatResolutionDecision,
+    PurchaseChatSupplierResolutionDecision,
+    PurchaseChatTurnDecision,
 )
 from sumampa_odoo_agent.infrastructure.db.session_store import InMemorySessionStore
 from sumampa_odoo_agent.infrastructure.odoo.client import DryRunOdooClient
@@ -34,24 +37,31 @@ class SnapshotPurchaseInvoiceExtractor:
 
 
 class FakeAssistant:
-    async def plan(
+    async def decide(
         self,
         *,
         stage: str,
-        proposal_summary: str | None,
         user_message: str,
-    ) -> PurchaseChatPlannerDecision:
-        del proposal_summary
-        normalized = user_message.casefold()
-        if stage == "awaiting_invoice_confirmation" and "si" in normalized:
-            return PurchaseChatPlannerDecision(
-                intent="confirm_invoice",
-                assistant_message="Confirmo la factura.",
+        proposal,
+        last_apply_result,
+    ) -> PurchaseChatTurnDecision:
+        del user_message, proposal, last_apply_result
+        if stage == "awaiting_resolution":
+            return PurchaseChatTurnDecision(
+                action="review_resolution",
+                resolution=PurchaseChatResolutionDecision(
+                    supplier=PurchaseChatSupplierResolutionDecision(
+                        action="select_candidate",
+                        partner_id=102,
+                    )
+                ),
             )
-        return PurchaseChatPlannerDecision(
-            intent="await_invoice" if stage == "awaiting_invoice" else "other",
-            assistant_message="Seguimos.",
-        )
+        if stage == "awaiting_invoice_confirmation":
+            return PurchaseChatTurnDecision(action="confirm_invoice")
+        return PurchaseChatTurnDecision(action="await_invoice")
+
+    async def reply(self, request: PurchaseChatReplyRequest) -> str:
+        return f"event={request.event}"
 
 
 def _load_snapshot(path: Path) -> ExtractedPurchaseInvoiceDocument:
@@ -113,7 +123,7 @@ async def test_purchase_chat_service_restores_session_from_store(
     resolved = await second_service.run_turn(
         PurchaseChatMessageCommand(
             session_id=uploaded.session_id,
-            message="proveedor 102",
+            message="dejá proveedor 102",
             context=PurchaseChatContext(
                 supplier_id=102,
                 journal_id=301,

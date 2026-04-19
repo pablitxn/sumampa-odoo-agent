@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -15,15 +14,16 @@ from sumampa_odoo_agent.application.requests.odoo import (
 )
 from sumampa_odoo_agent.application.requests.purchase_chat import (
     PurchaseChatContext,
+    PurchaseChatLineResolutionDecision,
     PurchaseChatMessageCommand,
-    PurchaseChatPlannerDecision,
+    PurchaseChatReplyRequest,
+    PurchaseChatResolutionDecision,
+    PurchaseChatSupplierResolutionDecision,
+    PurchaseChatTurnDecision,
 )
 from sumampa_odoo_agent.infrastructure.odoo.client import DryRunOdooClient
 from sumampa_odoo_agent.infrastructure.odoo.resolution_memory import (
     PurchaseResolutionMemoryStore,
-)
-from sumampa_odoo_agent.infrastructure.purchase_chat.assistant import (
-    OpenAIPurchaseChatAssistant,
 )
 from sumampa_odoo_agent.infrastructure.purchase_chat.service import PurchaseChatService
 
@@ -40,85 +40,66 @@ class SnapshotPurchaseInvoiceExtractor:
         return self._extracted
 
 
-class _FakePlanningResponses:
-    async def parse(self, **kwargs: object) -> object:
-        payload = kwargs["input"][1]["content"][0]["text"]  # type: ignore[index]
-        stage, user_message = _parse_prompt_payload(str(payload))
-        decision = _decision_for(stage=stage, user_message=user_message)
-        return SimpleNamespace(
-            output=[
-                SimpleNamespace(
-                    type="message",
-                    content=[SimpleNamespace(parsed=decision)],
-                )
+class ScriptedAssistant:
+    def __init__(self, decisions: list[PurchaseChatTurnDecision] | None = None) -> None:
+        self._decisions = list(decisions or [])
+        self.reply_requests: list[PurchaseChatReplyRequest] = []
+
+    async def decide(
+        self,
+        *,
+        stage: str,
+        user_message: str,
+        proposal,
+        last_apply_result,
+    ) -> PurchaseChatTurnDecision:
+        del stage, user_message, proposal, last_apply_result
+        if self._decisions:
+            return self._decisions.pop(0)
+        return PurchaseChatTurnDecision(action="reply_only")
+
+    async def reply(self, request: PurchaseChatReplyRequest) -> str:
+        self.reply_requests.append(request)
+        supplier_pending = bool(
+            request.proposal
+            and request.proposal.supplier_resolution is not None
+            and request.proposal.supplier_resolution.status not in {"exact", "manual"}
+        )
+        pending_lines = (
+            [
+                line.line_number
+                for line in request.proposal.lines
+                if line.product_resolution.status not in {"exact", "manual"}
             ]
+            if request.proposal is not None
+            else []
+        )
+        return (
+            f"event={request.event};stage={request.stage};"
+            f"supplier_pending={supplier_pending};pending_lines={pending_lines};"
+            f"details={json.dumps(request.details, sort_keys=True, default=str)}"
         )
 
 
-class _FakePlanningClient:
-    def __init__(self) -> None:
-        self.responses = _FakePlanningResponses()
+def _test_assistant(
+    decisions: list[PurchaseChatTurnDecision] | None = None,
+) -> ScriptedAssistant:
+    return ScriptedAssistant(decisions)
 
 
-def _test_assistant() -> OpenAIPurchaseChatAssistant:
-    return OpenAIPurchaseChatAssistant(
-        model="gpt-5.4",
-        api_key_env_var="OPENAI_API_KEY",
-        client=_FakePlanningClient(),  # type: ignore[arg-type]
-    )
-
-
-def _parse_prompt_payload(payload: str) -> tuple[str, str]:
-    stage = "awaiting_invoice"
-    user_message = ""
-    for line in payload.splitlines():
-        if line.startswith("Etapa actual: "):
-            stage = line.removeprefix("Etapa actual: ").strip()
-        if line.startswith("Mensaje usuario: "):
-            user_message = line.removeprefix("Mensaje usuario: ").strip()
-    return stage, user_message
-
-
-def _decision_for(*, stage: str, user_message: str) -> PurchaseChatPlannerDecision:
-    normalized = " ".join(user_message.casefold().replace(",", " ").replace(".", " ").split())
-    if any(token in normalized for token in ("hola", "buenas", "como va", "qué onda", "que onda")):
-        return PurchaseChatPlannerDecision(
-            intent="greet",
-            assistant_message="Todo bien. Cuando quieras subime una factura y la revisamos.",
-        )
-    if stage == "awaiting_invoice_confirmation" and any(
-        token in normalized for token in ("si", "sí", "confirmo", "cargar factura", "dale")
-    ):
-        return PurchaseChatPlannerDecision(
-            intent="confirm_invoice",
-            assistant_message="Perfecto. Confirmo que querés cargar la factura.",
-        )
-    if stage == "awaiting_stock_confirmation" and any(
-        token in normalized for token in ("si", "sí", "generar recepción", "dale")
-    ):
-        return PurchaseChatPlannerDecision(
-            intent="confirm_stock",
-            assistant_message="Perfecto. Avanzo con la recepción de stock.",
-        )
-    if stage == "awaiting_price_confirmation" and any(
-        token in normalized for token in ("si", "sí", "actualizar precios", "dale")
-    ):
-        return PurchaseChatPlannerDecision(
-            intent="confirm_prices",
-            assistant_message="Perfecto. Avanzo con la actualización de precios.",
-        )
-    if "no" in normalized:
-        intent = {
-            "awaiting_invoice_confirmation": "reject_invoice",
-            "awaiting_stock_confirmation": "reject_stock",
-            "awaiting_price_confirmation": "reject_prices",
-        }.get(stage, "other")
-        return PurchaseChatPlannerDecision(
-            intent=intent, assistant_message="Listo. No avanzo con ese paso por ahora."
-        )
-    return PurchaseChatPlannerDecision(
-        intent="other" if stage != "awaiting_invoice" else "await_invoice",
-        assistant_message="Contame qué necesitás y adjuntá la factura cuando quieras.",
+def _review_decision(
+    *,
+    supplier: PurchaseChatSupplierResolutionDecision | None = None,
+    lines: list[PurchaseChatLineResolutionDecision] | None = None,
+    accept_current_resolution: bool = False,
+) -> PurchaseChatTurnDecision:
+    return PurchaseChatTurnDecision(
+        action="review_resolution",
+        resolution=PurchaseChatResolutionDecision(
+            supplier=supplier,
+            lines=lines or [],
+            accept_current_resolution=accept_current_resolution,
+        ),
     )
 
 
@@ -154,10 +135,23 @@ async def test_purchase_chat_keeps_user_in_loop_before_mutations_and_splits_stoc
         "_stock_by_product_id",
         {2001: 10.0, 2002: 2.0, 2003: 0.0},
     )
+    assistant = _test_assistant(
+        [
+            _review_decision(
+                supplier=PurchaseChatSupplierResolutionDecision(
+                    action="select_candidate",
+                    partner_id=102,
+                )
+            ),
+            PurchaseChatTurnDecision(action="confirm_invoice"),
+            PurchaseChatTurnDecision(action="confirm_stock"),
+            PurchaseChatTurnDecision(action="confirm_prices"),
+        ]
+    )
 
     service = PurchaseChatService(
         odoo=DryRunOdooClient(invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted)),
-        assistant=_test_assistant(),
+        assistant=assistant,
     )
 
     first = await service.run_turn(
@@ -261,6 +255,7 @@ async def test_purchase_chat_keeps_user_in_loop_before_mutations_and_splits_stoc
     assert fourth.stage == "completed"
     assert fourth.last_apply_result is not None
     assert any(operation.model == "product.template" for operation in fourth.last_apply_result.operations)
+    assert assistant.reply_requests[-1].event == "price_applied"
 
 
 @pytest.mark.integration
@@ -276,10 +271,22 @@ async def test_purchase_chat_can_stop_after_bill_without_updating_prices(
         "_stock_by_product_id",
         {2001: 4.0, 2002: 4.0, 2003: 4.0},
     )
+    assistant = _test_assistant(
+        [
+            _review_decision(
+                supplier=PurchaseChatSupplierResolutionDecision(
+                    action="select_candidate",
+                    partner_id=102,
+                )
+            ),
+            PurchaseChatTurnDecision(action="confirm_invoice"),
+            PurchaseChatTurnDecision(action="reject_prices"),
+        ]
+    )
 
     service = PurchaseChatService(
         odoo=DryRunOdooClient(invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted)),
-        assistant=_test_assistant(),
+        assistant=assistant,
     )
 
     uploaded = await service.run_turn(
@@ -342,6 +349,7 @@ async def test_purchase_chat_can_stop_after_bill_without_updating_prices(
     assert done.stage == "completed"
     assert done.last_apply_result is not None
     assert any(operation.model == "account.move" for operation in done.last_apply_result.operations)
+    assert assistant.reply_requests[-1].event == "price_rejected"
 
 
 @pytest.mark.integration
@@ -381,10 +389,23 @@ async def test_purchase_chat_keeps_new_products_blocked_until_guided_creation_ex
     )
     monkeypatch.setattr(DryRunOdooClient, "_products", [])
     monkeypatch.setattr(DryRunOdooClient, "_stock_by_product_id", {})
+    assistant = _test_assistant(
+        [
+            _review_decision(
+                lines=[
+                    PurchaseChatLineResolutionDecision(
+                        line_number=1,
+                        action="mark_new",
+                    )
+                ]
+            ),
+            _review_decision(accept_current_resolution=True),
+        ]
+    )
 
     service = PurchaseChatService(
         odoo=DryRunOdooClient(invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted)),
-        assistant=_test_assistant(),
+        assistant=assistant,
     )
 
     uploaded = await service.run_turn(
@@ -433,7 +454,7 @@ async def test_purchase_chat_keeps_new_products_blocked_until_guided_creation_ex
         )
     )
     assert confirmed.stage == "awaiting_resolution"
-    assert "todavía quedan cosas por resolver" in confirmed.assistant_message.casefold()
+    assert assistant.reply_requests[-1].event == "resolution_blocked"
 
 
 @pytest.mark.integration
@@ -475,9 +496,10 @@ async def test_purchase_chat_resolution_message_focuses_on_supplier_when_only_su
     )
     monkeypatch.setattr(DryRunOdooClient, "_stock_by_product_id", {501: 4.0})
 
+    assistant = _test_assistant()
     service = PurchaseChatService(
         odoo=DryRunOdooClient(invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted)),
-        assistant=_test_assistant(),
+        assistant=assistant,
     )
 
     uploaded = await service.run_turn(
@@ -498,9 +520,14 @@ async def test_purchase_chat_resolution_message_focuses_on_supplier_when_only_su
     )
 
     assert uploaded.stage == "awaiting_resolution"
-    assert "me falta resolver el proveedor" in uploaded.assistant_message.casefold()
-    assert "líneas pendientes:" not in uploaded.assistant_message.casefold()
-    assert "`proveedor 102`" in uploaded.assistant_message
+    assert assistant.reply_requests[-1].event == "analysis_requires_resolution"
+    assert assistant.reply_requests[-1].proposal is not None
+    assert assistant.reply_requests[-1].proposal.supplier_resolution is not None
+    assert assistant.reply_requests[-1].proposal.supplier_resolution.status == "missing"
+    assert all(
+        line.product_resolution.status in {"exact", "manual"}
+        for line in assistant.reply_requests[-1].proposal.lines
+    )
 
 
 @pytest.mark.integration
@@ -541,9 +568,10 @@ async def test_purchase_chat_resolution_message_focuses_on_lines_when_supplier_i
     monkeypatch.setattr(DryRunOdooClient, "_products", [])
     monkeypatch.setattr(DryRunOdooClient, "_stock_by_product_id", {})
 
+    assistant = _test_assistant()
     service = PurchaseChatService(
         odoo=DryRunOdooClient(invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted)),
-        assistant=_test_assistant(),
+        assistant=assistant,
     )
 
     uploaded = await service.run_turn(
@@ -564,15 +592,16 @@ async def test_purchase_chat_resolution_message_focuses_on_lines_when_supplier_i
     )
 
     assert uploaded.stage == "awaiting_resolution"
-    assert "proveedor resuelto:" in uploaded.assistant_message.casefold()
-    assert "me faltan estas líneas:" in uploaded.assistant_message.casefold()
-    assert "me falta resolver el proveedor" not in uploaded.assistant_message.casefold()
-    assert "`linea 1 producto 201`" in uploaded.assistant_message
+    assert assistant.reply_requests[-1].event == "analysis_requires_resolution"
+    assert assistant.reply_requests[-1].proposal is not None
+    assert assistant.reply_requests[-1].proposal.supplier_resolution is not None
+    assert assistant.reply_requests[-1].proposal.supplier_resolution.status == "exact"
+    assert assistant.reply_requests[-1].proposal.lines[0].product_resolution.status == "missing"
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_purchase_chat_responses_are_snapshots_between_turns(
+async def test_purchase_chat_snapshots_are_stable_between_turns(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     extracted = ExtractedPurchaseInvoiceDocument.model_validate(
@@ -620,9 +649,26 @@ async def test_purchase_chat_responses_are_snapshots_between_turns(
     )
     monkeypatch.setattr(DryRunOdooClient, "_stock_by_product_id", {901: 5.0})
 
+    assistant = _test_assistant(
+        [
+            _review_decision(
+                supplier=PurchaseChatSupplierResolutionDecision(
+                    action="select_candidate",
+                    partner_id=900,
+                ),
+                lines=[
+                    PurchaseChatLineResolutionDecision(
+                        line_number=1,
+                        action="select_candidate",
+                        product_id=901,
+                    )
+                ],
+            )
+        ]
+    )
     service = PurchaseChatService(
         odoo=DryRunOdooClient(invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted)),
-        assistant=_test_assistant(),
+        assistant=assistant,
     )
 
     uploaded = await service.run_turn(
@@ -647,7 +693,7 @@ async def test_purchase_chat_responses_are_snapshots_between_turns(
     resolved = await service.run_turn(
         PurchaseChatMessageCommand(
             session_id=uploaded.session_id,
-            message="proveedor 900 linea 1 producto 901",
+            message="dejá proveedor 900 y línea 1 con 901",
             context=PurchaseChatContext(
                 supplier_id=900,
                 journal_id=301,
@@ -689,9 +735,32 @@ async def test_purchase_chat_can_create_new_supplier_and_product_locally(
     monkeypatch.setattr(DryRunOdooClient, "_products", [])
     monkeypatch.setattr(DryRunOdooClient, "_stock_by_product_id", {})
 
+    assistant = _test_assistant(
+        [
+            _review_decision(
+                supplier=PurchaseChatSupplierResolutionDecision(action="mark_new"),
+                lines=[
+                    PurchaseChatLineResolutionDecision(
+                        line_number=1,
+                        action="mark_new",
+                    )
+                ],
+            ),
+            _review_decision(
+                supplier=PurchaseChatSupplierResolutionDecision(action="create_missing"),
+                lines=[
+                    PurchaseChatLineResolutionDecision(
+                        line_number=1,
+                        action="create_missing",
+                    )
+                ],
+            ),
+            PurchaseChatTurnDecision(action="confirm_invoice"),
+        ]
+    )
     service = PurchaseChatService(
         odoo=DryRunOdooClient(invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted)),
-        assistant=_test_assistant(),
+        assistant=assistant,
     )
 
     uploaded = await service.run_turn(
@@ -715,7 +784,7 @@ async def test_purchase_chat_can_create_new_supplier_and_product_locally(
     marked_new = await service.run_turn(
         PurchaseChatMessageCommand(
             session_id=uploaded.session_id,
-            message="proveedor nuevo linea 1 nuevo",
+            message="marcá proveedor y producto como nuevos",
             context=PurchaseChatContext(
                 journal_id=301,
                 markup_percentage=30.0,
@@ -727,7 +796,7 @@ async def test_purchase_chat_can_create_new_supplier_and_product_locally(
     created = await service.run_turn(
         PurchaseChatMessageCommand(
             session_id=uploaded.session_id,
-            message="crear nuevos",
+            message="crealos en odoo",
             context=PurchaseChatContext(
                 journal_id=301,
                 markup_percentage=30.0,
@@ -735,7 +804,8 @@ async def test_purchase_chat_can_create_new_supplier_and_product_locally(
         )
     )
     assert created.stage == "awaiting_invoice_confirmation"
-    assert "creé el proveedor" in created.assistant_message.casefold()
+    assert assistant.reply_requests[-1].event == "resolution_ready_for_invoice_confirmation"
+    assert assistant.reply_requests[-1].details["created_summary"] is not None
     assert created.proposal is not None
     assert created.proposal.supplier_resolution is not None
     assert created.proposal.supplier_resolution.selected_partner_id is not None
@@ -744,7 +814,7 @@ async def test_purchase_chat_can_create_new_supplier_and_product_locally(
     billed = await service.run_turn(
         PurchaseChatMessageCommand(
             session_id=uploaded.session_id,
-            message="si, cargar factura",
+            message="cargala",
             context=PurchaseChatContext(
                 journal_id=301,
                 markup_percentage=30.0,
@@ -808,12 +878,30 @@ async def test_purchase_chat_learns_confirmed_resolution_for_next_invoice(
     monkeypatch.setattr(DryRunOdooClient, "_stock_by_product_id", {901: 5.0})
 
     memory = PurchaseResolutionMemoryStore(tmp_path / "purchase-memory.json")
+    assistant = _test_assistant(
+        [
+            _review_decision(
+                supplier=PurchaseChatSupplierResolutionDecision(
+                    action="select_candidate",
+                    partner_id=900,
+                ),
+                lines=[
+                    PurchaseChatLineResolutionDecision(
+                        line_number=1,
+                        action="select_candidate",
+                        product_id=901,
+                    )
+                ],
+            ),
+            PurchaseChatTurnDecision(action="confirm_invoice"),
+        ]
+    )
     service = PurchaseChatService(
         odoo=DryRunOdooClient(
             invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted),
             resolution_memory=memory,
         ),
-        assistant=_test_assistant(),
+        assistant=assistant,
     )
 
     uploaded = await service.run_turn(
@@ -838,7 +926,7 @@ async def test_purchase_chat_learns_confirmed_resolution_for_next_invoice(
     resolved = await service.run_turn(
         PurchaseChatMessageCommand(
             session_id=uploaded.session_id,
-            message="proveedor 900 linea 1 producto 901",
+            message="tomá proveedor 900 y producto 901",
             context=PurchaseChatContext(
                 supplier_id=900,
                 journal_id=301,
@@ -851,7 +939,7 @@ async def test_purchase_chat_learns_confirmed_resolution_for_next_invoice(
     confirmed = await service.run_turn(
         PurchaseChatMessageCommand(
             session_id=uploaded.session_id,
-            message="si, cargar factura",
+            message="cargala",
             context=PurchaseChatContext(
                 supplier_id=900,
                 journal_id=301,

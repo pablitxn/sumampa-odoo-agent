@@ -15,6 +15,11 @@ from sumampa_odoo_agent.application.requests.odoo import (
     PurchaseInvoiceSupplierCandidate,
     PurchaseInvoiceSupplierResolution,
 )
+from sumampa_odoo_agent.application.requests.purchase_chat import (
+    PurchaseChatLineResolutionDecision,
+    PurchaseChatResolutionDecision,
+    PurchaseChatSupplierResolutionDecision,
+)
 from sumampa_odoo_agent.application.use_cases import (
     ApplyPurchaseInvoiceHumanReviewInput,
     PurchaseInvoiceHumanReviewUseCase,
@@ -120,7 +125,19 @@ async def test_purchase_invoice_human_review_accepts_manual_candidate_choices() 
     result = await use_case.apply(
         ApplyPurchaseInvoiceHumanReviewInput(
             proposal=proposal,
-            message="proveedor 102 linea 1 producto 201",
+            resolution=PurchaseChatResolutionDecision(
+                supplier=PurchaseChatSupplierResolutionDecision(
+                    action="select_candidate",
+                    partner_id=102,
+                ),
+                lines=[
+                    PurchaseChatLineResolutionDecision(
+                        line_number=1,
+                        action="select_candidate",
+                        product_id=201,
+                    )
+                ],
+            ),
         )
     )
 
@@ -143,7 +160,15 @@ async def test_purchase_invoice_human_review_creates_new_entities() -> None:
     result = await use_case.apply(
         ApplyPurchaseInvoiceHumanReviewInput(
             proposal=proposal,
-            message="crear nuevos",
+            resolution=PurchaseChatResolutionDecision(
+                supplier=PurchaseChatSupplierResolutionDecision(action="create_missing"),
+                lines=[
+                    PurchaseChatLineResolutionDecision(
+                        line_number=1,
+                        action="create_missing",
+                    )
+                ],
+            ),
         )
     )
 
@@ -166,7 +191,7 @@ async def test_purchase_invoice_human_review_keeps_blockers_when_user_only_confi
     result = await use_case.apply(
         ApplyPurchaseInvoiceHumanReviewInput(
             proposal=proposal,
-            message="si",
+            resolution=PurchaseChatResolutionDecision(accept_current_resolution=True),
         )
     )
 

@@ -4,15 +4,29 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from sumampa_odoo_agent.application.requests.purchase_chat import PurchaseChatPlannerDecision
+from sumampa_odoo_agent.application.requests.odoo import (
+    ApplyPurchaseInvoiceProposalResult,
+    PurchaseInvoiceProposalResult,
+)
+from sumampa_odoo_agent.application.requests.purchase_chat import (
+    PurchaseChatReplyRequest,
+    PurchaseChatTurnDecision,
+)
 
 
 class PurchaseChatAssistantPort(Protocol):
-    async def plan(
+    async def decide(
         self,
         *,
         stage: str,
-        proposal_summary: str | None,
         user_message: str,
-    ) -> PurchaseChatPlannerDecision:
-        """Interpret the user turn and craft a natural assistant reply."""
+        proposal: PurchaseInvoiceProposalResult | None,
+        last_apply_result: ApplyPurchaseInvoiceProposalResult | None,
+    ) -> PurchaseChatTurnDecision:
+        """Interpret the user turn and return the structured action to execute."""
+
+    async def reply(
+        self,
+        request: PurchaseChatReplyRequest,
+    ) -> str:
+        """Render the next user-facing message from the structured conversation state."""

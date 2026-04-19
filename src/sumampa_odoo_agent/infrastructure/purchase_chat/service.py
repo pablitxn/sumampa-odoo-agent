@@ -12,6 +12,7 @@ from sumampa_odoo_agent.application.requests.odoo import (
 from sumampa_odoo_agent.application.requests.purchase_chat import (
     PurchaseChatContext,
     PurchaseChatMessageCommand,
+    PurchaseChatReplyRequest,
     PurchaseChatResponse,
 )
 from sumampa_odoo_agent.application.use_cases import (
@@ -22,24 +23,6 @@ from sumampa_odoo_agent.application.use_cases import (
     ConfirmStockReceiptInput,
     PurchaseInvoiceActionsUseCase,
     PurchaseInvoiceHumanReviewUseCase,
-    proposal_summary,
-    response_after_invoice_analysis,
-    response_after_resolution,
-    response_awaiting_invoice,
-    response_completed_existing_flow,
-    response_invoice_applied,
-    response_invoice_blocked,
-    response_invoice_rejected,
-    response_invoice_runtime_error,
-    response_missing_context,
-    response_price_applied,
-    response_price_blocked,
-    response_price_rejected,
-    response_price_runtime_error,
-    response_stock_applied,
-    response_stock_blocked,
-    response_stock_rejected,
-    response_stock_runtime_error,
 )
 from sumampa_odoo_agent.domain.ports.odoo_port import OdooPort
 from sumampa_odoo_agent.domain.ports.purchase_chat_assistant_port import (
@@ -113,7 +96,7 @@ class PurchaseChatService:
         message = command.message.strip()
 
         if command.attachments:
-            session.proposal = await self._invoice_actions.analyze_purchase_invoice(
+            proposal = await self._invoice_actions.analyze_purchase_invoice(
                 AnalyzePurchaseInvoiceInput(
                     attachments=command.attachments,
                     supplier_name=session.context.supplier_name,
@@ -121,29 +104,39 @@ class PurchaseChatService:
                     markup_percentage=session.context.markup_percentage or 30.0,
                 )
             )
+            session.proposal = proposal
             session.bill_result = None
             session.stock_result = None
             session.price_result = None
             _sync_context_from_proposal(session)
+            stage = (
+                "awaiting_resolution"
+                if proposal.needs_user_resolution
+                else "awaiting_invoice_confirmation"
+            )
             return await self._persist_and_return(
                 session,
-                response_after_invoice_analysis(
+                await self._reply_response(
                     session_id=session.session_id,
+                    stage=stage,
+                    event=(
+                        "analysis_requires_resolution"
+                        if proposal.needs_user_resolution
+                        else "analysis_ready_for_invoice_confirmation"
+                    ),
+                    user_message=message,
                     proposal=session.proposal,
                 ),
             )
 
         if session.stage == "awaiting_invoice":
-            decision = await self._assistant.plan(
-                stage=session.stage,
-                proposal_summary=None,
-                user_message=message,
-            )
             return await self._persist_and_return(
                 session,
-                response_awaiting_invoice(
+                await self._reply_response(
                     session_id=session.session_id,
-                    assistant_message=decision.assistant_message,
+                    stage="awaiting_invoice",
+                    event="awaiting_invoice",
+                    user_message=message,
                 ),
             )
 
@@ -151,30 +144,38 @@ class PurchaseChatService:
             session.stage = "awaiting_invoice"
             return await self._persist_and_return(
                 session,
-                response_missing_context(session_id=session.session_id),
+                await self._reply_response(
+                    session_id=session.session_id,
+                    stage="awaiting_invoice",
+                    event="missing_context",
+                    user_message=message,
+                ),
             )
 
         if session.stage == "awaiting_resolution":
             return await self._handle_resolution_turn(session, message)
 
-        decision = await self._assistant.plan(
+        decision = await self._assistant.decide(
             stage=session.stage,
-            proposal_summary=proposal_summary(session.proposal),
             user_message=message,
+            proposal=session.proposal,
+            last_apply_result=_current_last_apply_result(session),
         )
 
         if session.stage == "awaiting_invoice_confirmation":
-            if decision.intent in {"reject_invoice", "reset"}:
+            if decision.action in {"reject_invoice", "reset"}:
                 session.stage = "awaiting_invoice"
                 session.proposal = None
                 return await self._persist_and_return(
                     session,
-                    response_invoice_rejected(
+                    await self._reply_response(
                         session_id=session.session_id,
-                        assistant_message=decision.assistant_message,
+                        stage="awaiting_invoice",
+                        event="invoice_rejected",
+                        user_message=message,
                     ),
                 )
-            if decision.intent == "confirm_invoice":
+            if decision.action == "confirm_invoice":
                 try:
                     bill_result = await self._invoice_actions.confirm_purchase_invoice(
                         ConfirmPurchaseInvoiceInput(
@@ -186,44 +187,59 @@ class PurchaseChatService:
                 except RuntimeError as exc:
                     return await self._persist_and_return(
                         session,
-                        response_invoice_runtime_error(
+                        await self._reply_response(
                             session_id=session.session_id,
+                            stage="awaiting_invoice_confirmation",
+                            event="invoice_runtime_error",
+                            user_message=message,
                             proposal=session.proposal,
-                            exc=exc,
+                            details={"error_message": str(exc)},
                         ),
                     )
                 if not bill_result.applied:
                     return await self._persist_and_return(
                         session,
-                        response_invoice_blocked(
+                        await self._reply_response(
                             session_id=session.session_id,
+                            stage="awaiting_invoice_confirmation",
+                            event="invoice_blocked",
+                            user_message=message,
                             proposal=session.proposal,
-                            result=bill_result,
+                            last_apply_result=bill_result,
                         ),
                     )
                 session.bill_result = bill_result
                 return await self._persist_and_return(
                     session,
-                    response_invoice_applied(
+                    await self._reply_response(
                         session_id=session.session_id,
+                        stage=(
+                            "awaiting_stock_confirmation"
+                            if bool(session.context.create_stock_receipt)
+                            else "awaiting_price_confirmation"
+                        ),
+                        event="invoice_applied",
+                        user_message=message,
                         proposal=session.proposal,
-                        result=bill_result,
-                        assistant_message=decision.assistant_message,
-                        create_stock_receipt=bool(session.context.create_stock_receipt),
+                        last_apply_result=bill_result,
+                        details={
+                            "create_stock_receipt": bool(session.context.create_stock_receipt),
+                        },
                     ),
                 )
             return await self._persist_and_return(
                 session,
-                PurchaseChatResponse(
+                await self._reply_response(
                     session_id=session.session_id,
                     stage="awaiting_invoice_confirmation",
-                    assistant_message=decision.assistant_message,
+                    event="awaiting_invoice_confirmation",
+                    user_message=message,
                     proposal=session.proposal,
                 ),
             )
 
         if session.stage == "awaiting_stock_confirmation":
-            if decision.intent == "confirm_stock":
+            if decision.action == "confirm_stock":
                 try:
                     stock_result = await self._invoice_actions.confirm_stock_receipt(
                         ConfirmStockReceiptInput(
@@ -238,55 +254,66 @@ class PurchaseChatService:
                 except RuntimeError as exc:
                     return await self._persist_and_return(
                         session,
-                        response_stock_runtime_error(
+                        await self._reply_response(
                             session_id=session.session_id,
+                            stage="awaiting_stock_confirmation",
+                            event="stock_runtime_error",
+                            user_message=message,
                             proposal=session.proposal,
                             last_apply_result=session.bill_result,
-                            exc=exc,
+                            details={"error_message": str(exc)},
                         ),
                     )
                 if not stock_result.applied:
                     return await self._persist_and_return(
                         session,
-                        response_stock_blocked(
+                        await self._reply_response(
                             session_id=session.session_id,
+                            stage="awaiting_stock_confirmation",
+                            event="stock_blocked",
+                            user_message=message,
                             proposal=session.proposal,
-                            result=stock_result,
+                            last_apply_result=stock_result,
                         ),
                     )
                 session.stock_result = stock_result
                 return await self._persist_and_return(
                     session,
-                    response_stock_applied(
+                    await self._reply_response(
                         session_id=session.session_id,
+                        stage="awaiting_price_confirmation",
+                        event="stock_applied",
+                        user_message=message,
                         proposal=session.proposal,
-                        result=stock_result,
-                        assistant_message=decision.assistant_message,
+                        last_apply_result=stock_result,
                     ),
                 )
-            if decision.intent in {"reject_stock", "reset"}:
+            if decision.action in {"reject_stock", "reset"}:
                 return await self._persist_and_return(
                     session,
-                    response_stock_rejected(
+                    await self._reply_response(
                         session_id=session.session_id,
+                        stage="awaiting_price_confirmation",
+                        event="stock_rejected",
+                        user_message=message,
                         proposal=session.proposal,
-                        assistant_message=decision.assistant_message,
                         last_apply_result=session.bill_result,
                     ),
                 )
             return await self._persist_and_return(
                 session,
-                PurchaseChatResponse(
+                await self._reply_response(
                     session_id=session.session_id,
                     stage="awaiting_stock_confirmation",
-                    assistant_message=decision.assistant_message,
+                    event="awaiting_stock_confirmation",
+                    user_message=message,
                     proposal=session.proposal,
                     last_apply_result=session.bill_result,
                 ),
             )
 
         if session.stage == "awaiting_price_confirmation":
-            if decision.intent == "confirm_prices":
+            if decision.action == "confirm_prices":
                 try:
                     price_result = await self._invoice_actions.confirm_price_updates(
                         ConfirmPriceUpdatesInput(
@@ -298,48 +325,59 @@ class PurchaseChatService:
                 except RuntimeError as exc:
                     return await self._persist_and_return(
                         session,
-                        response_price_runtime_error(
+                        await self._reply_response(
                             session_id=session.session_id,
+                            stage="awaiting_price_confirmation",
+                            event="price_runtime_error",
+                            user_message=message,
                             proposal=session.proposal,
                             last_apply_result=session.bill_result,
-                            exc=exc,
+                            details={"error_message": str(exc)},
                         ),
                     )
                 if not price_result.applied:
                     return await self._persist_and_return(
                         session,
-                        response_price_blocked(
+                        await self._reply_response(
                             session_id=session.session_id,
+                            stage="awaiting_price_confirmation",
+                            event="price_blocked",
+                            user_message=message,
                             proposal=session.proposal,
-                            result=price_result,
+                            last_apply_result=price_result,
                         ),
                     )
                 session.price_result = price_result
                 return await self._persist_and_return(
                     session,
-                    response_price_applied(
+                    await self._reply_response(
                         session_id=session.session_id,
+                        stage="completed",
+                        event="price_applied",
+                        user_message=message,
                         proposal=session.proposal,
-                        result=price_result,
-                        assistant_message=decision.assistant_message,
+                        last_apply_result=price_result,
                     ),
                 )
-            if decision.intent in {"reject_prices", "reset"}:
+            if decision.action in {"reject_prices", "reset"}:
                 return await self._persist_and_return(
                     session,
-                    response_price_rejected(
+                    await self._reply_response(
                         session_id=session.session_id,
+                        stage="completed",
+                        event="price_rejected",
+                        user_message=message,
                         proposal=session.proposal,
-                        assistant_message=decision.assistant_message,
                         last_apply_result=session.stock_result or session.bill_result,
                     ),
                 )
             return await self._persist_and_return(
                 session,
-                PurchaseChatResponse(
+                await self._reply_response(
                     session_id=session.session_id,
                     stage="awaiting_price_confirmation",
-                    assistant_message=decision.assistant_message,
+                    event="awaiting_price_confirmation",
+                    user_message=message,
                     proposal=session.proposal,
                     last_apply_result=session.stock_result or session.bill_result,
                 ),
@@ -347,8 +385,11 @@ class PurchaseChatService:
 
         return await self._persist_and_return(
             session,
-            response_completed_existing_flow(
+            await self._reply_response(
                 session_id=session.session_id,
+                stage="completed",
+                event="completed_existing_flow",
+                user_message=message,
                 proposal=session.proposal,
                 last_apply_result=session.price_result or session.stock_result or session.bill_result,
             ),
@@ -362,30 +403,87 @@ class PurchaseChatService:
         proposal = session.proposal
         assert proposal is not None
 
-        resolution = await self._human_review_use_case.apply(
-            ApplyPurchaseInvoiceHumanReviewInput(
-                proposal=proposal,
-                message=message,
-            )
+        decision = await self._assistant.decide(
+            stage=session.stage,
+            user_message=message,
+            proposal=proposal,
+            last_apply_result=_current_last_apply_result(session),
         )
-        if resolution.reset_requested:
+        if decision.action == "reset":
             session.stage = "awaiting_invoice"
             session.proposal = None
             return await self._persist_and_return(
                 session,
-                response_after_resolution(
+                await self._reply_response(
                     session_id=session.session_id,
-                    proposal=proposal,
-                    resolution=resolution,
+                    stage="awaiting_invoice",
+                    event="resolution_reset",
+                    user_message=message,
                 ),
             )
-        _sync_context_from_proposal(session)
+        if decision.action == "review_resolution" and decision.resolution is not None:
+            resolution = await self._human_review_use_case.apply(
+                ApplyPurchaseInvoiceHumanReviewInput(
+                    proposal=proposal,
+                    resolution=decision.resolution,
+                )
+            )
+            _sync_context_from_proposal(session)
+            if resolution.error_message is not None:
+                return await self._persist_and_return(
+                    session,
+                    await self._reply_response(
+                        session_id=session.session_id,
+                        stage="awaiting_resolution",
+                        event="resolution_error",
+                        user_message=message,
+                        proposal=proposal,
+                        details={"error_message": resolution.error_message},
+                    ),
+                )
+            if resolution.ready_for_confirmation:
+                return await self._persist_and_return(
+                    session,
+                    await self._reply_response(
+                        session_id=session.session_id,
+                        stage="awaiting_invoice_confirmation",
+                        event="resolution_ready_for_invoice_confirmation",
+                        user_message=message,
+                        proposal=proposal,
+                        details={
+                            "changed": resolution.changed,
+                            "created_summary": resolution.created_summary,
+                        },
+                    ),
+                )
+            event = (
+                "resolution_blocked"
+                if resolution.has_blockers
+                else "resolution_updated"
+            )
+            return await self._persist_and_return(
+                session,
+                await self._reply_response(
+                    session_id=session.session_id,
+                    stage="awaiting_resolution",
+                    event=event,
+                    user_message=message,
+                    proposal=proposal,
+                    details={
+                        "changed": resolution.changed,
+                        "created_summary": resolution.created_summary,
+                        "has_blockers": resolution.has_blockers,
+                    },
+                ),
+            )
         return await self._persist_and_return(
             session,
-            response_after_resolution(
+            await self._reply_response(
                 session_id=session.session_id,
+                stage="awaiting_resolution",
+                event="resolution_updated",
+                user_message=message,
                 proposal=proposal,
-                resolution=resolution,
             ),
         )
 
@@ -411,6 +509,35 @@ class PurchaseChatService:
             payload=session.to_payload(),
         )
         return response
+
+    async def _reply_response(
+        self,
+        *,
+        session_id: str,
+        stage: str,
+        event: str,
+        user_message: str,
+        proposal: PurchaseInvoiceProposalResult | None = None,
+        last_apply_result: ApplyPurchaseInvoiceProposalResult | None = None,
+        details: dict[str, object] | None = None,
+    ) -> PurchaseChatResponse:
+        assistant_message = await self._assistant.reply(
+            PurchaseChatReplyRequest(
+                stage=stage,
+                event=event,
+                user_message=user_message,
+                proposal=proposal,
+                last_apply_result=last_apply_result,
+                details=details or {},
+            )
+        )
+        return PurchaseChatResponse(
+            session_id=session_id,
+            stage=stage,
+            assistant_message=assistant_message,
+            proposal=proposal,
+            last_apply_result=last_apply_result,
+        )
 
 
 def _validate_optional_model(model: type[PurchaseInvoiceProposalResult] | type[ApplyPurchaseInvoiceProposalResult], payload: object) -> PurchaseInvoiceProposalResult | ApplyPurchaseInvoiceProposalResult | None:
@@ -447,3 +574,9 @@ def _sync_context_from_proposal(session: PurchaseChatSession) -> None:
         return
     if session.context.supplier_id is None and proposal.supplier_resolution.selected_partner_id is not None:
         session.context.supplier_id = proposal.supplier_resolution.selected_partner_id
+
+
+def _current_last_apply_result(
+    session: PurchaseChatSession,
+) -> ApplyPurchaseInvoiceProposalResult | None:
+    return session.price_result or session.stock_result or session.bill_result

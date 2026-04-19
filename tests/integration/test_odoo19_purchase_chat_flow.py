@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import xmlrpc.client
 from pathlib import Path
-from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -20,13 +19,14 @@ from sumampa_odoo_agent.application.requests.odoo import (
 )
 from sumampa_odoo_agent.application.requests.purchase_chat import (
     PurchaseChatContext,
+    PurchaseChatLineResolutionDecision,
     PurchaseChatMessageCommand,
-    PurchaseChatPlannerDecision,
+    PurchaseChatReplyRequest,
+    PurchaseChatResolutionDecision,
+    PurchaseChatSupplierResolutionDecision,
+    PurchaseChatTurnDecision,
 )
 from sumampa_odoo_agent.infrastructure.odoo.client import OdooJsonRpcClient
-from sumampa_odoo_agent.infrastructure.purchase_chat.assistant import (
-    OpenAIPurchaseChatAssistant,
-)
 from sumampa_odoo_agent.infrastructure.purchase_chat.service import PurchaseChatService
 
 
@@ -42,81 +42,33 @@ class SnapshotPurchaseInvoiceExtractor:
         return self._extracted
 
 
-class _FakePlanningResponses:
-    async def parse(self, **kwargs: object) -> object:
-        payload = kwargs["input"][1]["content"][0]["text"]  # type: ignore[index]
-        stage, user_message = _parse_prompt_payload(str(payload))
-        decision = _decision_for(stage=stage, user_message=user_message)
-        return SimpleNamespace(
-            output=[
-                SimpleNamespace(
-                    type="message",
-                    content=[SimpleNamespace(parsed=decision)],
-                )
-            ]
-        )
+class ScriptedAssistant:
+    def __init__(self, decisions: list[PurchaseChatTurnDecision] | None = None) -> None:
+        self._decisions = list(decisions or [])
+        self.reply_requests: list[PurchaseChatReplyRequest] = []
+
+    async def decide(
+        self,
+        *,
+        stage: str,
+        user_message: str,
+        proposal,
+        last_apply_result,
+    ) -> PurchaseChatTurnDecision:
+        del stage, user_message, proposal, last_apply_result
+        if self._decisions:
+            return self._decisions.pop(0)
+        return PurchaseChatTurnDecision(action="reply_only")
+
+    async def reply(self, request: PurchaseChatReplyRequest) -> str:
+        self.reply_requests.append(request)
+        return f"event={request.event}"
 
 
-class _FakePlanningClient:
-    def __init__(self) -> None:
-        self.responses = _FakePlanningResponses()
-
-
-def _test_assistant() -> OpenAIPurchaseChatAssistant:
-    return OpenAIPurchaseChatAssistant(
-        model="gpt-5.4",
-        api_key_env_var="OPENAI_API_KEY",
-        client=_FakePlanningClient(),  # type: ignore[arg-type]
-    )
-
-
-def _parse_prompt_payload(payload: str) -> tuple[str, str]:
-    stage = "awaiting_invoice"
-    user_message = ""
-    for line in payload.splitlines():
-        if line.startswith("Etapa actual: "):
-            stage = line.removeprefix("Etapa actual: ").strip()
-        if line.startswith("Mensaje usuario: "):
-            user_message = line.removeprefix("Mensaje usuario: ").strip()
-    return stage, user_message
-
-
-def _decision_for(*, stage: str, user_message: str) -> PurchaseChatPlannerDecision:
-    normalized = " ".join(user_message.casefold().replace(",", " ").replace(".", " ").split())
-    if stage == "awaiting_invoice_confirmation" and any(
-        token in normalized for token in ("si", "sí", "confirmo", "cargar factura", "dale")
-    ):
-        return PurchaseChatPlannerDecision(
-            intent="confirm_invoice",
-            assistant_message="Perfecto. Confirmo que querés cargar la factura.",
-        )
-    if stage == "awaiting_stock_confirmation" and any(
-        token in normalized for token in ("si", "sí", "generar recepción", "dale")
-    ):
-        return PurchaseChatPlannerDecision(
-            intent="confirm_stock",
-            assistant_message="Perfecto. Avanzo con la recepción de stock.",
-        )
-    if stage == "awaiting_price_confirmation" and any(
-        token in normalized for token in ("si", "sí", "actualizar precios", "dale")
-    ):
-        return PurchaseChatPlannerDecision(
-            intent="confirm_prices",
-            assistant_message="Perfecto. Avanzo con la actualización de precios.",
-        )
-    if "no" in normalized:
-        intent = {
-            "awaiting_invoice_confirmation": "reject_invoice",
-            "awaiting_stock_confirmation": "reject_stock",
-            "awaiting_price_confirmation": "reject_prices",
-        }.get(stage, "other")
-        return PurchaseChatPlannerDecision(
-            intent=intent, assistant_message="Listo. No avanzo con ese paso por ahora."
-        )
-    return PurchaseChatPlannerDecision(
-        intent="other" if stage != "awaiting_invoice" else "await_invoice",
-        assistant_message="Contame qué necesitás y adjuntá la factura cuando quieras.",
-    )
+def _test_assistant(
+    decisions: list[PurchaseChatTurnDecision] | None = None,
+) -> ScriptedAssistant:
+    return ScriptedAssistant(decisions)
 
 
 def _load_snapshot(path: Path) -> ExtractedPurchaseInvoiceDocument:
@@ -202,9 +154,16 @@ async def test_purchase_chat_flow_can_create_bill_receipt_and_price_updates_in_l
         timeout_seconds=float(odoo19_env["ORCHID_ODOO_TIMEOUT_SECONDS"]),
         invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted),
     )
+    assistant = _test_assistant(
+        [
+            PurchaseChatTurnDecision(action="confirm_invoice"),
+            PurchaseChatTurnDecision(action="confirm_stock"),
+            PurchaseChatTurnDecision(action="confirm_prices"),
+        ]
+    )
     service = PurchaseChatService(
         odoo=client,
-        assistant=_test_assistant(),
+        assistant=assistant,
     )
 
     purchase_journal = (await client.search_journals(SearchJournalsQuery(query="purchase", limit=1))).hits[0]
@@ -384,7 +343,13 @@ async def test_purchase_chat_blocks_duplicate_vendor_bill_in_local_odoo(
         timeout_seconds=float(odoo19_env["ORCHID_ODOO_TIMEOUT_SECONDS"]),
         invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted),
     )
-    service = PurchaseChatService(odoo=client, assistant=_test_assistant())
+    assistant = _test_assistant(
+        [
+            PurchaseChatTurnDecision(action="confirm_invoice"),
+            PurchaseChatTurnDecision(action="confirm_invoice"),
+        ]
+    )
+    service = PurchaseChatService(odoo=client, assistant=assistant)
     purchase_journal = (await client.search_journals(SearchJournalsQuery(query="purchase", limit=1))).hits[0]
     context = PurchaseChatContext(
         journal_id=purchase_journal.id,
@@ -481,7 +446,36 @@ async def test_purchase_chat_can_create_new_supplier_and_product_in_local_odoo(
         timeout_seconds=float(odoo19_env["ORCHID_ODOO_TIMEOUT_SECONDS"]),
         invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted),
     )
-    service = PurchaseChatService(odoo=client, assistant=_test_assistant())
+    assistant = _test_assistant(
+        [
+            PurchaseChatTurnDecision(
+                action="review_resolution",
+                resolution=PurchaseChatResolutionDecision(
+                    supplier=PurchaseChatSupplierResolutionDecision(action="mark_new"),
+                    lines=[
+                        PurchaseChatLineResolutionDecision(
+                            line_number=1,
+                            action="mark_new",
+                        )
+                    ],
+                ),
+            ),
+            PurchaseChatTurnDecision(
+                action="review_resolution",
+                resolution=PurchaseChatResolutionDecision(
+                    supplier=PurchaseChatSupplierResolutionDecision(action="create_missing"),
+                    lines=[
+                        PurchaseChatLineResolutionDecision(
+                            line_number=1,
+                            action="create_missing",
+                        )
+                    ],
+                ),
+            ),
+            PurchaseChatTurnDecision(action="confirm_invoice"),
+        ]
+    )
+    service = PurchaseChatService(odoo=client, assistant=assistant)
     purchase_journal = (await client.search_journals(SearchJournalsQuery(query="purchase", limit=1))).hits[0]
     context = PurchaseChatContext(
         journal_id=purchase_journal.id,
@@ -506,7 +500,7 @@ async def test_purchase_chat_can_create_new_supplier_and_product_in_local_odoo(
     marked_new = await service.run_turn(
         PurchaseChatMessageCommand(
             session_id=uploaded.session_id,
-            message="proveedor nuevo linea 1 nuevo",
+            message="marcá proveedor y producto como nuevos",
             context=context,
         )
     )
@@ -515,7 +509,7 @@ async def test_purchase_chat_can_create_new_supplier_and_product_in_local_odoo(
     created = await service.run_turn(
         PurchaseChatMessageCommand(
             session_id=uploaded.session_id,
-            message="crear nuevos",
+            message="crealos en odoo",
             context=context,
         )
     )
@@ -549,7 +543,7 @@ async def test_purchase_chat_can_create_new_supplier_and_product_in_local_odoo(
     billed = await service.run_turn(
         PurchaseChatMessageCommand(
             session_id=uploaded.session_id,
-            message="si, cargar factura",
+            message="cargala",
             context=context,
         )
     )
