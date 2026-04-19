@@ -1,4 +1,4 @@
-"""Unit tests for purchase chat state machine helpers."""
+"""Unit tests for purchase chat response helpers."""
 
 from __future__ import annotations
 
@@ -12,12 +12,12 @@ from sumampa_odoo_agent.application.requests.odoo import (
     PurchaseInvoiceSupplierCandidate,
     PurchaseInvoiceSupplierResolution,
 )
-from sumampa_odoo_agent.application.use_cases.purchase_chat_resolution import (
-    ApplyPurchaseChatResolutionResult,
-)
-from sumampa_odoo_agent.application.use_cases.purchase_chat_state_machine import (
+from sumampa_odoo_agent.application.use_cases.purchase_chat_responses import (
     response_after_invoice_analysis,
     response_after_resolution,
+)
+from sumampa_odoo_agent.application.use_cases.purchase_invoice_human_review import (
+    ApplyPurchaseInvoiceHumanReviewResult,
 )
 
 
@@ -95,7 +95,7 @@ def test_state_machine_routes_resolution_to_confirmation_when_ready() -> None:
     proposal.lines[0].product_resolution.selected_product_id = 201
     proposal.lines[0].product_match.product_id = 201
     proposal.needs_user_resolution = False
-    resolution = ApplyPurchaseChatResolutionResult(
+    resolution = ApplyPurchaseInvoiceHumanReviewResult(
         proposal=proposal,
         normalized_message="proveedor 102 linea 1 producto 201",
         changed=True,
@@ -115,7 +115,7 @@ def test_state_machine_routes_resolution_to_confirmation_when_ready() -> None:
 
 def test_state_machine_keeps_resolution_when_apply_still_blocked() -> None:
     proposal = _sample_proposal()
-    resolution = ApplyPurchaseChatResolutionResult(
+    resolution = ApplyPurchaseInvoiceHumanReviewResult(
         proposal=proposal,
         normalized_message="si",
         has_blockers=True,

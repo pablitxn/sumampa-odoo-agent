@@ -1,13 +1,6 @@
-"""Application use cases."""
+"""Application use case exports."""
 
-from sumampa_odoo_agent.application.use_cases.purchase_chat_resolution import (
-    ApplyPurchaseChatResolutionInput,
-    ApplyPurchaseChatResolutionResult,
-    PurchaseChatResolutionUseCase,
-    looks_positive,
-    proposal_has_resolution_blockers,
-)
-from sumampa_odoo_agent.application.use_cases.purchase_chat_state_machine import (
+from sumampa_odoo_agent.application.use_cases.purchase_chat_responses import (
     proposal_summary,
     response_after_invoice_analysis,
     response_after_resolution,
@@ -27,16 +20,23 @@ from sumampa_odoo_agent.application.use_cases.purchase_chat_state_machine import
     response_stock_rejected,
     response_stock_runtime_error,
 )
-from sumampa_odoo_agent.application.use_cases.purchase_chat_workflow import (
+from sumampa_odoo_agent.application.use_cases.purchase_invoice_actions import (
     AnalyzePurchaseInvoiceInput,
     ConfirmPriceUpdatesInput,
     ConfirmPurchaseInvoiceInput,
     ConfirmStockReceiptInput,
     CreateMissingProductInput,
     CreateMissingSupplierInput,
-    PurchaseChatWorkflowUseCases,
+    PurchaseInvoiceActionsUseCase,
 )
-from sumampa_odoo_agent.application.use_cases.purchase_invoice_resolution import (
+from sumampa_odoo_agent.application.use_cases.purchase_invoice_human_review import (
+    ApplyPurchaseInvoiceHumanReviewInput,
+    ApplyPurchaseInvoiceHumanReviewResult,
+    PurchaseInvoiceHumanReviewUseCase,
+    looks_positive,
+    proposal_has_resolution_blockers,
+)
+from sumampa_odoo_agent.application.use_cases.resolve_purchase_invoice_entities import (
     ResolvePurchaseInvoiceEntitiesInput,
     ResolvePurchaseInvoiceEntitiesUseCase,
     normalize_invoice_date,
@@ -49,15 +49,15 @@ from sumampa_odoo_agent.application.use_cases.purchase_invoice_resolution import
 
 __all__ = [
     "AnalyzePurchaseInvoiceInput",
-    "ApplyPurchaseChatResolutionInput",
-    "ApplyPurchaseChatResolutionResult",
+    "ApplyPurchaseInvoiceHumanReviewInput",
+    "ApplyPurchaseInvoiceHumanReviewResult",
     "ConfirmPriceUpdatesInput",
     "ConfirmPurchaseInvoiceInput",
     "ConfirmStockReceiptInput",
     "CreateMissingProductInput",
     "CreateMissingSupplierInput",
-    "PurchaseChatResolutionUseCase",
-    "PurchaseChatWorkflowUseCases",
+    "PurchaseInvoiceActionsUseCase",
+    "PurchaseInvoiceHumanReviewUseCase",
     "ResolvePurchaseInvoiceEntitiesInput",
     "ResolvePurchaseInvoiceEntitiesUseCase",
     "looks_positive",

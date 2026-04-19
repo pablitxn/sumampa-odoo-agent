@@ -1,4 +1,4 @@
-"""Use case for manual resolution steps inside the purchase chat flow."""
+"""Human review use case for resolving purchase invoice ambiguities."""
 
 from __future__ import annotations
 
@@ -10,10 +10,10 @@ from sumampa_odoo_agent.application.requests.odoo import (
     PurchaseInvoiceProposalLine,
     PurchaseInvoiceProposalResult,
 )
-from sumampa_odoo_agent.application.use_cases.purchase_chat_workflow import (
+from sumampa_odoo_agent.application.use_cases.purchase_invoice_actions import (
     CreateMissingProductInput,
     CreateMissingSupplierInput,
-    PurchaseChatWorkflowUseCases,
+    PurchaseInvoiceActionsUseCase,
 )
 
 SUPPLIER_ID_RE = re.compile(r"\bproveedor\s+(\d+)\b")
@@ -27,13 +27,13 @@ CREATE_LINE_RE = re.compile(r"\bcrear\s+linea\s+(\d+)\b")
 
 
 @dataclass(slots=True)
-class ApplyPurchaseChatResolutionInput:
+class ApplyPurchaseInvoiceHumanReviewInput:
     proposal: PurchaseInvoiceProposalResult
     message: str
 
 
 @dataclass(slots=True)
-class ApplyPurchaseChatResolutionResult:
+class ApplyPurchaseInvoiceHumanReviewResult:
     proposal: PurchaseInvoiceProposalResult
     normalized_message: str
     reset_requested: bool = False
@@ -44,21 +44,21 @@ class ApplyPurchaseChatResolutionResult:
     ready_for_confirmation: bool = False
 
 
-class PurchaseChatResolutionUseCase:
+class PurchaseInvoiceHumanReviewUseCase:
     """Apply human choices over supplier/product resolution and guided creation."""
 
-    def __init__(self, workflow_use_cases: PurchaseChatWorkflowUseCases) -> None:
-        self._workflow_use_cases = workflow_use_cases
+    def __init__(self, invoice_actions: PurchaseInvoiceActionsUseCase) -> None:
+        self._invoice_actions = invoice_actions
 
     async def apply(
         self,
-        request: ApplyPurchaseChatResolutionInput,
-    ) -> ApplyPurchaseChatResolutionResult:
+        request: ApplyPurchaseInvoiceHumanReviewInput,
+    ) -> ApplyPurchaseInvoiceHumanReviewResult:
         proposal = request.proposal
         normalized = normalize_resolution_text(request.message)
 
         if looks_reset(normalized):
-            return ApplyPurchaseChatResolutionResult(
+            return ApplyPurchaseInvoiceHumanReviewResult(
                 proposal=proposal,
                 normalized_message=normalized,
                 reset_requested=True,
@@ -67,7 +67,7 @@ class PurchaseChatResolutionUseCase:
         changed = apply_resolution_commands(proposal, normalized)
         created_summary, creation_error = await self._apply_creation_commands(proposal, normalized)
         if creation_error is not None:
-            return ApplyPurchaseChatResolutionResult(
+            return ApplyPurchaseInvoiceHumanReviewResult(
                 proposal=proposal,
                 normalized_message=normalized,
                 changed=changed,
@@ -87,7 +87,7 @@ class PurchaseChatResolutionUseCase:
                 proposal.needs_user_resolution = False
                 ready_for_confirmation = True
 
-        return ApplyPurchaseChatResolutionResult(
+        return ApplyPurchaseInvoiceHumanReviewResult(
             proposal=proposal,
             normalized_message=normalized,
             changed=changed,
@@ -122,7 +122,7 @@ class PurchaseChatResolutionUseCase:
         ):
             resolution = proposal.supplier_resolution
             try:
-                result = await self._workflow_use_cases.create_missing_supplier(
+                result = await self._invoice_actions.create_missing_supplier(
                     CreateMissingSupplierInput(
                         name=resolution.selected_display_name
                         or resolution.extracted_name
@@ -152,7 +152,7 @@ class PurchaseChatResolutionUseCase:
             if line is None or line.product_resolution.status in {"exact", "manual"}:
                 continue
             try:
-                result = await self._workflow_use_cases.create_missing_product(
+                result = await self._invoice_actions.create_missing_product(
                     CreateMissingProductInput(
                         name=line.description,
                         default_code=suggest_product_default_code(line),

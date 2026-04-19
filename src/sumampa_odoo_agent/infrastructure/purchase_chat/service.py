@@ -16,12 +16,12 @@ from sumampa_odoo_agent.application.requests.purchase_chat import (
 )
 from sumampa_odoo_agent.application.use_cases import (
     AnalyzePurchaseInvoiceInput,
-    ApplyPurchaseChatResolutionInput,
+    ApplyPurchaseInvoiceHumanReviewInput,
     ConfirmPriceUpdatesInput,
     ConfirmPurchaseInvoiceInput,
     ConfirmStockReceiptInput,
-    PurchaseChatResolutionUseCase,
-    PurchaseChatWorkflowUseCases,
+    PurchaseInvoiceActionsUseCase,
+    PurchaseInvoiceHumanReviewUseCase,
     proposal_summary,
     response_after_invoice_analysis,
     response_after_resolution,
@@ -95,15 +95,15 @@ class PurchaseChatService:
         self,
         odoo: OdooPort,
         assistant: PurchaseChatAssistantPort,
-        workflow_use_cases: PurchaseChatWorkflowUseCases | None = None,
-        resolution_use_case: PurchaseChatResolutionUseCase | None = None,
+        invoice_actions: PurchaseInvoiceActionsUseCase | None = None,
+        human_review_use_case: PurchaseInvoiceHumanReviewUseCase | None = None,
         session_store: SessionStorePort | None = None,
     ) -> None:
         self._odoo = odoo
         self._assistant = assistant
-        self._workflow_use_cases = workflow_use_cases or PurchaseChatWorkflowUseCases(odoo)
-        self._resolution_use_case = resolution_use_case or PurchaseChatResolutionUseCase(
-            self._workflow_use_cases
+        self._invoice_actions = invoice_actions or PurchaseInvoiceActionsUseCase(odoo)
+        self._human_review_use_case = human_review_use_case or PurchaseInvoiceHumanReviewUseCase(
+            self._invoice_actions
         )
         self._session_store = session_store or InMemorySessionStore()
 
@@ -113,7 +113,7 @@ class PurchaseChatService:
         message = command.message.strip()
 
         if command.attachments:
-            session.proposal = await self._workflow_use_cases.analyze_purchase_invoice(
+            session.proposal = await self._invoice_actions.analyze_purchase_invoice(
                 AnalyzePurchaseInvoiceInput(
                     attachments=command.attachments,
                     supplier_name=session.context.supplier_name,
@@ -176,7 +176,7 @@ class PurchaseChatService:
                 )
             if decision.intent == "confirm_invoice":
                 try:
-                    bill_result = await self._workflow_use_cases.confirm_purchase_invoice(
+                    bill_result = await self._invoice_actions.confirm_purchase_invoice(
                         ConfirmPurchaseInvoiceInput(
                             supplier_id=session.context.supplier_id,
                             journal_id=session.context.journal_id,
@@ -225,7 +225,7 @@ class PurchaseChatService:
         if session.stage == "awaiting_stock_confirmation":
             if decision.intent == "confirm_stock":
                 try:
-                    stock_result = await self._workflow_use_cases.confirm_stock_receipt(
+                    stock_result = await self._invoice_actions.confirm_stock_receipt(
                         ConfirmStockReceiptInput(
                             supplier_id=session.context.supplier_id,
                             journal_id=session.context.journal_id,
@@ -288,7 +288,7 @@ class PurchaseChatService:
         if session.stage == "awaiting_price_confirmation":
             if decision.intent == "confirm_prices":
                 try:
-                    price_result = await self._workflow_use_cases.confirm_price_updates(
+                    price_result = await self._invoice_actions.confirm_price_updates(
                         ConfirmPriceUpdatesInput(
                             supplier_id=session.context.supplier_id,
                             journal_id=session.context.journal_id,
@@ -362,8 +362,8 @@ class PurchaseChatService:
         proposal = session.proposal
         assert proposal is not None
 
-        resolution = await self._resolution_use_case.apply(
-            ApplyPurchaseChatResolutionInput(
+        resolution = await self._human_review_use_case.apply(
+            ApplyPurchaseInvoiceHumanReviewInput(
                 proposal=proposal,
                 message=message,
             )

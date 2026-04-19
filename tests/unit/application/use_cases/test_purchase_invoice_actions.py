@@ -1,4 +1,4 @@
-"""Unit tests for purchase chat workflow use cases."""
+"""Unit tests for deterministic purchase invoice action use cases."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from sumampa_odoo_agent.application.use_cases import (
     ConfirmStockReceiptInput,
     CreateMissingProductInput,
     CreateMissingSupplierInput,
-    PurchaseChatWorkflowUseCases,
+    PurchaseInvoiceActionsUseCase,
 )
 
 
@@ -74,9 +74,9 @@ def _sample_proposal() -> PurchaseInvoiceProposalResult:
 
 
 @pytest.mark.asyncio
-async def test_workflow_use_case_analyzes_invoice_through_port() -> None:
+async def test_invoice_actions_use_case_analyzes_invoice_through_port() -> None:
     odoo = SpyOdooPort()
-    use_cases = PurchaseChatWorkflowUseCases(odoo)
+    use_cases = PurchaseInvoiceActionsUseCase(odoo)
 
     result = await use_cases.analyze_purchase_invoice(
         AnalyzePurchaseInvoiceInput(
@@ -100,9 +100,9 @@ async def test_workflow_use_case_analyzes_invoice_through_port() -> None:
 
 
 @pytest.mark.asyncio
-async def test_workflow_use_case_confirms_invoice_with_bill_flags() -> None:
+async def test_invoice_actions_use_case_confirms_invoice_with_bill_flags() -> None:
     odoo = SpyOdooPort()
-    use_cases = PurchaseChatWorkflowUseCases(odoo)
+    use_cases = PurchaseInvoiceActionsUseCase(odoo)
     proposal = _sample_proposal()
 
     await use_cases.confirm_purchase_invoice(
@@ -121,9 +121,9 @@ async def test_workflow_use_case_confirms_invoice_with_bill_flags() -> None:
 
 
 @pytest.mark.asyncio
-async def test_workflow_use_case_confirms_stock_with_stock_flags() -> None:
+async def test_invoice_actions_use_case_confirms_stock_with_stock_flags() -> None:
     odoo = SpyOdooPort()
-    use_cases = PurchaseChatWorkflowUseCases(odoo)
+    use_cases = PurchaseInvoiceActionsUseCase(odoo)
     proposal = _sample_proposal()
 
     await use_cases.confirm_stock_receipt(
@@ -148,9 +148,9 @@ async def test_workflow_use_case_confirms_stock_with_stock_flags() -> None:
 
 
 @pytest.mark.asyncio
-async def test_workflow_use_case_confirms_prices_with_price_flags() -> None:
+async def test_invoice_actions_use_case_confirms_prices_with_price_flags() -> None:
     odoo = SpyOdooPort()
-    use_cases = PurchaseChatWorkflowUseCases(odoo)
+    use_cases = PurchaseInvoiceActionsUseCase(odoo)
     proposal = _sample_proposal()
 
     await use_cases.confirm_price_updates(
@@ -169,9 +169,9 @@ async def test_workflow_use_case_confirms_prices_with_price_flags() -> None:
 
 
 @pytest.mark.asyncio
-async def test_workflow_use_case_creates_missing_entities() -> None:
+async def test_invoice_actions_use_case_creates_missing_entities() -> None:
     odoo = SpyOdooPort()
-    use_cases = PurchaseChatWorkflowUseCases(odoo)
+    use_cases = PurchaseInvoiceActionsUseCase(odoo)
 
     partner_result = await use_cases.create_missing_supplier(
         CreateMissingSupplierInput(

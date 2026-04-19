@@ -1,4 +1,4 @@
-"""Application-level state machine helpers for purchase chat responses."""
+"""Application-level response helpers for the purchase chat flow."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from sumampa_odoo_agent.application.requests.odoo import (
     PurchaseInvoiceProposalResult,
 )
 from sumampa_odoo_agent.application.requests.purchase_chat import PurchaseChatResponse
-from sumampa_odoo_agent.application.use_cases.purchase_chat_resolution import (
-    ApplyPurchaseChatResolutionResult,
+from sumampa_odoo_agent.application.use_cases.purchase_invoice_human_review import (
+    ApplyPurchaseInvoiceHumanReviewResult,
     proposal_has_resolution_blockers,
 )
 
@@ -54,7 +54,7 @@ def response_after_resolution(
     *,
     session_id: str,
     proposal: PurchaseInvoiceProposalResult,
-    resolution: ApplyPurchaseChatResolutionResult,
+    resolution: ApplyPurchaseInvoiceHumanReviewResult,
 ) -> PurchaseChatResponse:
     if resolution.reset_requested:
         return PurchaseChatResponse(
@@ -332,7 +332,7 @@ def response_completed_existing_flow(
     )
 
 
-def looks_like_explicit_accept(resolution: ApplyPurchaseChatResolutionResult) -> bool:
+def looks_like_explicit_accept(resolution: ApplyPurchaseInvoiceHumanReviewResult) -> bool:
     return resolution.normalized_message in {"si", "confirmo", "confirmar", "dale", "ok", "mandale", "avanza"}
 
 

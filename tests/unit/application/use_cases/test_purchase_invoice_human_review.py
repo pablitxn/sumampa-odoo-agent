@@ -1,4 +1,4 @@
-"""Unit tests for purchase chat resolution use case."""
+"""Unit tests for purchase invoice human review use case."""
 
 from __future__ import annotations
 
@@ -16,12 +16,12 @@ from sumampa_odoo_agent.application.requests.odoo import (
     PurchaseInvoiceSupplierResolution,
 )
 from sumampa_odoo_agent.application.use_cases import (
-    ApplyPurchaseChatResolutionInput,
-    PurchaseChatResolutionUseCase,
+    ApplyPurchaseInvoiceHumanReviewInput,
+    PurchaseInvoiceHumanReviewUseCase,
 )
 
 
-class SpyWorkflowUseCases:
+class SpyPurchaseInvoiceActionsUseCase:
     def __init__(self) -> None:
         self.created_supplier = None
         self.created_product = None
@@ -112,13 +112,13 @@ def _sample_proposal() -> PurchaseInvoiceProposalResult:
 
 
 @pytest.mark.asyncio
-async def test_purchase_chat_resolution_accepts_manual_candidate_choices() -> None:
-    workflow = SpyWorkflowUseCases()
-    use_case = PurchaseChatResolutionUseCase(workflow)  # type: ignore[arg-type]
+async def test_purchase_invoice_human_review_accepts_manual_candidate_choices() -> None:
+    invoice_actions = SpyPurchaseInvoiceActionsUseCase()
+    use_case = PurchaseInvoiceHumanReviewUseCase(invoice_actions)  # type: ignore[arg-type]
     proposal = _sample_proposal()
 
     result = await use_case.apply(
-        ApplyPurchaseChatResolutionInput(
+        ApplyPurchaseInvoiceHumanReviewInput(
             proposal=proposal,
             message="proveedor 102 linea 1 producto 201",
         )
@@ -133,15 +133,15 @@ async def test_purchase_chat_resolution_accepts_manual_candidate_choices() -> No
 
 
 @pytest.mark.asyncio
-async def test_purchase_chat_resolution_creates_new_entities() -> None:
-    workflow = SpyWorkflowUseCases()
-    use_case = PurchaseChatResolutionUseCase(workflow)  # type: ignore[arg-type]
+async def test_purchase_invoice_human_review_creates_new_entities() -> None:
+    invoice_actions = SpyPurchaseInvoiceActionsUseCase()
+    use_case = PurchaseInvoiceHumanReviewUseCase(invoice_actions)  # type: ignore[arg-type]
     proposal = _sample_proposal()
     proposal.supplier_resolution.status = "new"
     proposal.lines[0].product_resolution.status = "new"
 
     result = await use_case.apply(
-        ApplyPurchaseChatResolutionInput(
+        ApplyPurchaseInvoiceHumanReviewInput(
             proposal=proposal,
             message="crear nuevos",
         )
@@ -149,22 +149,22 @@ async def test_purchase_chat_resolution_creates_new_entities() -> None:
 
     assert result.created_summary is not None
     assert result.ready_for_confirmation is True
-    assert workflow.created_supplier is not None
-    assert workflow.created_product is not None
+    assert invoice_actions.created_supplier is not None
+    assert invoice_actions.created_product is not None
     assert proposal.supplier_resolution.selected_partner_id == 999
     assert proposal.lines[0].product_match.product_id == 555
 
 
 @pytest.mark.asyncio
-async def test_purchase_chat_resolution_keeps_blockers_when_user_only_confirms() -> None:
-    workflow = SpyWorkflowUseCases()
-    use_case = PurchaseChatResolutionUseCase(workflow)  # type: ignore[arg-type]
+async def test_purchase_invoice_human_review_keeps_blockers_when_user_only_confirms() -> None:
+    invoice_actions = SpyPurchaseInvoiceActionsUseCase()
+    use_case = PurchaseInvoiceHumanReviewUseCase(invoice_actions)  # type: ignore[arg-type]
     proposal = _sample_proposal()
     proposal.lines[0].product_resolution.status = "missing"
     proposal.lines[0].product_resolution.candidates = []
 
     result = await use_case.apply(
-        ApplyPurchaseChatResolutionInput(
+        ApplyPurchaseInvoiceHumanReviewInput(
             proposal=proposal,
             message="si",
         )

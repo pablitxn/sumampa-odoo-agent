@@ -1,4 +1,4 @@
-"""Use cases for deterministic purchase chat operations."""
+"""Deterministic business actions for the purchase invoice flow."""
 
 from __future__ import annotations
 
@@ -64,8 +64,8 @@ class CreateMissingProductInput:
     description_sale: str | None
 
 
-class PurchaseChatWorkflowUseCases:
-    """Deterministic business operations behind the conversational flow."""
+class PurchaseInvoiceActionsUseCase:
+    """Deterministic business actions behind the conversational invoice flow."""
 
     def __init__(self, odoo: OdooPort) -> None:
         self._odoo = odoo
