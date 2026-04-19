@@ -12,6 +12,7 @@ from mcp.types import EmbeddedResource, ImageContent, TextContent, Tool
 
 from sumampa_odoo_agent.adapters.mcp.errors import MCPToolError
 from sumampa_odoo_agent.adapters.mcp.tools import load_tool_specs
+from sumampa_odoo_agent.application.message_specs import render_message
 from sumampa_odoo_agent.infrastructure.runtime import (
     get_runtime_container,
     get_runtime_state,
@@ -24,7 +25,7 @@ def _unknown_tool_payload(name: str) -> dict[str, Any]:
     return {
         "error": {
             "code": "unknown_tool",
-            "message": f"Unknown tool: {name}",
+            "message": render_message("runtime.json", "unknown_tool", name=name),
             "details": {"tool": name},
         }
     }
@@ -69,7 +70,7 @@ def create_mcp_server() -> Server:
             result = {
                 "error": {
                     "code": "internal_error",
-                    "message": "An unexpected error occurred",
+                    "message": render_message("runtime.json", "unexpected_error"),
                     "details": {"tool": name, "exception_type": exc.__class__.__name__},
                 }
             }

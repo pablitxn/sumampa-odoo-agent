@@ -11,6 +11,7 @@ from sumampa_odoo_agent.adapters.dependencies import ContainerDep
 
 router = APIRouter(tags=["core"])
 DEMO_HTML_PATH = Path(__file__).resolve().parent.parent / "static" / "purchase_invoice_demo.html"
+DEMO_COPY_JS_PATH = Path(__file__).resolve().parent.parent / "static" / "purchase_invoice_demo_copy.js"
 
 
 @router.get("/health")
@@ -41,3 +42,8 @@ async def capabilities(container: ContainerDep) -> dict[str, object]:
 @router.get("/demo/purchase-invoices")
 async def purchase_invoice_demo() -> FileResponse:
     return FileResponse(DEMO_HTML_PATH)
+
+
+@router.get("/demo/purchase-invoices-copy.js")
+async def purchase_invoice_demo_copy() -> FileResponse:
+    return FileResponse(DEMO_COPY_JS_PATH, media_type="text/javascript")

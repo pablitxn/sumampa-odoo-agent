@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from sumampa_odoo_agent.adapters.dependencies import ContainerDep
+from sumampa_odoo_agent.application.message_specs import render_message
 from sumampa_odoo_agent.application.requests.odoo import (
     AnalyzePurchaseInvoiceCommand,
     ApplyPurchaseInvoiceProposalCommand,
@@ -291,5 +292,8 @@ async def _read_invoice_attachments(
         for upload in files
     ]
     if required and not attachments:
-        raise HTTPException(status_code=422, detail="At least one invoice image is required.")
+        raise HTTPException(
+            status_code=422,
+            detail=render_message("runtime.json", "invoice_image_required"),
+        )
     return attachments

@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from sumampa_odoo_agent.application.message_specs import render_message
+
 
 @dataclass(slots=True)
 class ApplicationError(Exception):
@@ -88,7 +90,7 @@ class DisabledModuleError(NotFoundError):
 
     def __init__(self, module_name: str) -> None:
         super().__init__(
-            f"Module '{module_name}' is disabled",
+            render_message("runtime.json", "module_disabled", module_name=module_name),
             code="module_disabled",
             details={"module": module_name},
         )

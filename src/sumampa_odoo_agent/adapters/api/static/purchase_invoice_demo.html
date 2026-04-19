@@ -168,62 +168,61 @@
   <body>
     <div class="shell">
       <aside class="sidebar">
-        <h1>Compras conversacional</h1>
-        <p class="lede">
-          Podés hablar natural, subir una o varias fotos de la misma factura, validar extracción y recién después confirmar
-          carga en Odoo y actualización de precios.
-        </p>
-        <label>Proveedor esperado
-          <input id="supplierName" type="text" placeholder="Acme Proveedor SA" />
+        <h1 data-copy-text="sidebar_title"></h1>
+        <p class="lede" data-copy-text="sidebar_lede"></p>
+        <label><span data-copy-text="supplier_name_label"></span>
+          <input id="supplierName" type="text" data-copy-placeholder="supplier_name_placeholder" />
         </label>
-        <label>CUIT esperado
-          <input id="supplierVat" type="text" placeholder="30-12345678-9" />
+        <label><span data-copy-text="supplier_vat_label"></span>
+          <input id="supplierVat" type="text" data-copy-placeholder="supplier_vat_placeholder" />
         </label>
-        <label>Markup %
+        <label><span data-copy-text="markup_label"></span>
           <input id="markupPercentage" type="number" min="0" step="0.5" value="30" />
         </label>
-        <label>Supplier ID Odoo
-          <input id="supplierId" type="number" min="1" placeholder="102" />
+        <label><span data-copy-text="supplier_id_label"></span>
+          <input id="supplierId" type="number" min="1" data-copy-placeholder="supplier_id_placeholder" />
         </label>
-        <label>Journal ID compras
-          <input id="journalId" type="number" min="1" placeholder="301" />
+        <label><span data-copy-text="journal_id_label"></span>
+          <input id="journalId" type="number" min="1" data-copy-placeholder="journal_id_placeholder" />
         </label>
-        <label>Picking type ID
-          <input id="pickingTypeId" type="number" min="1" placeholder="502" />
+        <label><span data-copy-text="picking_type_id_label"></span>
+          <input id="pickingTypeId" type="number" min="1" data-copy-placeholder="picking_type_id_placeholder" />
         </label>
-        <label>Location origen ID
-          <input id="locationId" type="number" min="1" placeholder="603" />
+        <label><span data-copy-text="location_id_label"></span>
+          <input id="locationId" type="number" min="1" data-copy-placeholder="location_id_placeholder" />
         </label>
-        <label>Location destino ID
-          <input id="locationDestId" type="number" min="1" placeholder="601" />
+        <label><span data-copy-text="location_dest_id_label"></span>
+          <input id="locationDestId" type="number" min="1" data-copy-placeholder="location_dest_id_placeholder" />
         </label>
         <label>
           <input id="createStockReceipt" type="checkbox" />
-          Incluir también el paso de recepción de stock
+          <span data-copy-text="create_stock_receipt_label"></span>
         </label>
-        <button id="loadDefaultsBtn" type="button" class="ghost-button">Cargar defaults locales</button>
+        <button id="loadDefaultsBtn" type="button" class="ghost-button" data-copy-text="load_defaults_button"></button>
       </aside>
 
       <section class="chat">
         <div class="head">
-          <h2>Chat de compras</h2>
-          <div class="meta" id="stageLabel">Sesión nueva</div>
+          <h2 data-copy-text="chat_title"></h2>
+          <div class="meta" id="stageLabel"></div>
         </div>
         <div class="messages" id="messages"></div>
         <div class="composer">
-          <label>Adjuntar factura
+          <label><span data-copy-text="invoice_attachment_label"></span>
             <input id="invoiceImage" type="file" accept="image/*,.pdf" multiple />
           </label>
-          <textarea id="messageInput" placeholder="Ejemplo: hola, te paso una factura nueva / sí, cargala / sí, actualizá precios"></textarea>
+          <textarea id="messageInput" data-copy-placeholder="message_placeholder"></textarea>
           <div class="toolbar">
-            <button id="sendBtn">Enviar</button>
-            <button id="resetBtn" type="button">Nueva sesión</button>
+            <button id="sendBtn" data-copy-text="send_button"></button>
+            <button id="resetBtn" type="button" data-copy-text="reset_button"></button>
           </div>
         </div>
       </section>
     </div>
 
+    <script src="/demo/purchase-invoices-copy.js"></script>
     <script>
+      const COPY = window.PURCHASE_INVOICE_DEMO_COPY || {};
       const messages = document.getElementById("messages");
       const stageLabel = document.getElementById("stageLabel");
       const sendBtn = document.getElementById("sendBtn");
@@ -232,6 +231,28 @@
       const messageInput = document.getElementById("messageInput");
       const invoiceImage = document.getElementById("invoiceImage");
       let sessionId = null;
+
+      function t(key) {
+        return COPY[key] || key;
+      }
+
+      function formatCopy(key, params = {}) {
+        let template = t(key);
+        for (const [paramKey, value] of Object.entries(params)) {
+          template = template.replaceAll(`{${paramKey}}`, String(value));
+        }
+        return template;
+      }
+
+      function hydrateStaticCopy() {
+        document.querySelectorAll("[data-copy-text]").forEach((node) => {
+          node.textContent = t(node.dataset.copyText);
+        });
+        document.querySelectorAll("[data-copy-placeholder]").forEach((node) => {
+          node.placeholder = t(node.dataset.copyPlaceholder);
+        });
+        stageLabel.textContent = t("new_session_label");
+      }
 
       function escapeHtml(value) {
         return String(value)
@@ -253,18 +274,29 @@
         if (!proposal) return "";
         const warnings = proposal.warnings.length
           ? proposal.warnings.map((warning) => `<span class="pill">${escapeHtml(warning)}</span>`).join("")
-          : `<span class="pill ok">Sin alertas fuertes</span>`;
+          : `<span class="pill ok">${escapeHtml(t("no_strong_warnings"))}</span>`;
         const lines = proposal.lines.map((line) => `
           <div class="proposal-line">
             <strong>${escapeHtml(line.description)}</strong><br />
-            qty ${line.quantity} | IVA ${line.vat_rate}% | costo neto $${line.unit_price_net} | venta sugerida $${line.suggested_sale_price}<br />
-            match: ${escapeHtml(line.product_match.display_name || "sin match")} (${Math.round((line.product_match.confidence || 0) * 100)}%)
+            ${escapeHtml(formatCopy("proposal_line_summary", {
+              quantity: line.quantity,
+              vat_rate: line.vat_rate,
+              unit_price_net: line.unit_price_net,
+              suggested_sale_price: line.suggested_sale_price,
+            }))}<br />
+            ${escapeHtml(formatCopy("proposal_match_summary", {
+              display_name: line.product_match.display_name || t("proposal_match_fallback"),
+              confidence: Math.round((line.product_match.confidence || 0) * 100),
+            }))}
           </div>
         `).join("");
         return `
           <div class="proposal">
-            <div><strong>${escapeHtml(proposal.document_type || "Factura")}</strong> ${escapeHtml(proposal.invoice_number || "s/n")} | ${escapeHtml(proposal.invoice_date || "sin fecha")}</div>
-            <div>Proveedor: ${escapeHtml(proposal.supplier_name || "sin proveedor")} | Total $${proposal.totals.total}</div>
+            <div><strong>${escapeHtml(proposal.document_type || t("proposal_document_fallback"))}</strong> ${escapeHtml(proposal.invoice_number || t("proposal_invoice_number_fallback"))} | ${escapeHtml(proposal.invoice_date || t("proposal_date_fallback"))}</div>
+            <div>${escapeHtml(formatCopy("proposal_supplier_total", {
+              supplier_name: proposal.supplier_name || t("proposal_supplier_fallback"),
+              total: proposal.totals.total,
+            }))}</div>
             <div style="margin-top:8px">${warnings}</div>
             ${lines}
           </div>
@@ -275,16 +307,19 @@
         if (!result) return "";
         return `
           <details style="margin-top:10px">
-            <summary>Operaciones Odoo</summary>
+            <summary>${escapeHtml(t("odoo_operations_summary"))}</summary>
             <pre>${escapeHtml(JSON.stringify(result, null, 2))}</pre>
           </details>
         `;
       }
 
       function appendAgentResponse(payload) {
-        stageLabel.textContent = `Etapa: ${payload.stage} | sesión ${payload.session_id}`;
+        stageLabel.textContent = formatCopy("stage_session_label", {
+          stage: payload.stage,
+          session_id: payload.session_id,
+        });
         const html = `
-          <div class="meta">Agente</div>
+          <div class="meta">${escapeHtml(t("agent_meta"))}</div>
           ${escapeHtml(payload.assistant_message).replaceAll("\n", "<br />")}
           ${renderProposal(payload.proposal)}
           ${renderApplyResult(payload.last_apply_result)}
@@ -314,8 +349,8 @@
       async function fetchFirstHit(path, query) {
         const response = await fetch(`${path}?query=${encodeURIComponent(query)}&limit=1`);
         const payload = await response.json();
-        if (!response.ok) throw new Error(payload.message || `Falló lookup ${path}`);
-        if (!payload.hits?.length) throw new Error(`Sin resultados para ${query} en ${path}`);
+        if (!response.ok) throw new Error(payload.message || formatCopy("lookup_failed", { path }));
+        if (!payload.hits?.length) throw new Error(formatCopy("lookup_no_results", { query, path }));
         return payload.hits[0];
       }
 
@@ -333,12 +368,16 @@
           document.getElementById("locationId").value = vendorLocation.id;
           document.getElementById("locationDestId").value = stockLocation.id;
           addMessage("agent", `
-            <div class="meta">Sistema</div>
-            Cargué defaults del backend activo.<br />
-            journal ${journal.id}, picking ${pickingType.id}, origen ${vendorLocation.id}, destino ${stockLocation.id}.
+            <div class="meta">${escapeHtml(t("system_meta"))}</div>
+            ${formatCopy("defaults_loaded_message", {
+              journal_id: journal.id,
+              picking_type_id: pickingType.id,
+              location_id: vendorLocation.id,
+              location_dest_id: stockLocation.id,
+            })}
           `);
         } catch (error) {
-          addMessage("agent", `<strong>Error cargando defaults</strong><br />${escapeHtml(error.message)}`);
+          addMessage("agent", `<strong>${escapeHtml(t("error_loading_defaults_title"))}</strong><br />${escapeHtml(error.message)}`);
         } finally {
           loadDefaultsBtn.disabled = false;
         }
@@ -348,11 +387,11 @@
         const text = messageInput.value.trim();
         const files = Array.from(invoiceImage.files || []);
         if (!text && files.length === 0) {
-          addMessage("agent", "<strong>Falta input.</strong><br />Mandame un mensaje o adjuntá una factura.");
+          addMessage("agent", `<strong>${escapeHtml(t("missing_input_title"))}</strong><br />${escapeHtml(t("missing_input_body"))}`);
           return;
         }
         addMessage("user", `
-          <div class="meta">Vos</div>
+          <div class="meta">${escapeHtml(t("user_meta"))}</div>
           ${text ? `${escapeHtml(text).replaceAll("\n", "<br />")}` : ""}
           ${files.map((file) => `<div class="pill">${escapeHtml(file.name)}</div>`).join("")}
         `);
@@ -363,13 +402,13 @@
             body: buildForm(),
           });
           const payload = await response.json();
-          if (!response.ok) throw new Error(payload.message || "No se pudo procesar el turno.");
+          if (!response.ok) throw new Error(payload.message || t("turn_processing_failed"));
           sessionId = payload.session_id;
           appendAgentResponse(payload);
           messageInput.value = "";
           invoiceImage.value = "";
         } catch (error) {
-          addMessage("agent", `<strong>Error</strong><br />${escapeHtml(error.message)}`);
+          addMessage("agent", `<strong>${escapeHtml(t("generic_error_title"))}</strong><br />${escapeHtml(error.message)}`);
         } finally {
           sendBtn.disabled = false;
         }
@@ -382,19 +421,20 @@
       resetBtn.addEventListener("click", () => {
         sessionId = null;
         messages.innerHTML = "";
-        stageLabel.textContent = "Sesión nueva";
+        stageLabel.textContent = t("new_session_label");
         messageInput.value = "";
         invoiceImage.value = "";
         addMessage("agent", `
-          <div class="meta">Agente</div>
-          Arranquemos cuando quieras. Subime una factura y te voy guiando paso a paso.
+          <div class="meta">${escapeHtml(t("agent_meta"))}</div>
+          ${escapeHtml(t("welcome_message"))}
         `);
       });
       loadDefaultsBtn.addEventListener("click", loadLocalDefaults);
 
+      hydrateStaticCopy();
       addMessage("agent", `
-        <div class="meta">Agente</div>
-        Arranquemos cuando quieras. Subime una factura y te voy guiando paso a paso.
+        <div class="meta">${escapeHtml(t("agent_meta"))}</div>
+        ${escapeHtml(t("welcome_message"))}
       `);
     </script>
   </body>

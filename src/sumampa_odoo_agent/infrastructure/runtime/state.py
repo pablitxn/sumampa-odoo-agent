@@ -6,6 +6,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from sumampa_odoo_agent.application.message_specs import render_message
 from sumampa_odoo_agent.infrastructure.runtime.container import (
     ApplicationContainer,
     build_container,
@@ -87,7 +88,7 @@ def get_runtime_state() -> RuntimeState:
     """Return active runtime state."""
     state = _RuntimeHolder.state
     if state is None:
-        msg = "Runtime is not initialized. Call startup_runtime() first."
+        msg = render_message("runtime.json", "runtime_not_initialized")
         raise RuntimeError(msg)
     return state
 

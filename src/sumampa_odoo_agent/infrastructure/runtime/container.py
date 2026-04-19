@@ -29,6 +29,7 @@ from sumampa_odoo_agent.application.handlers.odoo_queries import (
 from sumampa_odoo_agent.application.handlers.purchase_chat import (
     PurchaseChatMessageCommandHandler,
 )
+from sumampa_odoo_agent.application.message_specs import render_message
 from sumampa_odoo_agent.application.requests.agent import RunAgentCommand
 from sumampa_odoo_agent.application.requests.odoo import (
     AnalyzePurchaseInvoiceCommand,
@@ -121,7 +122,11 @@ async def build_container(
         )
     else:
         raise RuntimeError(
-            f"Unsupported invoice extraction mode: {settings.invoice_extraction.mode}"
+            render_message(
+                "runtime.json",
+                "unsupported_invoice_extraction_mode",
+                mode=settings.invoice_extraction.mode,
+            )
         )
     if settings.purchase_chat.mode == "openai":
         purchase_chat_assistant = OpenAIPurchaseChatAssistant(
@@ -132,7 +137,13 @@ async def build_container(
             reply_system_spec=settings.purchase_chat.reply_system_spec,
         )
     else:
-        raise RuntimeError(f"Unsupported purchase chat mode: {settings.purchase_chat.mode}")
+        raise RuntimeError(
+            render_message(
+                "runtime.json",
+                "unsupported_purchase_chat_mode",
+                mode=settings.purchase_chat.mode,
+            )
+        )
 
     if "odoo" in enabled_modules:
         if settings.odoo.mode == "jsonrpc":
@@ -200,7 +211,13 @@ async def build_container(
         elif settings.agent.mode == "disabled":
             agent_backend = DisabledAgentService()
         else:
-            raise RuntimeError(f"Unsupported agent mode: {settings.agent.mode}")
+            raise RuntimeError(
+                render_message(
+                    "runtime.json",
+                    "unsupported_agent_mode",
+                    mode=settings.agent.mode,
+                )
+            )
         command_bus.register(RunAgentCommand, RunAgentCommandHandler(agent_backend))
 
     return ApplicationContainer(
@@ -227,4 +244,10 @@ async def _build_session_store(settings: AppSettings) -> SessionStorePort:
         store = HybridSessionStore(primary=primary, cache=cache)
         await store.ensure_schema()
         return store
-    raise RuntimeError(f"Unsupported session store mode: {mode}")
+    raise RuntimeError(
+        render_message(
+            "runtime.json",
+            "unsupported_session_store_mode",
+            mode=mode,
+        )
+    )

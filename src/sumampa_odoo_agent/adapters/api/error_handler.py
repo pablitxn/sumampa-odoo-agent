@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from sumampa_odoo_agent.application.errors import ApplicationError
+from sumampa_odoo_agent.application.message_specs import render_message
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         payload: dict[str, Any] = {
             "error": "ValidationError",
-            "message": "Request validation failed",
+            "message": render_message("runtime.json", "request_validation_failed"),
             "code": "validation_error",
             "details": {"errors": _validation_details(exc)},
         }
@@ -84,7 +85,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         logger.exception("Unhandled exception")
         payload = {
             "error": "InternalServerError",
-            "message": "An unexpected error occurred",
+            "message": render_message("runtime.json", "unexpected_error"),
             "code": "internal_error",
             "details": {"exception_type": exc.__class__.__name__},
         }

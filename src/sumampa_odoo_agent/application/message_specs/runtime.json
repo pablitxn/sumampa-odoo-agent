@@ -1,0 +1,13 @@
+{
+  "runtime_not_initialized": "Runtime is not initialized. Call startup_runtime() first.",
+  "module_disabled": "Module '{module_name}' is disabled",
+  "agent_module_disabled": "El módulo agent está deshabilitado. Configurá ORCHID_AGENT_MODE=openai para usarlo.",
+  "invoice_image_required": "At least one invoice image is required.",
+  "request_validation_failed": "Request validation failed",
+  "unexpected_error": "An unexpected error occurred",
+  "unknown_tool": "Unknown tool: {name}",
+  "unsupported_invoice_extraction_mode": "Unsupported invoice extraction mode: {mode}",
+  "unsupported_purchase_chat_mode": "Unsupported purchase chat mode: {mode}",
+  "unsupported_agent_mode": "Unsupported agent mode: {mode}",
+  "unsupported_session_store_mode": "Unsupported session store mode: {mode}"
+}

@@ -7,6 +7,7 @@ from importlib.metadata import version as package_version
 from typing import Annotated, Any
 
 from sumampa_odoo_agent.application.llm_specs import load_llm_spec
+from sumampa_odoo_agent.application.message_specs import render_message
 from sumampa_odoo_agent.domain.ports.odoo_port import OdooPort
 from sumampa_odoo_agent.domain.ports.session_store_port import SessionStorePort
 
@@ -24,9 +25,7 @@ class DisabledAgentService:
         session_id: str | None = None,
     ) -> dict[str, Any]:
         del prompt, context, session_id
-        raise RuntimeError(
-            "El módulo agent está deshabilitado. Configurá ORCHID_AGENT_MODE=openai para usarlo."
-        )
+        raise RuntimeError(render_message("runtime.json", "agent_module_disabled"))
 
 
 class MicrosoftAgentFrameworkOpenAIService:

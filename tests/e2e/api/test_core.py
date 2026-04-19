@@ -64,3 +64,13 @@ def test_purchase_invoice_demo_route_is_available(core_only_enabled_modules: Non
 
     assert response.status_code == 200
     assert "Sumampa Compras Chat" in response.text
+
+
+def test_purchase_invoice_demo_copy_route_is_available(core_only_enabled_modules: None) -> None:
+    del core_only_enabled_modules
+    app = create_app()
+    with TestClient(app) as client:
+        response = client.get("/demo/purchase-invoices-copy.js")
+
+    assert response.status_code == 200
+    assert "window.PURCHASE_INVOICE_DEMO_COPY" in response.text
