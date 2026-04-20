@@ -26,9 +26,6 @@ from sumampa_odoo_agent.application.handlers.odoo_queries import (
     ValidateDeliveryDraftQueryHandler,
     ValidateInvoiceDraftQueryHandler,
 )
-from sumampa_odoo_agent.application.handlers.purchase_chat import (
-    PurchaseChatMessageCommandHandler,
-)
 from sumampa_odoo_agent.application.message_specs import render_message
 from sumampa_odoo_agent.application.requests.agent import RunAgentCommand
 from sumampa_odoo_agent.application.requests.odoo import (
@@ -48,13 +45,7 @@ from sumampa_odoo_agent.application.requests.odoo import (
     ValidateDeliveryDraftQuery,
     ValidateInvoiceDraftQuery,
 )
-from sumampa_odoo_agent.application.requests.purchase_chat import (
-    PurchaseChatMessageCommand,
-)
 from sumampa_odoo_agent.domain.ports.invoice_extractor_port import PurchaseInvoiceExtractorPort
-from sumampa_odoo_agent.domain.ports.purchase_chat_assistant_port import (
-    PurchaseChatAssistantPort,
-)
 from sumampa_odoo_agent.domain.ports.session_store_port import SessionStorePort
 from sumampa_odoo_agent.infrastructure.agent.service import (
     DisabledAgentService,
@@ -70,10 +61,6 @@ from sumampa_odoo_agent.infrastructure.odoo.client import DryRunOdooClient, Odoo
 from sumampa_odoo_agent.infrastructure.odoo.resolution_memory import (
     PurchaseResolutionMemoryStore,
 )
-from sumampa_odoo_agent.infrastructure.purchase_chat.assistant import (
-    OpenAIPurchaseChatAssistant,
-)
-from sumampa_odoo_agent.infrastructure.purchase_chat.service import PurchaseChatService
 from sumampa_odoo_agent.infrastructure.runtime.modules import ModuleMetadata
 from sumampa_odoo_agent.infrastructure.runtime.settings import AppSettings
 
@@ -106,7 +93,6 @@ async def build_container(
     query_bus = QueryBus()
     odoo_backend: OdooJsonRpcClient | DryRunOdooClient | None = None
     invoice_extractor: PurchaseInvoiceExtractorPort
-    purchase_chat_assistant: PurchaseChatAssistantPort
     resolution_memory = PurchaseResolutionMemoryStore.from_env()
     closers: list[Callable[[], Awaitable[None]]] = []
     session_store = await _build_session_store(settings)
@@ -128,23 +114,6 @@ async def build_container(
                 mode=settings.invoice_extraction.mode,
             )
         )
-    if settings.purchase_chat.mode == "openai":
-        purchase_chat_assistant = OpenAIPurchaseChatAssistant(
-            model=settings.purchase_chat.model,
-            api_key_env_var=settings.purchase_chat.api_key_env_var,
-            base_url=settings.purchase_chat.base_url,
-            decide_system_spec=settings.purchase_chat.decide_system_spec,
-            reply_system_spec=settings.purchase_chat.reply_system_spec,
-        )
-    else:
-        raise RuntimeError(
-            render_message(
-                "runtime.json",
-                "unsupported_purchase_chat_mode",
-                mode=settings.purchase_chat.mode,
-            )
-        )
-
     if "odoo" in enabled_modules:
         if settings.odoo.mode == "jsonrpc":
             odoo_backend = OdooJsonRpcClient(
@@ -174,16 +143,6 @@ async def build_container(
             ApplyPurchaseInvoiceProposalCommand,
             ApplyPurchaseInvoiceProposalCommandHandler(odoo_backend),
         )
-        command_bus.register(
-            PurchaseChatMessageCommand,
-                PurchaseChatMessageCommandHandler(
-                    PurchaseChatService(
-                        odoo_backend,
-                        purchase_chat_assistant,
-                        session_store=session_store,
-                    )
-                ),
-            )
         query_bus.register(SearchPartnersQuery, SearchPartnersQueryHandler(odoo_backend))
         query_bus.register(SearchProductsQuery, SearchProductsQueryHandler(odoo_backend))
         query_bus.register(SearchJournalsQuery, SearchJournalsQueryHandler(odoo_backend))

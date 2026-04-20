@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -39,7 +40,11 @@ def register_exception_handlers(app: FastAPI) -> None:
             logger.error("Application error: %s", exc.message)
         else:
             logger.warning("Application error: %s", exc.message)
-        return JSONResponse(status_code=exc.status_code, content=exc.to_dict())
+        headers: dict[str, str] = {}
+        retry_after = exc.details.get("retry_after_seconds")
+        if exc.status_code == 429 and isinstance(retry_after, int | float) and retry_after > 0:
+            headers["Retry-After"] = str(max(1, math.ceil(float(retry_after))))
+        return JSONResponse(status_code=exc.status_code, content=exc.to_dict(), headers=headers)
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_error_handler(

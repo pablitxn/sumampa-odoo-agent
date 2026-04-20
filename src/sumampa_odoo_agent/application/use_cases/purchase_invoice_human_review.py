@@ -10,8 +10,8 @@ from sumampa_odoo_agent.application.requests.odoo import (
     PurchaseInvoiceProposalLine,
     PurchaseInvoiceProposalResult,
 )
-from sumampa_odoo_agent.application.requests.purchase_chat import (
-    PurchaseChatResolutionDecision,
+from sumampa_odoo_agent.application.requests.purchase_workflow import (
+    PurchaseResolutionDecision,
 )
 from sumampa_odoo_agent.application.use_cases.purchase_invoice_actions import (
     CreateMissingProductInput,
@@ -23,7 +23,7 @@ from sumampa_odoo_agent.application.use_cases.purchase_invoice_actions import (
 @dataclass(slots=True)
 class ApplyPurchaseInvoiceHumanReviewInput:
     proposal: PurchaseInvoiceProposalResult
-    resolution: PurchaseChatResolutionDecision
+    resolution: PurchaseResolutionDecision
 
 
 @dataclass(slots=True)
@@ -78,7 +78,7 @@ class PurchaseInvoiceHumanReviewUseCase:
     async def _apply_creation_decisions(
         self,
         proposal: PurchaseInvoiceProposalResult,
-        decision: PurchaseChatResolutionDecision,
+        decision: PurchaseResolutionDecision,
     ) -> tuple[str | None, str | None]:
         created_messages: list[str] = []
 
@@ -169,7 +169,7 @@ class PurchaseInvoiceHumanReviewUseCase:
 
 def apply_resolution_decision(
     proposal: PurchaseInvoiceProposalResult,
-    decision: PurchaseChatResolutionDecision,
+    decision: PurchaseResolutionDecision,
 ) -> bool:
     changed = False
 

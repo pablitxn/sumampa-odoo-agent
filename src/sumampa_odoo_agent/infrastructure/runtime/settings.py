@@ -49,15 +49,6 @@ class InvoiceExtractionSettings(BaseModel):
     prompt_spec: str = "invoice_extraction/purchase_invoice.md"
 
 
-class PurchaseChatSettings(BaseModel):
-    mode: str = "openai"
-    model: str = "gpt-5.4"
-    api_key_env_var: str = "OPENAI_API_KEY"
-    base_url: str | None = None
-    decide_system_spec: str = "purchase_chat/decide_system.md"
-    reply_system_spec: str = "purchase_chat/reply_system.md"
-
-
 class SessionStoreSettings(BaseModel):
     mode: str = "memory"
     postgres_dsn: str = ''
@@ -72,7 +63,6 @@ class AppSettings(BaseModel):
     odoo: OdooSettings = Field(default_factory=OdooSettings)
     agent: AgentSettings = Field(default_factory=AgentSettings)
     invoice_extraction: InvoiceExtractionSettings = Field(default_factory=InvoiceExtractionSettings)
-    purchase_chat: PurchaseChatSettings = Field(default_factory=PurchaseChatSettings)
     session_store: SessionStoreSettings = Field(default_factory=SessionStoreSettings)
 
 
@@ -110,30 +100,6 @@ def _apply_env_overrides(settings: AppSettings) -> AppSettings:
     invoice_model = os.environ.get("ORCHID_INVOICE_EXTRACTION_MODEL")
     if invoice_model:
         updates.setdefault("invoice_extraction", {})["model"] = invoice_model
-
-    purchase_chat_mode = os.environ.get("ORCHID_PURCHASE_CHAT_MODE")
-    if purchase_chat_mode:
-        updates.setdefault("purchase_chat", {})["mode"] = purchase_chat_mode
-
-    purchase_chat_model = os.environ.get("ORCHID_PURCHASE_CHAT_MODEL")
-    if purchase_chat_model:
-        updates.setdefault("purchase_chat", {})["model"] = purchase_chat_model
-
-    purchase_chat_decide_system_spec = os.environ.get(
-        "ORCHID_PURCHASE_CHAT_DECIDE_SYSTEM_SPEC"
-    )
-    if purchase_chat_decide_system_spec:
-        updates.setdefault("purchase_chat", {})["decide_system_spec"] = (
-            purchase_chat_decide_system_spec
-        )
-
-    purchase_chat_reply_system_spec = os.environ.get(
-        "ORCHID_PURCHASE_CHAT_REPLY_SYSTEM_SPEC"
-    )
-    if purchase_chat_reply_system_spec:
-        updates.setdefault("purchase_chat", {})["reply_system_spec"] = (
-            purchase_chat_reply_system_spec
-        )
 
     agent_mode = os.environ.get("ORCHID_AGENT_MODE")
     if agent_mode:

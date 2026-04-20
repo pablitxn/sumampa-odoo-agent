@@ -2,16 +2,53 @@
 
 from __future__ import annotations
 
+import inspect
+import json
+import logging
 import os
+import re
 from importlib.metadata import version as package_version
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
+from uuid import uuid4
 
+from agent_framework.exceptions import ChatClientException
+from openai import RateLimitError
+
+from sumampa_odoo_agent.application.errors import TooManyRequestsError, UpstreamServiceError
 from sumampa_odoo_agent.application.llm_specs import load_llm_spec
 from sumampa_odoo_agent.application.message_specs import render_message
+from sumampa_odoo_agent.application.requests.purchase_workflow import (
+    PurchaseLineResolutionDecision,
+    PurchaseResolutionDecision,
+    PurchaseSupplierResolutionDecision,
+)
+from sumampa_odoo_agent.application.use_cases import (
+    AnalyzePurchaseInvoiceInput,
+    ApplyPurchaseInvoiceHumanReviewInput,
+    ConfirmPriceUpdatesInput,
+    ConfirmPurchaseInvoiceInput,
+    ConfirmStockReceiptInput,
+    PurchaseInvoiceActionsUseCase,
+    PurchaseInvoiceHumanReviewUseCase,
+)
 from sumampa_odoo_agent.domain.ports.odoo_port import OdooPort
 from sumampa_odoo_agent.domain.ports.session_store_port import SessionStorePort
+from sumampa_odoo_agent.infrastructure.agent.purchase_flow import (
+    PurchaseWorkflowRunContext,
+    delete_purchase_workflow_state,
+    load_purchase_workflow_state,
+    merge_purchase_context,
+    save_purchase_workflow_state,
+    sync_purchase_context_from_proposal,
+)
 
 AGENT_SESSION_NAMESPACE = "agent"
+_RATE_LIMIT_RETRY_AFTER_PATTERN = re.compile(
+    r"Please try again in (?P<seconds>\d+(?:\.\d+)?)s",
+    re.IGNORECASE,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class DisabledAgentService:
@@ -66,39 +103,86 @@ class MicrosoftAgentFrameworkOpenAIService:
             )
 
         chat_client = OpenAIChatClient(model=self._model, api_key=api_key, base_url=self._base_url)
-        agent: Any = chat_client.as_agent(
+        resolved_session_id = session_id or str(uuid4())
+        purchase_run_context = PurchaseWorkflowRunContext.from_agent_context(context)
+        if purchase_run_context.has_inputs():
+            purchase_state = await load_purchase_workflow_state(
+                self._session_store,
+                session_id=resolved_session_id,
+            )
+            purchase_state.context = merge_purchase_context(
+                purchase_state.context,
+                purchase_run_context.context,
+            )
+            await save_purchase_workflow_state(self._session_store, purchase_state)
+        current_purchase_flow = await _purchase_flow_prompt_snapshot(
+            session_store=self._session_store,
+            session_id=resolved_session_id,
+            include_empty=purchase_run_context.has_inputs(),
+        )
+
+        agent: Any = _create_compatible_agent(
+            chat_client=chat_client,
+            agent_type=Agent,
             name="Sumampa Odoo Agent",
             instructions=self._system_prompt,
-            tools=_build_odoo_tools(self._odoo),
-            function_invocation_configuration={"max_function_calls": 6},
+            tools=_build_agent_tools(
+                odoo=self._odoo,
+                session_store=self._session_store,
+                session_id=resolved_session_id,
+                run_context=purchase_run_context,
+            ),
+            max_function_calls=16,
         )
         if not isinstance(agent, Agent):
             raise RuntimeError("Failed to create Microsoft Agent Framework agent")
 
-        session = await self._load_or_create_session(agent=agent, session_id=session_id)
+        session = await self._load_or_create_session(agent=agent, session_id=resolved_session_id)
 
-        message = prompt if not context else f"{prompt}\n\nContexto JSON:\n{context!r}"
-        response = await agent.run(message, session=session)
+        message = _build_agent_message(
+            prompt=prompt,
+            context=context,
+            purchase_flow=current_purchase_flow,
+        )
+        try:
+            response = await agent.run(message, session=session)
+        except Exception as exc:
+            translated_error = _translate_agent_run_error(exc, model=self._model)
+            if translated_error is not None:
+                raise translated_error from exc
+            raise
         await self._session_store.save(
             namespace=AGENT_SESSION_NAMESPACE,
             session_id=session.session_id,
             payload=session.to_dict(),
         )
-        return {
+        result: dict[str, Any] = {
             "mode": "microsoft-agent-framework-openai",
-            "session_id": session.session_id,
+            "session_id": resolved_session_id,
             "text": getattr(response, "text", str(response)),
         }
+        purchase_flow = await _purchase_flow_snapshot(
+            session_store=self._session_store,
+            session_id=resolved_session_id,
+            include_empty=purchase_run_context.has_inputs(),
+        )
+        if purchase_flow is not None:
+            result["purchase_flow"] = purchase_flow
+        return result
 
-    async def _load_or_create_session(self, *, agent: Any, session_id: str | None) -> Any:
+    async def _load_or_create_session(
+        self,
+        *,
+        agent: Any,
+        session_id: str,
+    ) -> Any:
         AgentSession = _load_agent_session_type()
-        if session_id:
-            payload = await self._session_store.load(
-                namespace=AGENT_SESSION_NAMESPACE,
-                session_id=session_id,
-            )
-            if payload is not None:
-                return AgentSession.from_dict(payload)
+        payload = await self._session_store.load(
+            namespace=AGENT_SESSION_NAMESPACE,
+            session_id=session_id,
+        )
+        if payload is not None:
+            return AgentSession.from_dict(payload)
         return agent.create_session(session_id=session_id)
 
 
@@ -106,8 +190,7 @@ def _load_openai_chat_client() -> type[Any]:
     """Work around current upstream packaging bug around `agent_framework.__version__`."""
     import agent_framework
 
-    if not hasattr(agent_framework, "__version__"):
-        agent_framework.__version__ = package_version("agent-framework")
+    _ensure_agent_framework_version(agent_framework)
 
     from agent_framework.openai import OpenAIChatClient
 
@@ -123,12 +206,59 @@ def _load_agent_type() -> type[Any]:
 def _load_agent_session_type() -> type[Any]:
     import agent_framework
 
-    if not hasattr(agent_framework, "__version__"):
-        agent_framework.__version__ = package_version("agent-framework")
+    _ensure_agent_framework_version(agent_framework)
 
-    from agent_framework import AgentSession
+    from agent_framework._sessions import AgentSession
+
+    if getattr(agent_framework, "AgentSession", None) is None:
+        agent_framework.AgentSession = AgentSession
 
     return AgentSession
+
+
+def _ensure_agent_framework_version(agent_framework: Any) -> None:
+    if getattr(agent_framework, "__version__", None) is None:
+        agent_framework.__version__ = package_version("agent-framework")
+
+
+def _create_compatible_agent(
+    *,
+    chat_client: Any,
+    agent_type: type[Any],
+    name: str,
+    instructions: str,
+    tools: list[Any],
+    max_function_calls: int,
+) -> Any:
+    kwargs: dict[str, Any] = {
+        "name": name,
+        "instructions": instructions,
+        "tools": tools,
+    }
+    if _chat_client_accepts_function_invocation_configuration(chat_client):
+        if _agent_accepts_function_invocation_configuration(agent_type):
+            kwargs["function_invocation_configuration"] = {
+                "max_function_calls": max_function_calls,
+            }
+        else:
+            kwargs["function_invocation_configuration"] = None
+    return chat_client.as_agent(**kwargs)
+
+
+def _agent_accepts_function_invocation_configuration(agent_type: type[Any]) -> bool:
+    try:
+        parameters = inspect.signature(agent_type.__init__).parameters
+    except (TypeError, ValueError):
+        return False
+    return "function_invocation_configuration" in parameters
+
+
+def _chat_client_accepts_function_invocation_configuration(chat_client: Any) -> bool:
+    try:
+        parameters = inspect.signature(chat_client.as_agent).parameters
+    except (TypeError, ValueError):
+        return False
+    return "function_invocation_configuration" in parameters
 
 
 def _tool_names(*, include_odoo: bool) -> list[str]:
@@ -136,6 +266,13 @@ def _tool_names(*, include_odoo: bool) -> list[str]:
     if include_odoo:
         names.extend(
             [
+                "purchase_get_state",
+                "purchase_analyze_invoice",
+                "purchase_review_resolution",
+                "purchase_confirm_invoice",
+                "purchase_confirm_stock_receipt",
+                "purchase_confirm_price_updates",
+                "purchase_reset",
                 "create_partner",
                 "search_partners",
                 "search_products",
@@ -154,7 +291,13 @@ def _tool_names(*, include_odoo: bool) -> list[str]:
     return names
 
 
-def _build_odoo_tools(odoo: OdooPort | None) -> list[Any]:
+def _build_agent_tools(
+    *,
+    odoo: OdooPort | None,
+    session_store: SessionStorePort,
+    session_id: str,
+    run_context: PurchaseWorkflowRunContext,
+) -> list[Any]:
     async def explain_capabilities() -> str:
         """Explain what this Sumampa Odoo agent can currently do."""
         names = ", ".join(_tool_names(include_odoo=odoo is not None))
@@ -166,6 +309,196 @@ def _build_odoo_tools(odoo: OdooPort | None) -> list[Any]:
     tools: list[Any] = [explain_capabilities]
     if odoo is None:
         return tools
+
+    purchase_actions = PurchaseInvoiceActionsUseCase(odoo)
+    purchase_review = PurchaseInvoiceHumanReviewUseCase(purchase_actions)
+
+    async def purchase_get_state(
+        detail: Annotated[
+            Literal["compact", "full"],
+            "Nivel de detalle del estado activo: compact o full",
+        ] = "compact",
+    ) -> dict[str, Any]:
+        """Return the current purchase workflow state for this session."""
+        state = await load_purchase_workflow_state(session_store, session_id=session_id)
+        return state.agent_snapshot(detail=detail)
+
+    async def purchase_analyze_invoice(
+        supplier_name: Annotated[str | None, "Nombre del proveedor esperado"] = None,
+        supplier_vat: Annotated[str | None, "CUIT esperado del proveedor"] = None,
+        markup_percentage: Annotated[float | None, "Markup sugerido en porcentaje"] = None,
+    ) -> dict[str, Any]:
+        """Analyze the invoice attachments from the current turn and persist the proposal."""
+        attachments = run_context.to_attachments()
+        if not attachments:
+            raise RuntimeError("No hay factura adjunta en este turno para analizar.")
+
+        state = await load_purchase_workflow_state(session_store, session_id=session_id)
+        if supplier_name:
+            state.context.supplier_name = supplier_name
+        if supplier_vat:
+            state.context.supplier_vat = supplier_vat
+        if markup_percentage is not None:
+            state.context.markup_percentage = markup_percentage
+
+        proposal = await purchase_actions.analyze_purchase_invoice(
+            AnalyzePurchaseInvoiceInput(
+                attachments=attachments,
+                supplier_name=state.context.supplier_name,
+                supplier_vat=state.context.supplier_vat,
+                markup_percentage=state.context.markup_percentage or 30.0,
+            )
+        )
+        state.proposal = proposal
+        state.bill_result = None
+        state.stock_result = None
+        state.price_result = None
+        state.last_result = None
+        sync_purchase_context_from_proposal(state)
+        await save_purchase_workflow_state(session_store, state)
+        return state.agent_snapshot()
+
+    async def purchase_review_resolution(
+        accept_current_resolution: Annotated[
+            bool,
+            "Acepta la resolución actual si ya no hace falta tocar proveedor o productos",
+        ] = False,
+        supplier: Annotated[
+            dict[str, Any] | None,
+            "Resolución del proveedor con action y partner_id si aplica",
+        ] = None,
+        lines: Annotated[
+            list[dict[str, Any]] | None,
+            "Resoluciones de productos con line_number, action y product_id si aplica",
+        ] = None,
+    ) -> dict[str, Any]:
+        """Resolve supplier and product ambiguities for the active purchase proposal."""
+        state = await load_purchase_workflow_state(session_store, session_id=session_id)
+        if state.proposal is None:
+            raise RuntimeError("No hay propuesta de factura activa para resolver.")
+
+        resolution = PurchaseResolutionDecision(
+            accept_current_resolution=accept_current_resolution,
+            supplier=(
+                PurchaseSupplierResolutionDecision.model_validate(supplier)
+                if supplier is not None
+                else None
+            ),
+            lines=[
+                PurchaseLineResolutionDecision.model_validate(line)
+                for line in (lines or [])
+            ],
+        )
+        result = await purchase_review.apply(
+            ApplyPurchaseInvoiceHumanReviewInput(
+                proposal=state.proposal,
+                resolution=resolution,
+            )
+        )
+        state.proposal = result.proposal
+        sync_purchase_context_from_proposal(state)
+        await save_purchase_workflow_state(session_store, state)
+        snapshot = state.agent_snapshot()
+        snapshot["review_result"] = {
+            "changed": result.changed,
+            "created_summary": result.created_summary,
+            "error_message": result.error_message,
+            "has_blockers": result.has_blockers,
+            "ready_for_confirmation": result.ready_for_confirmation,
+        }
+        return snapshot
+
+    async def purchase_confirm_invoice(
+        supplier_id: Annotated[int | None, "ID de proveedor a usar si querés override"] = None,
+        journal_id: Annotated[int | None, "ID del diario de compras"] = None,
+    ) -> dict[str, Any]:
+        """Create the vendor bill for the active purchase proposal."""
+        state = await load_purchase_workflow_state(session_store, session_id=session_id)
+        if state.proposal is None:
+            raise RuntimeError("No hay propuesta de factura activa para confirmar.")
+        if supplier_id is not None:
+            state.context.supplier_id = supplier_id
+        if journal_id is not None:
+            state.context.journal_id = journal_id
+        result = await purchase_actions.confirm_purchase_invoice(
+            ConfirmPurchaseInvoiceInput(
+                supplier_id=state.context.supplier_id,
+                journal_id=state.context.journal_id,
+                proposal=state.proposal,
+            )
+        )
+        state.last_result = result
+        if result.applied:
+            state.bill_result = result
+        await save_purchase_workflow_state(session_store, state)
+        return state.agent_snapshot()
+
+    async def purchase_confirm_stock_receipt(
+        supplier_id: Annotated[int | None, "ID de proveedor a usar si querés override"] = None,
+        journal_id: Annotated[int | None, "ID del diario de compras"] = None,
+        picking_type_id: Annotated[int | None, "Tipo de operación de stock"] = None,
+        location_id: Annotated[int | None, "Ubicación origen"] = None,
+        location_dest_id: Annotated[int | None, "Ubicación destino"] = None,
+    ) -> dict[str, Any]:
+        """Create the stock receipt for the active purchase proposal."""
+        state = await load_purchase_workflow_state(session_store, session_id=session_id)
+        if state.proposal is None:
+            raise RuntimeError("No hay propuesta de factura activa para generar stock.")
+        if supplier_id is not None:
+            state.context.supplier_id = supplier_id
+        if journal_id is not None:
+            state.context.journal_id = journal_id
+        if picking_type_id is not None:
+            state.context.picking_type_id = picking_type_id
+        if location_id is not None:
+            state.context.location_id = location_id
+        if location_dest_id is not None:
+            state.context.location_dest_id = location_dest_id
+        result = await purchase_actions.confirm_stock_receipt(
+            ConfirmStockReceiptInput(
+                supplier_id=state.context.supplier_id,
+                journal_id=state.context.journal_id,
+                proposal=state.proposal,
+                picking_type_id=state.context.picking_type_id,
+                location_id=state.context.location_id,
+                location_dest_id=state.context.location_dest_id,
+            )
+        )
+        state.last_result = result
+        if result.applied:
+            state.stock_result = result
+        await save_purchase_workflow_state(session_store, state)
+        return state.agent_snapshot()
+
+    async def purchase_confirm_price_updates(
+        supplier_id: Annotated[int | None, "ID de proveedor a usar si querés override"] = None,
+        journal_id: Annotated[int | None, "ID del diario de compras"] = None,
+    ) -> dict[str, Any]:
+        """Update product prices for the active purchase proposal."""
+        state = await load_purchase_workflow_state(session_store, session_id=session_id)
+        if state.proposal is None:
+            raise RuntimeError("No hay propuesta de factura activa para actualizar precios.")
+        if supplier_id is not None:
+            state.context.supplier_id = supplier_id
+        if journal_id is not None:
+            state.context.journal_id = journal_id
+        result = await purchase_actions.confirm_price_updates(
+            ConfirmPriceUpdatesInput(
+                supplier_id=state.context.supplier_id,
+                journal_id=state.context.journal_id,
+                proposal=state.proposal,
+            )
+        )
+        state.last_result = result
+        if result.applied:
+            state.price_result = result
+        await save_purchase_workflow_state(session_store, state)
+        return state.agent_snapshot()
+
+    async def purchase_reset() -> dict[str, Any]:
+        """Drop the active purchase workflow state for this session."""
+        await delete_purchase_workflow_state(session_store, session_id=session_id)
+        return {"stage": "awaiting_invoice", "proposal": None, "last_apply_result": None}
 
     async def create_partner(
         name: Annotated[str, "Nombre del partner"],
@@ -394,6 +727,13 @@ def _build_odoo_tools(odoo: OdooPort | None) -> list[Any]:
 
     tools.extend(
         [
+            purchase_get_state,
+            purchase_analyze_invoice,
+            purchase_review_resolution,
+            purchase_confirm_invoice,
+            purchase_confirm_stock_receipt,
+            purchase_confirm_price_updates,
+            purchase_reset,
             create_partner,
             search_partners,
             search_products,
@@ -410,3 +750,136 @@ def _build_odoo_tools(odoo: OdooPort | None) -> list[Any]:
         ]
     )
     return tools
+
+
+def _build_agent_message(
+    *,
+    prompt: str,
+    context: dict[str, Any],
+    purchase_flow: dict[str, Any] | None,
+) -> str:
+    if not context:
+        if purchase_flow is None:
+            return prompt
+        return (
+            f"{prompt}\n\n"
+            "Contexto JSON:\n"
+            f"{json.dumps({'purchase_flow': purchase_flow}, ensure_ascii=False, indent=2, default=str)}"
+        )
+
+    safe_context = dict(context)
+    purchase_context = PurchaseWorkflowRunContext.from_agent_context(context)
+    if purchase_context.has_inputs():
+        safe_context["purchase_workflow"] = purchase_context.prompt_view()
+        safe_context.pop("purchase", None)
+    else:
+        safe_context.pop("purchase_workflow", None)
+        safe_context.pop("purchase", None)
+    if purchase_flow is not None:
+        safe_context["purchase_flow"] = purchase_flow
+
+    return (
+        f"{prompt}\n\n"
+        "Contexto JSON:\n"
+        f"{json.dumps(safe_context, ensure_ascii=False, indent=2, default=str)}"
+    )
+
+
+async def _purchase_flow_snapshot(
+    *,
+    session_store: SessionStorePort,
+    session_id: str,
+    include_empty: bool,
+) -> dict[str, Any] | None:
+    state = await load_purchase_workflow_state(session_store, session_id=session_id)
+    if state.proposal is None and not include_empty:
+        return None
+    return state.snapshot()
+
+
+async def _purchase_flow_prompt_snapshot(
+    *,
+    session_store: SessionStorePort,
+    session_id: str,
+    include_empty: bool,
+) -> dict[str, Any] | None:
+    state = await load_purchase_workflow_state(session_store, session_id=session_id)
+    if state.proposal is None and not include_empty:
+        return None
+    return state.agent_snapshot()
+
+
+def _translate_agent_run_error(
+    exc: Exception,
+    *,
+    model: str,
+) -> TooManyRequestsError | UpstreamServiceError | None:
+    rate_limit_error = _find_openai_rate_limit_error(exc)
+    if rate_limit_error is not None:
+        retry_after_seconds = _extract_retry_after_seconds(rate_limit_error)
+        details: dict[str, object] = {
+            "provider": "openai",
+            "model": model,
+        }
+        if retry_after_seconds is not None:
+            details["retry_after_seconds"] = retry_after_seconds
+        return TooManyRequestsError(
+            render_message("runtime.json", "agent_rate_limited"),
+            code="agent_rate_limited",
+            details=details,
+        )
+
+    if any(isinstance(error, ChatClientException) for error in _exception_chain(exc)):
+        return UpstreamServiceError(
+            render_message("runtime.json", "agent_upstream_failure"),
+            code="agent_upstream_failure",
+            details={
+                "provider": "openai",
+                "model": model,
+                "exception_type": exc.__class__.__name__,
+            },
+        )
+
+    return None
+
+
+def _find_openai_rate_limit_error(exc: Exception) -> RateLimitError | None:
+    for error in _exception_chain(exc):
+        if isinstance(error, RateLimitError):
+            return error
+    return None
+
+
+def _exception_chain(exc: BaseException) -> list[BaseException]:
+    errors: list[BaseException] = []
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        errors.append(current)
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return errors
+
+
+def _extract_retry_after_seconds(exc: RateLimitError) -> float | None:
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers is not None:
+        retry_after_ms = headers.get("retry-after-ms")
+        if retry_after_ms is not None:
+            try:
+                return round(float(retry_after_ms) / 1000.0, 3)
+            except ValueError:
+                logger.debug("Invalid retry-after-ms header from OpenAI: %s", retry_after_ms)
+
+        retry_after = headers.get("retry-after")
+        if retry_after is not None:
+            try:
+                return round(float(retry_after), 3)
+            except ValueError:
+                logger.debug("Invalid retry-after header from OpenAI: %s", retry_after)
+
+    match = _RATE_LIMIT_RETRY_AFTER_PATTERN.search(str(exc))
+    if match is None:
+        return None
+    return round(float(match.group("seconds")), 3)

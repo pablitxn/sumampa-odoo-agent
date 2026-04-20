@@ -15,10 +15,10 @@ from sumampa_odoo_agent.application.requests.odoo import (
     PurchaseInvoiceSupplierCandidate,
     PurchaseInvoiceSupplierResolution,
 )
-from sumampa_odoo_agent.application.requests.purchase_chat import (
-    PurchaseChatLineResolutionDecision,
-    PurchaseChatResolutionDecision,
-    PurchaseChatSupplierResolutionDecision,
+from sumampa_odoo_agent.application.requests.purchase_workflow import (
+    PurchaseLineResolutionDecision,
+    PurchaseResolutionDecision,
+    PurchaseSupplierResolutionDecision,
 )
 from sumampa_odoo_agent.application.use_cases import (
     ApplyPurchaseInvoiceHumanReviewInput,
@@ -125,13 +125,13 @@ async def test_purchase_invoice_human_review_accepts_manual_candidate_choices() 
     result = await use_case.apply(
         ApplyPurchaseInvoiceHumanReviewInput(
             proposal=proposal,
-            resolution=PurchaseChatResolutionDecision(
-                supplier=PurchaseChatSupplierResolutionDecision(
+            resolution=PurchaseResolutionDecision(
+                supplier=PurchaseSupplierResolutionDecision(
                     action="select_candidate",
                     partner_id=102,
                 ),
                 lines=[
-                    PurchaseChatLineResolutionDecision(
+                    PurchaseLineResolutionDecision(
                         line_number=1,
                         action="select_candidate",
                         product_id=201,
@@ -160,10 +160,10 @@ async def test_purchase_invoice_human_review_creates_new_entities() -> None:
     result = await use_case.apply(
         ApplyPurchaseInvoiceHumanReviewInput(
             proposal=proposal,
-            resolution=PurchaseChatResolutionDecision(
-                supplier=PurchaseChatSupplierResolutionDecision(action="create_missing"),
+            resolution=PurchaseResolutionDecision(
+                supplier=PurchaseSupplierResolutionDecision(action="create_missing"),
                 lines=[
-                    PurchaseChatLineResolutionDecision(
+                    PurchaseLineResolutionDecision(
                         line_number=1,
                         action="create_missing",
                     )
@@ -191,7 +191,7 @@ async def test_purchase_invoice_human_review_keeps_blockers_when_user_only_confi
     result = await use_case.apply(
         ApplyPurchaseInvoiceHumanReviewInput(
             proposal=proposal,
-            resolution=PurchaseChatResolutionDecision(accept_current_resolution=True),
+            resolution=PurchaseResolutionDecision(accept_current_resolution=True),
         )
     )
 

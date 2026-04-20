@@ -7,7 +7,11 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from sumampa_odoo_agent.adapters.api.error_handler import register_exception_handlers
-from sumampa_odoo_agent.application.errors import DisabledModuleError, NotFoundError
+from sumampa_odoo_agent.application.errors import (
+    DisabledModuleError,
+    NotFoundError,
+    TooManyRequestsError,
+)
 
 
 def _build_app() -> FastAPI:
@@ -32,6 +36,14 @@ def _build_app() -> FastAPI:
     @app.get("/module-disabled")
     async def module_disabled() -> dict[str, str]:
         raise DisabledModuleError("odoo")
+
+    @app.get("/rate-limited")
+    async def rate_limited() -> dict[str, str]:
+        raise TooManyRequestsError(
+            "Retry later",
+            code="agent_rate_limited",
+            details={"retry_after_seconds": 2.4},
+        )
 
     @app.post("/validate")
     async def validate(payload: InputPayload) -> dict[str, str]:
@@ -84,3 +96,15 @@ def test_disabled_module_error_maps_to_404() -> None:
     body = response.json()
     assert body["code"] == "module_disabled"
     assert body["details"]["module"] == "odoo"
+
+
+def test_rate_limited_error_maps_to_429_and_sets_retry_after_header() -> None:
+    app = _build_app()
+    with TestClient(app) as client:
+        response = client.get("/rate-limited")
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "3"
+    body = response.json()
+    assert body["code"] == "agent_rate_limited"
+    assert body["details"]["retry_after_seconds"] == 2.4

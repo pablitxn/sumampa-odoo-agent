@@ -11,7 +11,6 @@ from pathlib import Path
 from sumampa_odoo_agent.application.requests.odoo import AnalyzePurchaseInvoiceCommand
 from sumampa_odoo_agent.infrastructure.extraction.service import OpenAIPurchaseInvoiceExtractor
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FIXTURES_DIR = PROJECT_ROOT / "tests" / "integration" / "fixtures" / "purchase_invoices"
 DEFAULT_OUTPUT_DIR = (
@@ -62,22 +61,35 @@ async def generate_snapshots(*, fixtures_dir: Path, output_dir: Path, model: str
         model=model,
         api_key_env_var="OPENAI_API_KEY",
     )
-    output_dir.mkdir(parents=True, exist_ok=True)
+    fixture_paths = _prepare_snapshot_paths(fixtures_dir=fixtures_dir, output_dir=output_dir)
 
-    for fixture_path in sorted(fixtures_dir.glob("*.jp*g")):
+    for fixture_path in fixture_paths:
         result = await extractor.extract(
             AnalyzePurchaseInvoiceCommand(
                 filename=fixture_path.name,
                 content_type="image/jpeg",
-                image_bytes=fixture_path.read_bytes(),
+                image_bytes=_read_fixture_bytes(fixture_path),
             )
         )
         snapshot_path = output_dir / f"{fixture_path.stem}.json"
-        snapshot_path.write_text(
+        _write_snapshot(
+            snapshot_path,
             json.dumps(result.model_dump(mode="json"), indent=2, ensure_ascii=True) + "\n",
-            encoding="utf-8",
         )
         print(f"snapshot generado: {snapshot_path}")
+
+
+def _prepare_snapshot_paths(*, fixtures_dir: Path, output_dir: Path) -> list[Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return sorted(fixtures_dir.glob("*.jp*g"))
+
+
+def _read_fixture_bytes(path: Path) -> bytes:
+    return path.read_bytes()
+
+
+def _write_snapshot(path: Path, content: str) -> None:
+    path.write_text(content, encoding="utf-8")
 
 
 def main() -> None:

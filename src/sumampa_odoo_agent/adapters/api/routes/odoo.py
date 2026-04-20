@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import base64
 from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from sumampa_odoo_agent.adapters.dependencies import ContainerDep
 from sumampa_odoo_agent.application.message_specs import render_message
+from sumampa_odoo_agent.application.requests.agent import RunAgentCommand
 from sumampa_odoo_agent.application.requests.odoo import (
     AnalyzePurchaseInvoiceCommand,
     ApplyPurchaseInvoiceProposalCommand,
@@ -31,10 +33,9 @@ from sumampa_odoo_agent.application.requests.odoo import (
     ValidateDeliveryDraftQuery,
     ValidateInvoiceDraftQuery,
 )
-from sumampa_odoo_agent.application.requests.purchase_chat import (
-    PurchaseChatContext,
-    PurchaseChatMessageCommand,
-    PurchaseChatResponse,
+from sumampa_odoo_agent.application.requests.purchase_workflow import (
+    PurchaseWorkflowContext,
+    PurchaseWorkflowResponse,
 )
 
 router = APIRouter(prefix="/api/v1/odoo", tags=["odoo"])
@@ -198,7 +199,7 @@ async def apply_purchase_invoice_proposal(
     return await container.command_bus.dispatch(command)
 
 
-@router.post("/purchase-chat/messages", response_model=PurchaseChatResponse)
+@router.post("/purchase-chat/messages", response_model=PurchaseWorkflowResponse)
 async def purchase_chat_message(
     message: Annotated[str, Form()] = "",
     session_id: Annotated[str | None, Form()] = None,
@@ -214,29 +215,53 @@ async def purchase_chat_message(
     invoice_images: Annotated[list[UploadFile] | None, File()] = None,
     invoice_image: Annotated[UploadFile | None, File()] = None,
     container: ContainerDep = None,  # type: ignore[assignment]
-) -> PurchaseChatResponse:
+) -> PurchaseWorkflowResponse:
     attachments = await _read_invoice_attachments(
         invoice_images=invoice_images,
         invoice_image=invoice_image,
         required=False,
     )
-    request = PurchaseChatMessageCommand(
-        session_id=session_id,
-        message=message,
-        attachments=attachments,
-        context=PurchaseChatContext(
-            supplier_id=supplier_id,
-            journal_id=journal_id,
-            picking_type_id=picking_type_id,
-            location_id=location_id,
-            location_dest_id=location_dest_id,
-            create_stock_receipt=create_stock_receipt,
-            markup_percentage=markup_percentage,
-            supplier_name=supplier_name,
-            supplier_vat=supplier_vat,
-        ),
+    purchase_context = PurchaseWorkflowContext(
+        supplier_id=supplier_id,
+        journal_id=journal_id,
+        picking_type_id=picking_type_id,
+        location_id=location_id,
+        location_dest_id=location_dest_id,
+        create_stock_receipt=create_stock_receipt,
+        markup_percentage=markup_percentage,
+        supplier_name=supplier_name,
+        supplier_vat=supplier_vat,
     )
-    return await container.command_bus.dispatch(request)
+    agent_result = await container.command_bus.dispatch(
+        RunAgentCommand(
+            prompt=_purchase_chat_prompt(message=message, has_attachments=bool(attachments)),
+            session_id=session_id,
+            context={
+                "purchase_workflow": {
+                    "context": purchase_context.model_dump(
+                        mode="json",
+                        exclude_none=True,
+                        exclude_defaults=True,
+                    ),
+                    "attachments": _serialize_invoice_attachments(attachments),
+                }
+            },
+        )
+    )
+    purchase_flow = agent_result.get("purchase_flow")
+    if not isinstance(purchase_flow, dict):
+        purchase_flow = {
+            "stage": "awaiting_invoice",
+            "proposal": None,
+            "last_apply_result": None,
+        }
+    return PurchaseWorkflowResponse(
+        session_id=str(agent_result.get("session_id") or session_id or ""),
+        stage=str(purchase_flow.get("stage") or "awaiting_invoice"),
+        assistant_message=str(agent_result.get("text") or ""),
+        proposal=purchase_flow.get("proposal"),
+        last_apply_result=purchase_flow.get("last_apply_result"),
+    )
 
 
 @router.post("/partners", response_model=OdooOperationResult)
@@ -297,3 +322,28 @@ async def _read_invoice_attachments(
             detail=render_message("runtime.json", "invoice_image_required"),
         )
     return attachments
+
+
+def _serialize_invoice_attachments(
+    attachments: list[InvoiceAttachment],
+) -> list[dict[str, str | None]]:
+    return [
+        {
+            "filename": attachment.filename,
+            "content_type": attachment.content_type,
+            "content_base64": base64.b64encode(attachment.content_bytes).decode("ascii"),
+        }
+        for attachment in attachments
+    ]
+
+
+def _purchase_chat_prompt(*, message: str, has_attachments: bool) -> str:
+    normalized = message.strip()
+    if normalized:
+        return normalized
+    if has_attachments:
+        return "Analizá la factura adjunta y guiame con el siguiente paso."
+    return (
+        "Seguimos con la factura activa si existe una. "
+        "Si no hay una activa, pedí la factura y sólo el contexto mínimo necesario."
+    )

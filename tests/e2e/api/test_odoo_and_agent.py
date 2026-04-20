@@ -5,26 +5,18 @@ from fastapi.testclient import TestClient
 
 from sumampa_odoo_agent.adapters.api.main import create_app
 from sumampa_odoo_agent.application.requests.odoo import ExtractedPurchaseInvoiceDocument
-from sumampa_odoo_agent.application.requests.purchase_chat import (
-    PurchaseChatReplyRequest,
-    PurchaseChatTurnDecision,
-)
 from sumampa_odoo_agent.infrastructure.agent.service import (
     MicrosoftAgentFrameworkOpenAIService,
 )
 from sumampa_odoo_agent.infrastructure.extraction.service import (
     OpenAIPurchaseInvoiceExtractor,
 )
-from sumampa_odoo_agent.infrastructure.purchase_chat.assistant import (
-    OpenAIPurchaseChatAssistant,
-)
 from sumampa_odoo_agent.infrastructure.runtime.state import reset_runtime_state_for_tests
 
 
 @pytest.fixture(autouse=True)
 def patch_runtime_for_api_tests(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ORCHID_PURCHASE_CHAT_MODE", "openai")
-    monkeypatch.setenv("ORCHID_AGENT_MODE", "disabled")
+    monkeypatch.setenv("ORCHID_AGENT_MODE", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     reset_runtime_state_for_tests()
 
@@ -52,22 +44,7 @@ def patch_runtime_for_api_tests(monkeypatch: pytest.MonkeyPatch) -> None:
             }
         )
 
-    async def fake_decide(self, *, stage, user_message, proposal, last_apply_result):  # type: ignore[no-untyped-def]
-        del self, user_message, proposal, last_apply_result
-        if stage == "awaiting_invoice_confirmation":
-            return PurchaseChatTurnDecision(action="confirm_invoice")
-        if stage == "awaiting_stock_confirmation":
-            return PurchaseChatTurnDecision(action="confirm_stock")
-        if stage == "awaiting_price_confirmation":
-            return PurchaseChatTurnDecision(action="confirm_prices")
-        return PurchaseChatTurnDecision(action="reply_only")
-
-    async def fake_reply(self, request: PurchaseChatReplyRequest):  # type: ignore[no-untyped-def]
-        return f"event={request.event}"
-
     monkeypatch.setattr(OpenAIPurchaseInvoiceExtractor, "extract", fake_extract)
-    monkeypatch.setattr(OpenAIPurchaseChatAssistant, "decide", fake_decide)
-    monkeypatch.setattr(OpenAIPurchaseChatAssistant, "reply", fake_reply)
     yield
     reset_runtime_state_for_tests()
 
@@ -263,200 +240,83 @@ def test_apply_purchase_invoice_proposal_returns_product_and_bill_operations() -
     assert any(operation["model"] == "account.move" for operation in payload["operations"])
 
 
-def test_purchase_chat_flow_goes_from_invoice_to_price_update() -> None:
+def test_purchase_chat_endpoint_delegates_to_agent() -> None:
+    async def fake_run(self, *, prompt, context, session_id=None):  # type: ignore[no-untyped-def]
+        del self, prompt, context
+        return {
+            "mode": "microsoft-agent-framework-openai",
+            "session_id": session_id or "purchase-session-1",
+            "text": "Te encontré 2 productos pendientes para revisar.",
+            "purchase_flow": {
+                "stage": "awaiting_resolution",
+                "proposal": {
+                    "mode": "dry-run",
+                    "supplier_name": "Sumampa SRL",
+                    "supplier_vat": None,
+                    "supplier_resolution": {
+                        "status": "exact",
+                        "selected_partner_id": 102,
+                        "selected_display_name": "Sumampa SRL",
+                        "selected_vat": None,
+                        "extracted_name": "Sumampa SRL",
+                        "extracted_vat": None,
+                        "candidates": [],
+                    },
+                    "invoice_number": "TEST-0001",
+                    "invoice_date": "2026-04-19",
+                    "document_type": "Factura A",
+                    "currency": "ARS",
+                    "markup_percentage": 30.0,
+                    "lines": [],
+                    "totals": {"untaxed": 100.0, "vat": 21.0, "total": 121.0},
+                    "needs_user_resolution": True,
+                    "warnings": [],
+                    "assumptions": [],
+                },
+                "last_apply_result": None,
+                "context": {},
+            },
+        }
+
     app = create_app()
-    with TestClient(app) as client:
-        first = client.post(
-            "/api/v1/odoo/purchase-chat/messages",
-            data={
-                "message": "te paso una factura nueva",
-                "supplier_name": "Sumampa SRL",
-                "markup_percentage": "30",
-            },
-            files={"invoice_image": ("factura-acme.jpg", b"fake-image", "image/jpeg")},
-        )
-        first_payload = first.json()
-
-        second = client.post(
-            "/api/v1/odoo/purchase-chat/messages",
-            data={
-                "session_id": first_payload["session_id"],
-                "message": "si, cargar factura",
-                "supplier_id": "102",
-                "journal_id": "301",
-                "markup_percentage": "30",
-            },
-        )
-        second_payload = second.json()
-
-        third = client.post(
-            "/api/v1/odoo/purchase-chat/messages",
-            data={
-                "session_id": first_payload["session_id"],
-                "message": "si, actualizar precios",
-                "supplier_id": "102",
-                "journal_id": "301",
-                "markup_percentage": "30",
-            },
-        )
-        third_payload = third.json()
-
-    assert first.status_code == 200
-    assert first_payload["stage"] == "awaiting_invoice_confirmation"
-    assert first_payload["proposal"]["invoice_number"] is not None
-
-    assert second.status_code == 200
-    assert second_payload["stage"] == "awaiting_price_confirmation"
-    assert second_payload["last_apply_result"]["applied"] is True
-
-    assert third.status_code == 200
-    assert third_payload["stage"] == "completed"
-    assert third_payload["assistant_message"] == "event=price_applied"
-
-
-def test_purchase_chat_keeps_supplier_resolution_across_turns_when_form_leaves_supplier_blank() -> None:
-    app = create_app()
-    with TestClient(app) as client:
-        first = client.post(
-            "/api/v1/odoo/purchase-chat/messages",
-            data={
-                "message": "te paso una factura nueva",
-                "supplier_name": "Sumampa SRL",
-                "markup_percentage": "30",
-            },
-            files={"invoice_image": ("factura-acme.jpg", b"fake-image", "image/jpeg")},
-        )
-        first_payload = first.json()
-
-        second = client.post(
-            "/api/v1/odoo/purchase-chat/messages",
-            data={
-                "session_id": first_payload["session_id"],
-                "message": "si, cargar factura",
-                "journal_id": "301",
-            },
-        )
-        second_payload = second.json()
-
-    assert first.status_code == 200
-    assert first_payload["stage"] == "awaiting_invoice_confirmation"
-    assert first_payload["proposal"]["supplier_resolution"]["selected_partner_id"] == 102
-
-    assert second.status_code == 200
-    assert second_payload["stage"] == "awaiting_price_confirmation"
-    assert second_payload["last_apply_result"]["applied"] is True
-    assert any(
-        operation["model"] == "account.move"
-        for operation in second_payload["last_apply_result"]["operations"]
-    )
-
-
-def test_purchase_chat_flow_splits_bill_stock_and_prices_when_requested() -> None:
-    app = create_app()
-    with TestClient(app) as client:
-        first = client.post(
-            "/api/v1/odoo/purchase-chat/messages",
-            data={
-                "message": "te paso una factura nueva",
-                "supplier_name": "Sumampa SRL",
-                "markup_percentage": "30",
-                "create_stock_receipt": "true",
-                "picking_type_id": "501",
-                "location_id": "603",
-                "location_dest_id": "601",
-            },
-            files={"invoice_image": ("factura-acme.jpg", b"fake-image", "image/jpeg")},
-        )
-        first_payload = first.json()
-
-        second = client.post(
-            "/api/v1/odoo/purchase-chat/messages",
-            data={
-                "session_id": first_payload["session_id"],
-                "message": "si, cargar factura",
-                "supplier_id": "102",
-                "journal_id": "301",
-            },
-        )
-        second_payload = second.json()
-
-        third = client.post(
-            "/api/v1/odoo/purchase-chat/messages",
-            data={
-                "session_id": first_payload["session_id"],
-                "message": "si, generar recepción",
-            },
-        )
-        third_payload = third.json()
-
-        fourth = client.post(
-            "/api/v1/odoo/purchase-chat/messages",
-            data={
-                "session_id": first_payload["session_id"],
-                "message": "si, actualizar precios",
-            },
-        )
-        fourth_payload = fourth.json()
-
-    assert first.status_code == 200
-    assert first_payload["stage"] == "awaiting_invoice_confirmation"
-
-    assert second.status_code == 200
-    assert second_payload["stage"] == "awaiting_stock_confirmation"
-    assert second_payload["last_apply_result"]["applied"] is True
-    assert any(
-        operation["model"] == "account.move"
-        for operation in second_payload["last_apply_result"]["operations"]
-    )
-    assert all(
-        operation["model"] != "stock.picking"
-        for operation in second_payload["last_apply_result"]["operations"]
-    )
-
-    assert third.status_code == 200
-    assert third_payload["stage"] == "awaiting_price_confirmation"
-    assert any(
-        operation["model"] == "stock.picking"
-        for operation in third_payload["last_apply_result"]["operations"]
-    )
-
-    assert fourth.status_code == 200
-    assert fourth_payload["stage"] == "completed"
-    assert fourth_payload["assistant_message"] == "event=price_applied"
-
-
-def test_purchase_chat_stops_in_resolution_when_supplier_is_ambiguous() -> None:
-    app = create_app()
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/v1/odoo/purchase-chat/messages",
-            data={
-                "message": "te paso una factura nueva",
-                "supplier_name": "Acme Proveedor SA",
-                "markup_percentage": "30",
-            },
-            files={"invoice_image": ("factura-acme.jpg", b"fake-image", "image/jpeg")},
-        )
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(MicrosoftAgentFrameworkOpenAIService, "run", fake_run)
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/odoo/purchase-chat/messages",
+                data={"message": "revisá los productos"},
+            )
 
     assert response.status_code == 200
     payload = response.json()
+    assert payload["session_id"] == "purchase-session-1"
     assert payload["stage"] == "awaiting_resolution"
-    assert payload["proposal"]["needs_user_resolution"] is True
-    assert payload["assistant_message"] == "event=analysis_requires_resolution"
+    assert payload["assistant_message"] == "Te encontré 2 productos pendientes para revisar."
+    assert payload["proposal"]["invoice_number"] == "TEST-0001"
 
 
 def test_purchase_chat_handles_small_talk_without_invoice() -> None:
+    async def fake_run(self, *, prompt, context, session_id=None):  # type: ignore[no-untyped-def]
+        del self, prompt, context
+        return {
+            "mode": "microsoft-agent-framework-openai",
+            "session_id": session_id or "small-talk-session",
+            "text": "Mandame la factura y sigo.",
+        }
+
     app = create_app()
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/v1/odoo/purchase-chat/messages",
-            data={"message": "ey como va?"},
-        )
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(MicrosoftAgentFrameworkOpenAIService, "run", fake_run)
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/odoo/purchase-chat/messages",
+                data={"message": "ey como va?"},
+            )
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["stage"] == "awaiting_invoice"
-    assert payload["assistant_message"] == "event=awaiting_invoice"
+    assert payload["assistant_message"] == "Mandame la factura y sigo."
 
 
 def test_run_agent_uses_openai_backend_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:

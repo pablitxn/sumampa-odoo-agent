@@ -1,9 +1,10 @@
-"""Replay a full local purchase flow against the seeded Odoo 19 stack."""
+"""Replay a full local purchase flow against Odoo through the agent."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import json
 import os
 import sys
@@ -20,27 +21,23 @@ from bootstrap_odoo_integration import (
 from sumampa_odoo_agent.application.requests.odoo import (
     AnalyzePurchaseInvoiceCommand,
     ExtractedPurchaseInvoiceDocument,
-    InvoiceAttachment,
     SearchJournalsQuery,
     SearchLocationsQuery,
     SearchPickingTypesQuery,
 )
-from sumampa_odoo_agent.application.requests.purchase_chat import (
-    PurchaseChatContext,
-    PurchaseChatMessageCommand,
+from sumampa_odoo_agent.application.requests.purchase_workflow import PurchaseWorkflowContext
+from sumampa_odoo_agent.infrastructure.agent.service import (
+    MicrosoftAgentFrameworkOpenAIService,
 )
+from sumampa_odoo_agent.infrastructure.db.session_store import InMemorySessionStore
 from sumampa_odoo_agent.infrastructure.odoo.client import OdooJsonRpcClient
-from sumampa_odoo_agent.infrastructure.purchase_chat.assistant import (
-    OpenAIPurchaseChatAssistant,
-)
-from sumampa_odoo_agent.infrastructure.purchase_chat.service import PurchaseChatService
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOTS_DIR = (
     REPO_ROOT / "tests" / "integration" / "fixtures" / "purchase_invoice_extractions"
 )
-DEFAULT_PURCHASE_CHAT_MODEL = "gpt-5.4"
-DEFAULT_PURCHASE_CHAT_API_KEY_ENV = "OPENAI_API_KEY"
+DEFAULT_AGENT_MODEL = "gpt-5.4-mini"
+DEFAULT_AGENT_API_KEY_ENV = "OPENAI_API_KEY"
 
 
 class SnapshotPurchaseInvoiceExtractor:
@@ -70,39 +67,34 @@ async def main_async(args: argparse.Namespace) -> int:
         timeout_seconds=float(os.environ.get("ORCHID_ODOO_TIMEOUT_SECONDS", "30")),
         invoice_extractor=SnapshotPurchaseInvoiceExtractor(extracted),
     )
-    context = await _default_context(
+    workflow_context = await _default_context(
         client=client,
         markup_percentage=args.markup,
         create_stock_receipt=args.create_stock_receipt,
     )
-    service = PurchaseChatService(
+    agent = MicrosoftAgentFrameworkOpenAIService(
+        model=os.environ.get("ORCHID_AGENT_MODEL", DEFAULT_AGENT_MODEL),
+        api_key_env_var=DEFAULT_AGENT_API_KEY_ENV,
+        base_url=os.environ.get("ORCHID_AGENT_BASE_URL"),
         odoo=client,
-        assistant=OpenAIPurchaseChatAssistant(
-            model=os.environ.get("ORCHID_PURCHASE_CHAT_MODEL", DEFAULT_PURCHASE_CHAT_MODEL),
-            api_key_env_var=DEFAULT_PURCHASE_CHAT_API_KEY_ENV,
-            base_url=os.environ.get("ORCHID_PURCHASE_CHAT_BASE_URL"),
-        ),
+        session_store=InMemorySessionStore(),
     )
 
     turns: list[dict[str, object]] = []
-    response = await service.run_turn(
-        PurchaseChatMessageCommand(
-            message="te paso la factura",
-            attachments=[
-                InvoiceAttachment(
-                    filename=f"{args.fixture}.jpeg",
-                    content_type="image/jpeg",
-                    content_bytes=b"snapshot-backed-image",
-                )
-            ],
-            context=context,
-        )
+    session_id = str(uuid4())
+    response = await _run_turn(
+        agent=agent,
+        session_id=session_id,
+        prompt="Analizá la factura adjunta y avanzá con el flujo de compra.",
+        context=workflow_context,
+        attach_invoice=True,
+        fixture_name=args.fixture,
     )
-    turns.append(response.model_dump())
+    turns.append(response)
 
-    if response.stage == "awaiting_resolution":
+    if response["stage"] == "awaiting_resolution":
         resolution_message = _auto_resolution_message(
-            response.proposal,
+            response.get("proposal"),
             allow_new_supplier=args.allow_new_supplier,
             allow_new_products=args.allow_new_products,
         )
@@ -114,68 +106,62 @@ async def main_async(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 1
-        response = await service.run_turn(
-            PurchaseChatMessageCommand(
-                session_id=response.session_id,
-                message=resolution_message,
-                context=context,
-            )
+        response = await _run_turn(
+            agent=agent,
+            session_id=session_id,
+            prompt=resolution_message,
+            context=workflow_context,
         )
-        turns.append(response.model_dump())
-        if response.stage == "awaiting_resolution":
-            if _proposal_has_new_items(response.proposal):
-                response = await service.run_turn(
-                    PurchaseChatMessageCommand(
-                        session_id=response.session_id,
-                        message="crear nuevos",
-                        context=context,
-                    )
-                )
-                turns.append(response.model_dump())
-        if response.stage == "awaiting_resolution":
-            response = await service.run_turn(
-                PurchaseChatMessageCommand(
-                    session_id=response.session_id,
-                    message="si",
-                    context=context,
-                )
+        turns.append(response)
+        if response["stage"] == "awaiting_resolution" and _proposal_has_new_items(response.get("proposal")):
+            response = await _run_turn(
+                agent=agent,
+                session_id=session_id,
+                prompt="Creá en Odoo todos los faltantes marcados como nuevos.",
+                context=workflow_context,
             )
-            turns.append(response.model_dump())
+            turns.append(response)
+        if response["stage"] == "awaiting_resolution":
+            response = await _run_turn(
+                agent=agent,
+                session_id=session_id,
+                prompt="Aceptá la resolución actual y seguí.",
+                context=workflow_context,
+            )
+            turns.append(response)
 
-    if response.stage != "awaiting_invoice_confirmation":
+    if response["stage"] != "awaiting_invoice_confirmation":
         _print_turns(turns, as_json=args.json)
         print(
-            f"\nEl flujo no llegó a confirmación de factura. Etapa actual: {response.stage}",
+            f"\nEl flujo no llegó a confirmación de factura. Etapa actual: {response['stage']}",
             file=sys.stderr,
         )
         return 1
 
-    response = await service.run_turn(
-        PurchaseChatMessageCommand(
-            session_id=response.session_id,
-            message="si, cargar factura",
-            context=context,
-        )
+    response = await _run_turn(
+        agent=agent,
+        session_id=session_id,
+        prompt="Confirmá la factura con el contexto actual.",
+        context=workflow_context,
     )
-    turns.append(response.model_dump())
+    turns.append(response)
     if args.create_stock_receipt:
-        if response.stage != "awaiting_stock_confirmation":
+        if response["stage"] != "awaiting_stock_confirmation":
             _print_turns(turns, as_json=args.json)
             print(
                 "\nLa factura no quedó cargada correctamente o no entró a la etapa de stock.",
                 file=sys.stderr,
             )
             return 1
-        response = await service.run_turn(
-            PurchaseChatMessageCommand(
-                session_id=response.session_id,
-                message="si, generar recepción",
-                context=context,
-            )
+        response = await _run_turn(
+            agent=agent,
+            session_id=session_id,
+            prompt="Generá la recepción de stock.",
+            context=workflow_context,
         )
-        turns.append(response.model_dump())
+        turns.append(response)
 
-    if response.stage != "awaiting_price_confirmation":
+    if response["stage"] != "awaiting_price_confirmation":
         _print_turns(turns, as_json=args.json)
         print(
             "\nLa factura/recepción no quedó cargada correctamente. Revisá warnings y contexto local.",
@@ -183,15 +169,18 @@ async def main_async(args: argparse.Namespace) -> int:
         )
         return 1
 
-    final_message = "si, actualizar precios" if args.confirm_prices else "no, por ahora no"
-    response = await service.run_turn(
-        PurchaseChatMessageCommand(
-            session_id=response.session_id,
-            message=final_message,
-            context=context,
-        )
+    final_message = (
+        "Actualizá los precios y costos con esta factura."
+        if args.confirm_prices
+        else "No actualices los precios por ahora."
     )
-    turns.append(response.model_dump())
+    response = await _run_turn(
+        agent=agent,
+        session_id=session_id,
+        prompt=final_message,
+        context=workflow_context,
+    )
+    turns.append(response)
 
     _print_turns(turns, as_json=args.json)
     return 0
@@ -241,9 +230,9 @@ async def _default_context(
     client: OdooJsonRpcClient,
     markup_percentage: float,
     create_stock_receipt: bool,
-) -> PurchaseChatContext:
+) -> PurchaseWorkflowContext:
     journal = (await client.search_journals(SearchJournalsQuery(query="purchase", limit=1))).hits[0]
-    context = PurchaseChatContext(
+    context = PurchaseWorkflowContext(
         journal_id=journal.id,
         markup_percentage=markup_percentage,
         create_stock_receipt=create_stock_receipt,
@@ -258,6 +247,46 @@ async def _default_context(
     context.location_id = vendors.id
     context.location_dest_id = stock.id
     return context
+
+
+async def _run_turn(
+    *,
+    agent: MicrosoftAgentFrameworkOpenAIService,
+    session_id: str,
+    prompt: str,
+    context: PurchaseWorkflowContext,
+    attach_invoice: bool = False,
+    fixture_name: str = "snapshot",
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "purchase_workflow": {
+            "context": context.model_dump(mode="json", exclude_none=True, exclude_defaults=True)
+        }
+    }
+    if attach_invoice:
+        payload["purchase_workflow"]["attachments"] = [  # type: ignore[index]
+            {
+                "filename": f"{fixture_name}.jpeg",
+                "content_type": "image/jpeg",
+                "content_base64": base64.b64encode(b"snapshot-backed-image").decode("ascii"),
+            }
+        ]
+
+    result = await agent.run(
+        prompt=prompt,
+        context=payload,
+        session_id=session_id,
+    )
+    purchase_flow = result.get("purchase_flow") or {}
+    if not isinstance(purchase_flow, dict):
+        purchase_flow = {}
+    return {
+        "session_id": str(result.get("session_id") or session_id),
+        "stage": str(purchase_flow.get("stage") or "awaiting_invoice"),
+        "assistant_message": str(result.get("text") or ""),
+        "proposal": purchase_flow.get("proposal"),
+        "last_apply_result": purchase_flow.get("last_apply_result"),
+    }
 
 
 def _load_snapshot(path: Path) -> ExtractedPurchaseInvoiceDocument:
@@ -284,43 +313,70 @@ def _unique_invoice_number(value: str | None) -> str:
 
 
 def _auto_resolution_message(
-    proposal,
+    proposal: object,
     *,
     allow_new_supplier: bool,
     allow_new_products: bool,
 ) -> str | None:
-    if proposal is None:
+    if not isinstance(proposal, dict):
         return None
+
     commands: list[str] = []
-    supplier_resolution = proposal.supplier_resolution
-    if supplier_resolution is not None:
-        if supplier_resolution.status == "candidate" and supplier_resolution.candidates:
-            commands.append(f"proveedor {supplier_resolution.candidates[0].partner_id}")
-        elif supplier_resolution.status == "missing":
+    supplier_resolution = proposal.get("supplier_resolution")
+    if isinstance(supplier_resolution, dict):
+        status = supplier_resolution.get("status")
+        candidates = supplier_resolution.get("candidates") or []
+        if status == "candidate" and candidates:
+            candidate = candidates[0]
+            if isinstance(candidate, dict) and candidate.get("partner_id") is not None:
+                commands.append(
+                    f"Elegí el proveedor candidato {candidate['partner_id']}."
+                )
+        elif status == "missing":
             if not allow_new_supplier:
                 return None
-            commands.append("proveedor nuevo")
+            commands.append("Marcá el proveedor como nuevo.")
 
-    for line in proposal.lines:
-        resolution = line.product_resolution
-        if resolution.status == "candidate" and resolution.candidates:
-            commands.append(
-                f"linea {line.line_number} producto {resolution.candidates[0].product_id}"
-            )
-        elif resolution.status == "missing":
+    for line in proposal.get("lines") or []:
+        if not isinstance(line, dict):
+            continue
+        resolution = line.get("product_resolution")
+        if not isinstance(resolution, dict):
+            continue
+        line_number = line.get("line_number")
+        candidates = resolution.get("candidates") or []
+        if resolution.get("status") == "candidate" and candidates:
+            candidate = candidates[0]
+            if (
+                isinstance(candidate, dict)
+                and candidate.get("product_id") is not None
+                and line_number is not None
+            ):
+                commands.append(
+                    f"Para la línea {line_number}, elegí el producto candidato {candidate['product_id']}."
+                )
+        elif resolution.get("status") == "missing":
             if not allow_new_products:
                 return None
-            commands.append(f"linea {line.line_number} nuevo")
+            commands.append(f"Marcá la línea {line_number} como producto nuevo.")
 
-    return " ".join(commands) if commands else "si"
+    if commands:
+        return " ".join(commands)
+    return "Aceptá la resolución actual y seguí."
 
 
-def _proposal_has_new_items(proposal) -> bool:
-    if proposal is None:
+def _proposal_has_new_items(proposal: object) -> bool:
+    if not isinstance(proposal, dict):
         return False
-    if proposal.supplier_resolution is not None and proposal.supplier_resolution.status == "new":
+    supplier_resolution = proposal.get("supplier_resolution")
+    if isinstance(supplier_resolution, dict) and supplier_resolution.get("status") == "new":
         return True
-    return any(line.product_resolution.status == "new" for line in proposal.lines)
+    for line in proposal.get("lines") or []:
+        if isinstance(line, dict):
+            resolution = line.get("product_resolution")
+            if isinstance(resolution, dict) and resolution.get("status") == "new":
+                return True
+    return False
 
 
 def _print_turns(turns: list[dict[str, object]], *, as_json: bool) -> None:

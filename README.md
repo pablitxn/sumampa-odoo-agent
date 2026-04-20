@@ -209,11 +209,11 @@ RUN_SESSION_STORE_INTEGRATION=1 PYTHONPATH=src uv run pytest -q tests/integratio
 
 ## Demo conversacional
 
-Para probar el flujo conversacional con OpenAI real en extracción y chat:
+Para probar el flujo conversacional con OpenAI real, con el agente manejando todo el workflow:
 
 ```bash
 cd ~/repos/sumampa-odoo-agent
-ORCHID_INVOICE_EXTRACTION_MODE=openai ORCHID_PURCHASE_CHAT_MODE=openai ORCHID_ODOO_MODE=dry-run uv run sumampa_odoo_agent --reload
+ORCHID_INVOICE_EXTRACTION_MODE=openai ORCHID_AGENT_MODE=openai ORCHID_ODOO_MODE=dry-run uv run sumampa_odoo_agent --reload
 ```
 
 Después abrí `http://127.0.0.1:8000/demo/purchase-invoices`.
@@ -232,26 +232,26 @@ Para correr el flujo completo sin UI ni WhatsApp, usando snapshots contra el Odo
 
 ```bash
 cd ~/repos/sumampa-odoo-agent
-PYTHONPATH=src uv run python scripts/replay_purchase_chat_flow.py --create-stock-receipt --confirm-prices
+PYTHONPATH=src uv run python scripts/replay_agent_purchase_flow.py --create-stock-receipt --confirm-prices
 ```
 
 Por defecto el replay usa `molinos_1`, que hoy recorre factura + recepción + actualización de costo/precio sin intervención manual adicional. Si querés otro snapshot:
 
 ```bash
 cd ~/repos/sumampa-odoo-agent
-PYTHONPATH=src uv run python scripts/replay_purchase_chat_flow.py arcor_1 --create-stock-receipt --confirm-prices
+PYTHONPATH=src uv run python scripts/replay_agent_purchase_flow.py arcor_1 --create-stock-receipt --confirm-prices
 ```
 
 Si querés que el replay marque faltantes como nuevos y los cree localmente:
 
 ```bash
 cd ~/repos/sumampa-odoo-agent
-PYTHONPATH=src uv run python scripts/replay_purchase_chat_flow.py algun_fixture --allow-new-supplier --allow-new-products
+PYTHONPATH=src uv run python scripts/replay_agent_purchase_flow.py algun_fixture --allow-new-supplier --allow-new-products
 ```
 
 ## Flujo conversacional actual
 
-El flujo de compras ahora tiene estas etapas:
+El agente mantiene un workflow activo de compra y estas etapas se derivan del estado actual, no de una máquina conversacional hardcodeada:
 
 - `awaiting_invoice`: espera saludo o imagen.
 - `awaiting_resolution`: hay proveedor o productos que requieren revisión humana.

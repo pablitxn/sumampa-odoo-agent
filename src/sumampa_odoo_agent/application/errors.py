@@ -85,6 +85,42 @@ class ConflictError(ApplicationError):
         )
 
 
+class TooManyRequestsError(ApplicationError):
+    """Raised when the caller should retry later."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "too_many_requests",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            code=code,
+            details={} if details is None else details,
+            status_code=429,
+        )
+
+
+class UpstreamServiceError(ApplicationError):
+    """Raised when an external dependency fails to complete the request."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "upstream_service_error",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            code=code,
+            details={} if details is None else details,
+            status_code=502,
+        )
+
+
 class DisabledModuleError(NotFoundError):
     """Raised when trying to use a disabled module endpoint/tool."""
 
