@@ -5,18 +5,13 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from sumampa_odoo_agent.services.models.odoo import (
-    AnalyzePurchaseInvoiceCommand,
-    ApplyPurchaseInvoiceProposalCommand,
-    ApplyPurchaseInvoiceProposalResult,
     CreateDeliveryCommand,
     CreateInvoiceCommand,
     CreatePartnerCommand,
     CreateProductCommand,
-    ExtractedPurchaseInvoiceDocument,
     OdooOperationResult,
     OdooSearchResult,
     OdooValidationResult,
-    PurchaseInvoiceProposalResult,
     SearchJournalsQuery,
     SearchLocationsQuery,
     SearchPartnersQuery,
@@ -43,27 +38,7 @@ class SessionStore(Protocol):
         """Release store resources."""
 
 
-class InvoiceExtractor(Protocol):
-    async def extract(
-        self,
-        command: AnalyzePurchaseInvoiceCommand,
-    ) -> ExtractedPurchaseInvoiceDocument:
-        """Extract normalized purchase invoice data from an uploaded artifact."""
-
-
 class OdooGateway(Protocol):
-    async def analyze_purchase_invoice(
-        self,
-        command: AnalyzePurchaseInvoiceCommand,
-    ) -> PurchaseInvoiceProposalResult:
-        """Extract and price a purchase invoice from an uploaded image."""
-
-    async def apply_purchase_invoice_proposal(
-        self,
-        command: ApplyPurchaseInvoiceProposalCommand,
-    ) -> ApplyPurchaseInvoiceProposalResult:
-        """Apply a purchase invoice proposal into Odoo-related operations."""
-
     async def search_partners(self, query: SearchPartnersQuery) -> OdooSearchResult:
         """Search partners in Odoo."""
 

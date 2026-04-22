@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from sumampa_odoo_agent.services.contracts import OdooGateway
 from sumampa_odoo_agent.services.models.odoo import (
-    AnalyzePurchaseInvoiceCommand,
-    ApplyPurchaseInvoiceProposalCommand,
-    ApplyPurchaseInvoiceProposalResult,
     CreateDeliveryCommand,
     CreateInvoiceCommand,
     CreatePartnerCommand,
@@ -14,7 +11,6 @@ from sumampa_odoo_agent.services.models.odoo import (
     OdooOperationResult,
     OdooSearchResult,
     OdooValidationResult,
-    PurchaseInvoiceProposalResult,
     SearchJournalsQuery,
     SearchLocationsQuery,
     SearchPartnersQuery,
@@ -36,18 +32,6 @@ class OdooService:
     @property
     def gateway(self) -> OdooGateway:
         return self._gateway
-
-    async def analyze_purchase_invoice(
-        self,
-        command: AnalyzePurchaseInvoiceCommand,
-    ) -> PurchaseInvoiceProposalResult:
-        return await self._gateway.analyze_purchase_invoice(command)
-
-    async def apply_purchase_invoice_proposal(
-        self,
-        command: ApplyPurchaseInvoiceProposalCommand,
-    ) -> ApplyPurchaseInvoiceProposalResult:
-        return await self._gateway.apply_purchase_invoice_proposal(command)
 
     async def search_partners(self, query: SearchPartnersQuery) -> OdooSearchResult:
         return await self._gateway.search_partners(query)

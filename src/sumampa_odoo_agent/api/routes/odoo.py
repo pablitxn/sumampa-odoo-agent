@@ -6,7 +6,6 @@ from fastapi import APIRouter
 
 from sumampa_odoo_agent.api.dependencies import ServicesDep
 from sumampa_odoo_agent.api.schemas import (
-    ApplyPurchaseInvoiceMutation,
     CreateDeliveryMutation,
     CreateInvoiceMutation,
     CreatePartnerMutation,
@@ -56,6 +55,4 @@ async def mutate(request: MutationRequest, services: ServicesDep) -> MutationRes
         return await services.odoo.create_invoice(request)
     if isinstance(request, CreateDeliveryMutation):
         return await services.odoo.create_delivery(request)
-    if isinstance(request, ApplyPurchaseInvoiceMutation):
-        return await services.purchase_invoices.apply(request)
     raise AssertionError("Unhandled mutation kind")

@@ -7,8 +7,6 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from sumampa_odoo_agent.services.models.odoo import (
-    ApplyPurchaseInvoiceProposalCommand,
-    ApplyPurchaseInvoiceProposalResult,
     CreateDeliveryCommand,
     CreateInvoiceCommand,
     CreatePartnerCommand,
@@ -17,7 +15,6 @@ from sumampa_odoo_agent.services.models.odoo import (
     OdooOperationResult,
     OdooSearchResult,
     OdooValidationResult,
-    PurchaseInvoiceProposalResult,
     SearchJournalsQuery,
     SearchLocationsQuery,
     SearchPartnersQuery,
@@ -43,13 +40,6 @@ class AttachmentInput(BaseModel):
         return self
 
 
-class PurchaseInvoiceAnalyzeRequest(BaseModel):
-    attachments: list[AttachmentInput] = Field(min_length=1)
-    supplier_name: str | None = None
-    supplier_vat: str | None = None
-    markup_percentage: float = Field(default=30.0, ge=0)
-
-
 class ConversationMessageRequest(BaseModel):
     conversation_id: str = Field(min_length=1)
     channel: str = Field(min_length=1)
@@ -66,8 +56,6 @@ class ConversationMessage(BaseModel):
 
 class WorkflowStateResponse(BaseModel):
     stage: str
-    proposal: PurchaseInvoiceProposalResult | None = None
-    last_apply_result: ApplyPurchaseInvoiceProposalResult | None = None
 
 
 class ConversationMessageResponse(BaseModel):
@@ -146,20 +134,15 @@ class CreateDeliveryMutation(CreateDeliveryCommand):
     kind: Literal["create_delivery"]
 
 
-class ApplyPurchaseInvoiceMutation(ApplyPurchaseInvoiceProposalCommand):
-    kind: Literal["apply_purchase_invoice"]
-
-
 MutationRequest = Annotated[
     CreatePartnerMutation
     | CreateProductMutation
     | CreateInvoiceMutation
-    | CreateDeliveryMutation
-    | ApplyPurchaseInvoiceMutation,
+    | CreateDeliveryMutation,
     Field(discriminator="kind"),
 ]
 
 
-MutationResponse = OdooOperationResult | ApplyPurchaseInvoiceProposalResult
+MutationResponse = OdooOperationResult
 LookupResponse = OdooSearchResult
 ValidationResponse = OdooValidationResult

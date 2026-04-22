@@ -7,6 +7,5 @@ Catálogos versionados para copy canónico que no debería quedar embebido en el
 
 Catálogos actuales:
 
-- `purchase_invoice.json`
 - `odoo_validation.json`
 - `runtime.json`

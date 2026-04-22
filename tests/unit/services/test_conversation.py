@@ -26,12 +26,8 @@ class _FakeRuntime:
         }
         return {
             "session_id": session_id,
-            "text": "Seguimos con la factura.",
-            "purchase_flow": {
-                "stage": "awaiting_resolution",
-                "proposal": None,
-                "last_apply_result": None,
-            },
+            "text": "Seguimos con el pedido.",
+            "stage": "idle",
         }
 
 
@@ -48,22 +44,22 @@ async def test_conversation_service_builds_prompt_and_runtime_context() -> None:
             text="",
             attachments=[
                 InvoiceAttachment(
-                    filename="factura.jpg",
+                    filename="adjunto.jpg",
                     content_type="image/jpeg",
                     content_bytes=b"fake-image",
                 )
             ],
-            context={"supplier_name": "Sumampa SRL"},
+            context={"customer_name": "Sumampa SRL"},
         )
     )
 
     assert result.conversation_id == "conv-1"
-    assert result.assistant_text == "Seguimos con la factura."
-    assert result.stage == "awaiting_resolution"
+    assert result.assistant_text == "Seguimos con el pedido."
+    assert result.stage == "idle"
     assert runtime.last_call is not None
-    assert runtime.last_call["prompt"] == "Analizá la factura adjunta y guiame con el siguiente paso."
+    assert runtime.last_call["prompt"] == "Hay un adjunto del usuario. Decime qué necesitás para seguir."
     runtime_context = runtime.last_call["context"]
     assert isinstance(runtime_context, dict)
     assert runtime_context["transport"]["channel"] == "whatsapp"
-    assert runtime_context["purchase_workflow"]["context"]["supplier_name"] == "Sumampa SRL"
-    assert len(runtime_context["purchase_workflow"]["attachments"]) == 1
+    assert runtime_context["context"]["customer_name"] == "Sumampa SRL"
+    assert len(runtime_context["attachments"]) == 1

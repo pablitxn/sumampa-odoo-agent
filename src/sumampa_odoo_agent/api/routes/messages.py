@@ -37,14 +37,9 @@ async def post_message(
             context=request.context,
         )
     )
-    last_apply_result = result.last_apply_result
     return ConversationMessageResponse(
         conversation_id=result.conversation_id,
         messages=[{"role": "assistant", "text": result.assistant_text}],
-        workflow_state={
-            "stage": result.stage,
-            "proposal": result.proposal,
-            "last_apply_result": last_apply_result,
-        },
-        operations=last_apply_result.operations if last_apply_result is not None else None,
+        workflow_state={"stage": result.stage},
+        operations=result.operations,
     )

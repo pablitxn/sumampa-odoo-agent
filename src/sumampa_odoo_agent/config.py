@@ -43,15 +43,6 @@ class AgentSettings(BaseModel):
     system_prompt_override: str | None = None
 
 
-class InvoiceExtractionSettings(BaseModel):
-    mode: str = "openai"
-    model: str = "gpt-5.4"
-    api_key_env_var: str = "OPENAI_API_KEY"
-    base_url: str | None = None
-    max_output_tokens: int = 3000
-    prompt_spec: str = "invoice_extraction/purchase_invoice.md"
-
-
 class SessionStoreSettings(BaseModel):
     mode: str = "memory"
     postgres_dsn: str = ""
@@ -65,7 +56,6 @@ class AppSettings(BaseModel):
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     odoo: OdooSettings = Field(default_factory=OdooSettings)
     agent: AgentSettings = Field(default_factory=AgentSettings)
-    invoice_extraction: InvoiceExtractionSettings = Field(default_factory=InvoiceExtractionSettings)
     session_store: SessionStoreSettings = Field(default_factory=SessionStoreSettings)
 
 
@@ -104,14 +94,6 @@ def _load_env_file(env_path: Path) -> None:
 def _apply_env_overrides(settings: AppSettings) -> AppSettings:
     updates: dict[str, Any] = {}
 
-    invoice_mode = os.environ.get("ORCHID_INVOICE_EXTRACTION_MODE")
-    if invoice_mode:
-        updates.setdefault("invoice_extraction", {})["mode"] = invoice_mode
-
-    invoice_model = os.environ.get("ORCHID_INVOICE_EXTRACTION_MODEL")
-    if invoice_model:
-        updates.setdefault("invoice_extraction", {})["model"] = invoice_model
-
     agent_mode = os.environ.get("ORCHID_AGENT_MODE")
     if agent_mode:
         updates.setdefault("agent", {})["mode"] = agent_mode
@@ -123,10 +105,6 @@ def _apply_env_overrides(settings: AppSettings) -> AppSettings:
     agent_system_prompt_override = os.environ.get("ORCHID_AGENT_SYSTEM_PROMPT_OVERRIDE")
     if agent_system_prompt_override:
         updates.setdefault("agent", {})["system_prompt_override"] = agent_system_prompt_override
-
-    invoice_prompt_spec = os.environ.get("ORCHID_INVOICE_EXTRACTION_PROMPT_SPEC")
-    if invoice_prompt_spec:
-        updates.setdefault("invoice_extraction", {})["prompt_spec"] = invoice_prompt_spec
 
     odoo_mode = os.environ.get("ORCHID_ODOO_MODE")
     if odoo_mode:

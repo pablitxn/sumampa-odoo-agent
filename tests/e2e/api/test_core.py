@@ -24,7 +24,7 @@ def test_legacy_capabilities_endpoint_is_removed() -> None:
 def test_legacy_demo_route_is_removed() -> None:
     app = create_app()
     with TestClient(app) as client:
-        response = client.get("/demo/purchase-invoices")
+        response = client.get("/demo")
 
     assert response.status_code == 404
     assert response.json()["code"] == "http_error"

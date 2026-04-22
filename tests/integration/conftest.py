@@ -13,46 +13,8 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 INTEGRATION_ROOT = Path(__file__).parent
-PURCHASE_INVOICE_FIXTURES_DIR = INTEGRATION_ROOT / "fixtures" / "purchase_invoices"
-PURCHASE_INVOICE_SNAPSHOTS_DIR = INTEGRATION_ROOT / "fixtures" / "purchase_invoice_extractions"
 SESSION_STORE_POSTGRES_DSN = os.environ.get("SESSION_STORE_POSTGRES_DSN", "")
 SESSION_STORE_REDIS_URL = "redis://127.0.0.1:6379/0"
-
-
-def _load_api_key_from_project_env() -> str | None:
-    env_path = PROJECT_ROOT / ".env"
-    if not env_path.exists():
-        return None
-
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        if key.strip() == "OPENAI_API_KEY":
-            return value.strip().strip("\"'")
-    return None
-
-
-@pytest.fixture(scope="session")
-def openai_api_key() -> str:
-    api_key = os.environ.get("OPENAI_API_KEY") or _load_api_key_from_project_env()
-    if not api_key:
-        raise RuntimeError(
-            "OPENAI_API_KEY es obligatoria para los tests de integracion con OpenAI."
-        )
-    os.environ.setdefault("OPENAI_API_KEY", api_key)
-    return api_key
-
-
-@pytest.fixture(scope="session")
-def purchase_invoice_fixtures_dir() -> Path:
-    return PURCHASE_INVOICE_FIXTURES_DIR
-
-
-@pytest.fixture(scope="session")
-def purchase_invoice_snapshots_dir() -> Path:
-    return PURCHASE_INVOICE_SNAPSHOTS_DIR
 
 
 @pytest.fixture(scope="session")
