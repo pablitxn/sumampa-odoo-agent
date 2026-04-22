@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from sumampa_odoo_agent.application.requests.odoo import (
+from sumampa_odoo_agent.integrations.odoo_client import DryRunOdooClient
+from sumampa_odoo_agent.services.models.odoo import (
     AnalyzePurchaseInvoiceCommand,
     ApplyPurchaseInvoiceProposalCommand,
     ExtractedPurchaseInvoiceDocument,
 )
-from sumampa_odoo_agent.infrastructure.odoo.client import DryRunOdooClient
 
 
 class SnapshotPurchaseInvoiceExtractor:

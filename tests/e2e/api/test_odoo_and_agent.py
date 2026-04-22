@@ -1,26 +1,36 @@
-"""E2E smoke tests for enabled Odoo and agent modules."""
+"""E2E smoke tests for Odoo services and conversation flows."""
+
+from __future__ import annotations
+
+import base64
 
 import pytest
 from fastapi.testclient import TestClient
 
-from sumampa_odoo_agent.adapters.api.main import create_app
-from sumampa_odoo_agent.application.requests.odoo import ExtractedPurchaseInvoiceDocument
-from sumampa_odoo_agent.infrastructure.agent.service import (
+from sumampa_odoo_agent.api.main import create_app
+from sumampa_odoo_agent.integrations.agent_service import (
     MicrosoftAgentFrameworkOpenAIService,
 )
-from sumampa_odoo_agent.infrastructure.extraction.service import (
+from sumampa_odoo_agent.integrations.openai_extraction import (
     OpenAIPurchaseInvoiceExtractor,
 )
-from sumampa_odoo_agent.infrastructure.runtime.state import reset_runtime_state_for_tests
+from sumampa_odoo_agent.services.models.odoo import ExtractedPurchaseInvoiceDocument
+
+
+def _image_attachment(filename: str = "factura-acme.jpg") -> dict[str, str]:
+    return {
+        "filename": filename,
+        "mime_type": "image/jpeg",
+        "content_base64": base64.b64encode(b"fake-image").decode("ascii"),
+    }
 
 
 @pytest.fixture(autouse=True)
 def patch_runtime_for_api_tests(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ORCHID_AGENT_MODE", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    reset_runtime_state_for_tests()
 
-    async def fake_extract(self, command):  # type: ignore[no-untyped-def]
+    async def fake_extract(self, command):
         supplier_name = command.supplier_name or "Proveedor Demo SA"
         return ExtractedPurchaseInvoiceDocument.model_validate(
             {
@@ -45,16 +55,15 @@ def patch_runtime_for_api_tests(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     monkeypatch.setattr(OpenAIPurchaseInvoiceExtractor, "extract", fake_extract)
-    yield
-    reset_runtime_state_for_tests()
 
 
 def test_create_product_uses_dry_run_backend() -> None:
     app = create_app()
     with TestClient(app) as client:
         response = client.post(
-            "/api/v1/odoo/products",
+            "/api/v1/odoo/mutations",
             json={
+                "kind": "create_product",
                 "name": "Bombilla inox",
                 "default_code": "BOMB-INOX",
                 "list_price": 12.5,
@@ -72,8 +81,9 @@ def test_create_partner_uses_dry_run_backend() -> None:
     app = create_app()
     with TestClient(app) as client:
         response = client.post(
-            "/api/v1/odoo/partners",
+            "/api/v1/odoo/mutations",
             json={
+                "kind": "create_partner",
                 "name": "Proveedor Demo SA",
                 "vat": "30712345678",
                 "supplier_rank": 1,
@@ -90,7 +100,10 @@ def test_create_partner_uses_dry_run_backend() -> None:
 def test_search_partners_uses_dry_run_backend() -> None:
     app = create_app()
     with TestClient(app) as client:
-        response = client.get("/api/v1/odoo/partners/search", params={"query": "sumampa"})
+        response = client.post(
+            "/api/v1/odoo/lookups",
+            json={"kind": "partners", "query": "sumampa"},
+        )
 
     assert response.status_code == 200
     payload = response.json()
@@ -102,7 +115,10 @@ def test_search_partners_uses_dry_run_backend() -> None:
 def test_search_products_uses_dry_run_backend() -> None:
     app = create_app()
     with TestClient(app) as client:
-        response = client.get("/api/v1/odoo/products/search", params={"query": "mate"})
+        response = client.post(
+            "/api/v1/odoo/lookups",
+            json={"kind": "products", "query": "mate"},
+        )
 
     assert response.status_code == 200
     payload = response.json()
@@ -114,7 +130,10 @@ def test_search_products_uses_dry_run_backend() -> None:
 def test_search_journals_uses_dry_run_backend() -> None:
     app = create_app()
     with TestClient(app) as client:
-        response = client.get("/api/v1/odoo/journals/search", params={"query": "ventas"})
+        response = client.post(
+            "/api/v1/odoo/lookups",
+            json={"kind": "journals", "query": "ventas"},
+        )
 
     assert response.status_code == 200
     payload = response.json()
@@ -125,7 +144,10 @@ def test_search_journals_uses_dry_run_backend() -> None:
 def test_validate_invoice_draft_reports_missing_context() -> None:
     app = create_app()
     with TestClient(app) as client:
-        response = client.get("/api/v1/odoo/invoices/validate")
+        response = client.post(
+            "/api/v1/odoo/validations",
+            json={"kind": "invoice"},
+        )
 
     assert response.status_code == 200
     payload = response.json()
@@ -137,9 +159,10 @@ def test_validate_invoice_draft_reports_missing_context() -> None:
 def test_validate_argentina_invoice_draft_reports_fiscal_gaps() -> None:
     app = create_app()
     with TestClient(app) as client:
-        response = client.get(
-            "/api/v1/odoo/invoices/validate-argentina",
-            params={
+        response = client.post(
+            "/api/v1/odoo/validations",
+            json={
+                "kind": "argentina_invoice",
                 "emitter_taxpayer_type": "responsable_inscripto",
                 "document_letter": "C",
                 "partner_name": "Cliente demo",
@@ -159,7 +182,10 @@ def test_validate_argentina_invoice_draft_reports_fiscal_gaps() -> None:
 def test_validate_delivery_draft_reports_missing_context() -> None:
     app = create_app()
     with TestClient(app) as client:
-        response = client.get("/api/v1/odoo/deliveries/validate")
+        response = client.post(
+            "/api/v1/odoo/validations",
+            json={"kind": "delivery"},
+        )
 
     assert response.status_code == 200
     payload = response.json()
@@ -170,13 +196,16 @@ def test_validate_delivery_draft_reports_missing_context() -> None:
     )
 
 
-def test_analyze_purchase_invoice_builds_markup_proposal_from_uploaded_image() -> None:
+def test_analyze_purchase_invoice_builds_markup_proposal_from_json_attachment() -> None:
     app = create_app()
     with TestClient(app) as client:
         response = client.post(
-            "/api/v1/odoo/purchase-invoices/proposals",
-            data={"supplier_name": "Sumampa SRL", "markup_percentage": "30"},
-            files={"invoice_image": ("factura-acme.jpg", b"fake-image", "image/jpeg")},
+            "/api/v1/purchase-invoices/analyze",
+            json={
+                "supplier_name": "Sumampa SRL",
+                "markup_percentage": 30.0,
+                "attachments": [_image_attachment()],
+            },
         )
 
     assert response.status_code == 200
@@ -192,37 +221,22 @@ def test_analyze_purchase_invoice_builds_markup_proposal_from_uploaded_image() -
     assert payload["lines"][0]["product_match"]["product_id"] is not None
 
 
-def test_analyze_purchase_invoice_accepts_multiple_images() -> None:
-    app = create_app()
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/v1/odoo/purchase-invoices/proposals",
-            data={"supplier_name": "Sumampa SRL", "markup_percentage": "30"},
-            files=[
-                ("invoice_images", ("factura-acme-1.jpg", b"fake-image-1", "image/jpeg")),
-                ("invoice_images", ("factura-acme-2.jpg", b"fake-image-2", "image/jpeg")),
-            ],
-        )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["mode"] == "dry-run"
-    assert payload["supplier_name"] == "Sumampa SRL"
-    assert payload["invoice_number"] == "TEST-0001"
-
-
 def test_apply_purchase_invoice_proposal_returns_product_and_bill_operations() -> None:
     app = create_app()
     with TestClient(app) as client:
         proposal_response = client.post(
-            "/api/v1/odoo/purchase-invoices/proposals",
-            data={"supplier_name": "Sumampa SRL", "markup_percentage": "30"},
-            files={"invoice_image": ("factura-acme.jpg", b"fake-image", "image/jpeg")},
+            "/api/v1/purchase-invoices/analyze",
+            json={
+                "supplier_name": "Sumampa SRL",
+                "markup_percentage": 30.0,
+                "attachments": [_image_attachment()],
+            },
         )
         proposal = proposal_response.json()
         response = client.post(
-            "/api/v1/odoo/purchase-invoices/apply",
+            "/api/v1/odoo/mutations",
             json={
+                "kind": "apply_purchase_invoice",
                 "supplier_id": 102,
                 "journal_id": 301,
                 "create_vendor_bill": True,
@@ -240,9 +254,11 @@ def test_apply_purchase_invoice_proposal_returns_product_and_bill_operations() -
     assert any(operation["model"] == "account.move" for operation in payload["operations"])
 
 
-def test_purchase_chat_endpoint_delegates_to_agent() -> None:
-    async def fake_run(self, *, prompt, context, session_id=None):  # type: ignore[no-untyped-def]
-        del self, prompt, context
+def test_messages_endpoint_delegates_to_agent() -> None:
+    async def fake_run(self, *, prompt, context, session_id=None):
+        assert prompt == "revisá los productos"
+        assert context["transport"]["channel"] == "whatsapp"
+        assert context["transport"]["user_id"] == "5491112345678"
         return {
             "mode": "microsoft-agent-framework-openai",
             "session_id": session_id or "purchase-session-1",
@@ -283,25 +299,34 @@ def test_purchase_chat_endpoint_delegates_to_agent() -> None:
         monkeypatch.setattr(MicrosoftAgentFrameworkOpenAIService, "run", fake_run)
         with TestClient(app) as client:
             response = client.post(
-                "/api/v1/odoo/purchase-chat/messages",
-                data={"message": "revisá los productos"},
+                "/api/v1/messages",
+                json={
+                    "conversation_id": "purchase-session-1",
+                    "channel": "whatsapp",
+                    "user_id": "5491112345678",
+                    "text": "revisá los productos",
+                },
             )
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["session_id"] == "purchase-session-1"
-    assert payload["stage"] == "awaiting_resolution"
-    assert payload["assistant_message"] == "Te encontré 2 productos pendientes para revisar."
-    assert payload["proposal"]["invoice_number"] == "TEST-0001"
+    assert payload["conversation_id"] == "purchase-session-1"
+    assert payload["messages"][0]["text"] == "Te encontré 2 productos pendientes para revisar."
+    assert payload["workflow_state"]["stage"] == "awaiting_resolution"
+    assert payload["workflow_state"]["proposal"]["invoice_number"] == "TEST-0001"
 
 
-def test_purchase_chat_handles_small_talk_without_invoice() -> None:
-    async def fake_run(self, *, prompt, context, session_id=None):  # type: ignore[no-untyped-def]
-        del self, prompt, context
+def test_messages_endpoint_serializes_attachments_for_agent() -> None:
+    async def fake_run(self, *, prompt, context, session_id=None):
+        del self, session_id
+        assert prompt == "Analizá la factura adjunta y guiame con el siguiente paso."
+        attachments = context["purchase_workflow"]["attachments"]
+        assert len(attachments) == 1
+        assert attachments[0]["filename"] == "factura-acme.jpg"
         return {
             "mode": "microsoft-agent-framework-openai",
-            "session_id": session_id or "small-talk-session",
-            "text": "Mandame la factura y sigo.",
+            "session_id": "attachment-session",
+            "text": "Mandame la próxima confirmación.",
         }
 
     app = create_app()
@@ -309,44 +334,17 @@ def test_purchase_chat_handles_small_talk_without_invoice() -> None:
         monkeypatch.setattr(MicrosoftAgentFrameworkOpenAIService, "run", fake_run)
         with TestClient(app) as client:
             response = client.post(
-                "/api/v1/odoo/purchase-chat/messages",
-                data={"message": "ey como va?"},
+                "/api/v1/messages",
+                json={
+                    "conversation_id": "attachment-session",
+                    "channel": "whatsapp",
+                    "user_id": "5491112345678",
+                    "attachments": [_image_attachment()],
+                    "context": {"supplier_name": "Sumampa SRL"},
+                },
             )
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["stage"] == "awaiting_invoice"
-    assert payload["assistant_message"] == "Mandame la factura y sigo."
-
-
-def test_run_agent_uses_openai_backend_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ORCHID_AGENT_MODE", "openai")
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    reset_runtime_state_for_tests()
-
-    async def fake_run(self, *, prompt, context, session_id=None):  # type: ignore[no-untyped-def]
-        return {
-            "mode": "microsoft-agent-framework-openai",
-            "text": "respuesta simulada para test",
-            "session_id": session_id,
-            "context": context,
-            "prompt": prompt,
-        }
-
-    monkeypatch.setattr(MicrosoftAgentFrameworkOpenAIService, "run", fake_run)
-
-    app = create_app()
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/v1/agent/runs",
-            json={
-                "prompt": "Necesito preparar una factura simple",
-                "session_id": "demo-session",
-            },
-        )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["mode"] == "microsoft-agent-framework-openai"
-    assert payload["session_id"] == "demo-session"
-    assert "simulada" in payload["text"].lower()
+    assert payload["workflow_state"]["stage"] == "awaiting_invoice"
+    assert payload["messages"][0]["text"] == "Mandame la próxima confirmación."

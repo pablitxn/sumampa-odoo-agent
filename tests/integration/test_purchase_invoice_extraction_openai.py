@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from sumampa_odoo_agent.application.requests.odoo import AnalyzePurchaseInvoiceCommand
-from sumampa_odoo_agent.infrastructure.extraction.service import OpenAIPurchaseInvoiceExtractor
+from sumampa_odoo_agent.integrations.openai_extraction import OpenAIPurchaseInvoiceExtractor
+from sumampa_odoo_agent.services.models.odoo import AnalyzePurchaseInvoiceCommand
 
 
 @dataclass(frozen=True, slots=True)

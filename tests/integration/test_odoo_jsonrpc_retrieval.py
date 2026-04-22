@@ -8,14 +8,14 @@ from uuid import uuid4
 
 import pytest
 
-from sumampa_odoo_agent.application.requests.odoo import (
+from sumampa_odoo_agent.integrations.odoo_client import OdooJsonRpcClient
+from sumampa_odoo_agent.services.models.odoo import (
     AnalyzePurchaseInvoiceCommand,
     ApplyPurchaseInvoiceProposalCommand,
     ExtractedPurchaseInvoiceDocument,
     SearchPartnersQuery,
     SearchProductsQuery,
 )
-from sumampa_odoo_agent.infrastructure.odoo.client import OdooJsonRpcClient
 
 
 class SnapshotPurchaseInvoiceExtractor:

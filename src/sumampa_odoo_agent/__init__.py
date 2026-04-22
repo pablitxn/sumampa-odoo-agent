@@ -1,4 +1,4 @@
-"""Orchid strict-hexagonal template package."""
+"""Sumampa Odoo agent package."""
 
 __all__ = ["__version__"]
 

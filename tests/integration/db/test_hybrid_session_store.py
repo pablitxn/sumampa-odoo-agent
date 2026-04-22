@@ -4,9 +4,9 @@ from uuid import uuid4
 
 import pytest
 
-from sumampa_odoo_agent.infrastructure.db.postgres.session_store import PostgresSessionStore
-from sumampa_odoo_agent.infrastructure.db.redis.session_cache import RedisSessionCache
-from sumampa_odoo_agent.infrastructure.db.session_store import HybridSessionStore
+from sumampa_odoo_agent.integrations.postgres_session_store import PostgresSessionStore
+from sumampa_odoo_agent.integrations.redis_session_cache import RedisSessionCache
+from sumampa_odoo_agent.integrations.session_store_backends import HybridSessionStore
 
 
 @pytest.mark.integration

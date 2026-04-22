@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from sumampa_odoo_agent.infrastructure.db.redis.session_cache import RedisSessionCache
+from sumampa_odoo_agent.integrations.redis_session_cache import RedisSessionCache
 
 
 @pytest.mark.integration
