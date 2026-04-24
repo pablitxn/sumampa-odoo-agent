@@ -18,8 +18,3 @@ def resolve_llm_spec_path(spec_path: str) -> Path:
 
 def load_llm_spec(spec_path: str) -> str:
     return resolve_llm_spec_path(spec_path).read_text(encoding="utf-8").strip()
-
-
-def render_llm_spec(spec_path: str, **context: object) -> str:
-    template = load_llm_spec(spec_path)
-    return template.format(**context)

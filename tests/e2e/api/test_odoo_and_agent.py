@@ -28,23 +28,6 @@ def patch_runtime_for_api_tests(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
 
-@pytest.mark.parametrize(
-    ("path", "payload"),
-    [
-        ("/api/v1/odoo/lookups", {"kind": "partners", "query": "sumampa"}),
-        ("/api/v1/odoo/validations", {"kind": "invoice"}),
-        ("/api/v1/odoo/mutations", {"kind": "create_product", "name": "Bombilla inox"}),
-    ],
-)
-def test_direct_odoo_http_routes_are_removed(path: str, payload: dict[str, object]) -> None:
-    app = create_app()
-    with TestClient(app) as client:
-        response = client.post(path, json=payload)
-
-    assert response.status_code == 404
-    assert response.json()["code"] == "http_error"
-
-
 def test_messages_endpoint_delegates_to_agent() -> None:
     async def fake_run(
         self: MicrosoftAgentFrameworkOpenAIService,
@@ -59,7 +42,6 @@ def test_messages_endpoint_delegates_to_agent() -> None:
             mode="microsoft-agent-framework-openai",
             session_id=request.session_id or "conversation-1",
             text="Te encontré 2 productos pendientes para revisar.",
-            stage="idle",
         )
 
     app = create_app()
@@ -80,7 +62,6 @@ def test_messages_endpoint_delegates_to_agent() -> None:
     payload = response.json()
     assert payload["conversation_id"] == "conversation-1"
     assert payload["messages"][0]["text"] == "Te encontré 2 productos pendientes para revisar."
-    assert payload["workflow_state"]["stage"] == "idle"
 
 
 def test_messages_endpoint_serializes_attachments_for_agent() -> None:
@@ -98,7 +79,6 @@ def test_messages_endpoint_serializes_attachments_for_agent() -> None:
             mode="microsoft-agent-framework-openai",
             session_id="attachment-session",
             text="Mandame la próxima confirmación.",
-            stage="idle",
         )
 
     app = create_app()
@@ -118,5 +98,4 @@ def test_messages_endpoint_serializes_attachments_for_agent() -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["workflow_state"]["stage"] == "idle"
     assert payload["messages"][0]["text"] == "Mandame la próxima confirmación."

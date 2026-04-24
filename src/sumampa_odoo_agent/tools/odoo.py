@@ -314,9 +314,5 @@ _ODOO_TOOL_SPECS: tuple[OdooToolSpec, ...] = (
 )
 
 
-def odoo_tool_names() -> list[str]:
-    return [spec.name for spec in _ODOO_TOOL_SPECS]
-
-
 def build_odoo_tools(odoo: OdooGateway) -> list[Any]:
     return [spec.build(odoo) for spec in _ODOO_TOOL_SPECS]

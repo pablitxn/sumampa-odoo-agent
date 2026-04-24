@@ -19,12 +19,6 @@ OdooModelName: TypeAlias = Literal[
 ]
 InvoiceMoveType: TypeAlias = Literal["out_invoice", "out_refund", "in_invoice", "in_refund", "entry"]
 OdooValidationOperation: TypeAlias = Literal["invoice", "argentina_invoice", "delivery"]
-OdooMutationAction: TypeAlias = Literal[
-    "create_partner",
-    "create_product",
-    "create_invoice",
-    "create_delivery",
-]
 
 
 class PartnerInput(BaseModel):
@@ -123,15 +117,6 @@ class InvoiceAttachment(BaseModel):
     filename: str = Field(min_length=1)
     content_type: str | None = None
     content_bytes: bytes = Field(min_length=1)
-
-
-class OdooMutationPlan(BaseModel):
-    """Public operation DTO returned by the messages API."""
-
-    action: OdooMutationAction
-    model: OdooModelName
-    record_id: int | None = None
-    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class OdooValidationResult(BaseModel):

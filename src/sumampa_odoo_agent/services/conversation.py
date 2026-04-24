@@ -7,12 +7,11 @@ from typing import Any
 
 from sumampa_odoo_agent.services.attachments import serialize_invoice_attachments
 from sumampa_odoo_agent.services.contracts import AgentRuntime
-from sumampa_odoo_agent.services.models.odoo import InvoiceAttachment, OdooMutationPlan
+from sumampa_odoo_agent.services.models.odoo import InvoiceAttachment
 from sumampa_odoo_agent.services.models.runtime import (
     AgentRunInput,
     ConversationRuntimeContext,
     TransportContext,
-    WorkflowStage,
 )
 
 
@@ -30,8 +29,6 @@ class ConversationTurnInput:
 class ConversationTurnResult:
     conversation_id: str
     assistant_text: str
-    stage: WorkflowStage
-    operations: list[OdooMutationPlan] | None
 
 
 class ConversationService:
@@ -65,8 +62,6 @@ class ConversationService:
         return ConversationTurnResult(
             conversation_id=result.session_id,
             assistant_text=result.text,
-            stage=result.stage,
-            operations=result.operations,
         )
 
 

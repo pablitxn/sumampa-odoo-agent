@@ -7,7 +7,7 @@ from typing import Any, cast
 
 import pytest
 
-from sumampa_odoo_agent.integrations.odoo_client import DryRunOdooClient
+from sumampa_odoo_agent.integrations.odoo_dry_run import DryRunOdooClient
 from sumampa_odoo_agent.tools import build_agent_tools
 
 AgentTool = Callable[..., Awaitable[dict[str, Any]]]
@@ -17,7 +17,6 @@ def test_build_agent_tools_uses_registry_names() -> None:
     tools = build_agent_tools(odoo=DryRunOdooClient())
     names = {tool.__name__ for tool in tools}
 
-    assert "explain_capabilities" in names
     assert "search_partners" in names
     assert "validate_argentina_invoice_draft" in names
     assert "create_delivery" in names

@@ -40,6 +40,4 @@ async def post_message(
     return ConversationMessageResponse(
         conversation_id=result.conversation_id,
         messages=[{"role": "assistant", "text": result.assistant_text}],
-        workflow_state={"stage": result.stage},
-        operations=result.operations,
     )

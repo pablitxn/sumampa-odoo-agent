@@ -24,7 +24,7 @@ async def test_hybrid_session_store_rehydrates_redis_from_postgres(
     store = HybridSessionStore(primary=primary, cache=cache)
     namespace = f"test-hybrid-{uuid4()}"
     session_id = str(uuid4())
-    payload = {"stage": "awaiting_price_confirmation", "history": ["a", "b", "c"]}
+    payload = {"status": "active", "history": ["a", "b", "c"]}
 
     try:
         await store.ensure_schema()

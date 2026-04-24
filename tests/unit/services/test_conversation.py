@@ -23,7 +23,6 @@ class _FakeRuntime:
             mode="test",
             session_id=request.session_id or "generated-session",
             text="Seguimos con el pedido.",
-            stage="idle",
         )
 
 
@@ -51,7 +50,6 @@ async def test_conversation_service_builds_prompt_and_runtime_context() -> None:
 
     assert result.conversation_id == "conv-1"
     assert result.assistant_text == "Seguimos con el pedido."
-    assert result.stage == "idle"
     assert runtime.last_call is not None
     assert runtime.last_call["prompt"] == "Hay un adjunto del usuario. Decime qué necesitás para seguir."
     runtime_context = runtime.last_call["context"]

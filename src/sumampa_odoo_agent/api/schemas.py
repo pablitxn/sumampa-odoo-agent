@@ -6,9 +6,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from sumampa_odoo_agent.services.models.odoo import OdooMutationPlan
-from sumampa_odoo_agent.services.models.runtime import WorkflowStage
-
 
 class AttachmentInput(BaseModel):
     filename: str = Field(min_length=1)
@@ -37,12 +34,6 @@ class ConversationMessage(BaseModel):
     text: str
 
 
-class WorkflowStateResponse(BaseModel):
-    stage: WorkflowStage
-
-
 class ConversationMessageResponse(BaseModel):
     conversation_id: str
     messages: list[ConversationMessage] = Field(min_length=1)
-    workflow_state: WorkflowStateResponse
-    operations: list[OdooMutationPlan] | None = None

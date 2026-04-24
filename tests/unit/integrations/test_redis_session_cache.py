@@ -48,6 +48,6 @@ async def test_redis_session_cache_rejects_non_object_payload() -> None:
 
 @pytest.mark.asyncio
 async def test_redis_session_cache_loads_object_payload() -> None:
-    cache = _cache_with_value('{"stage": "idle"}')
+    cache = _cache_with_value('{"status": "active"}')
 
-    assert await cache.load(namespace="agent", session_id="session-1") == {"stage": "idle"}
+    assert await cache.load(namespace="agent", session_id="session-1") == {"status": "active"}

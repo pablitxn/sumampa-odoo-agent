@@ -2,21 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, TypeAlias, cast, get_args
+from typing import Any
 
 from pydantic import BaseModel, Field
-
-from sumampa_odoo_agent.services.models.odoo import OdooMutationPlan
-
-WorkflowStage: TypeAlias = Literal[
-    "idle",
-    "awaiting_invoice_confirmation",
-    "awaiting_price_confirmation",
-    "awaiting_resolution",
-]
-
-DEFAULT_WORKFLOW_STAGE: WorkflowStage = "idle"
-_WORKFLOW_STAGES = set(get_args(WorkflowStage))
 
 
 class SerializedInvoiceAttachment(BaseModel):
@@ -50,11 +38,3 @@ class AgentRunResult(BaseModel):
     mode: str
     session_id: str
     text: str
-    stage: WorkflowStage = DEFAULT_WORKFLOW_STAGE
-    operations: list[OdooMutationPlan] | None = None
-
-
-def normalize_workflow_stage(value: object) -> WorkflowStage:
-    if isinstance(value, str) and value in _WORKFLOW_STAGES:
-        return cast(WorkflowStage, value)
-    return DEFAULT_WORKFLOW_STAGE

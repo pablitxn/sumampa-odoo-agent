@@ -5,8 +5,9 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from sumampa_odoo_agent.integrations.odoo_client import DryRunOdooClient, OdooJsonRpcClient
 from sumampa_odoo_agent.integrations.odoo_common import delivery_payload, invoice_payload
+from sumampa_odoo_agent.integrations.odoo_dry_run import DryRunOdooClient
+from sumampa_odoo_agent.integrations.odoo_jsonrpc import OdooJsonRpcClient
 from sumampa_odoo_agent.services.errors import UpstreamServiceError
 from sumampa_odoo_agent.services.models.odoo import (
     ArgentinaInvoiceValidationInput,

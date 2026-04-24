@@ -13,7 +13,7 @@ async def test_postgres_session_store_round_trip(session_store_env: dict[str, st
     store = PostgresSessionStore(dsn=session_store_env["postgres_dsn"])
     namespace = f"test-postgres-{uuid4()}"
     session_id = str(uuid4())
-    payload = {"stage": "awaiting_invoice_confirmation", "count": 2}
+    payload = {"status": "active", "count": 2}
 
     try:
         await store.ensure_schema()

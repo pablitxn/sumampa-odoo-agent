@@ -17,7 +17,7 @@ async def test_redis_session_cache_round_trip(session_store_env: dict[str, str])
     )
     namespace = f"test-redis-{uuid4()}"
     session_id = str(uuid4())
-    payload = {"stage": "awaiting_resolution", "warnings": ["uno", "dos"]}
+    payload = {"status": "active", "warnings": ["uno", "dos"]}
 
     try:
         await cache.save(namespace=namespace, session_id=session_id, payload=payload)
