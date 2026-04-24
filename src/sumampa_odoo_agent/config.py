@@ -53,7 +53,6 @@ class AgentSettings(BaseModel):
     model: str = "gpt-5.4-mini"
     api_key_env_var: str = "OPENAI_API_KEY"
     base_url: str | None = None
-    system_prompt_spec: str = "agent/system.md"
     system_prompt_override: str | None = None
 
 
@@ -75,7 +74,6 @@ class AppSettings(BaseModel):
 
 _ENV_OVERRIDES: tuple[EnvOverride, ...] = (
     EnvOverride("ORCHID_AGENT_MODE", ("agent", "mode")),
-    EnvOverride("ORCHID_AGENT_SYSTEM_PROMPT_SPEC", ("agent", "system_prompt_spec")),
     EnvOverride("ORCHID_AGENT_SYSTEM_PROMPT_OVERRIDE", ("agent", "system_prompt_override")),
     EnvOverride("ORCHID_ODOO_MODE", ("odoo", "mode")),
     EnvOverride("ORCHID_ODOO_BASE_URL", ("odoo", "base_url")),

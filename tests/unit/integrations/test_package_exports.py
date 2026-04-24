@@ -8,7 +8,7 @@ from sumampa_odoo_agent.integrations import (
     build_session_store,
 )
 from sumampa_odoo_agent.integrations.agent import MicrosoftAgentFrameworkOpenAIService
-from sumampa_odoo_agent.integrations.agent.llm_specs import load_llm_spec
+from sumampa_odoo_agent.integrations.agent.prompts import DEFAULT_AGENT_SYSTEM_PROMPT
 from sumampa_odoo_agent.integrations.odoo import DryRunOdooClient, OdooJsonRpcClient
 from sumampa_odoo_agent.integrations.sessions import InMemorySessionStore
 
@@ -26,7 +26,5 @@ def test_canonical_package_exports_are_available() -> None:
     assert InMemorySessionStore.__name__ == "InMemorySessionStore"
 
 
-def test_default_agent_prompt_still_loads_after_package_move() -> None:
-    prompt = load_llm_spec("agent/system.md")
-
-    assert "Sos el asistente operativo de Sumampa para Odoo." in prompt
+def test_default_agent_prompt_is_available_without_asset_loader() -> None:
+    assert "Sos el asistente operativo de Sumampa para Odoo." in DEFAULT_AGENT_SYSTEM_PROMPT

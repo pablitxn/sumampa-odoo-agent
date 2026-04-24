@@ -16,8 +16,8 @@ from sumampa_odoo_agent.integrations.agent.framework import (
     _load_agent_type,
     _load_openai_chat_client,
 )
-from sumampa_odoo_agent.integrations.agent.llm_specs import load_llm_spec
 from sumampa_odoo_agent.integrations.agent.messages import _build_agent_message
+from sumampa_odoo_agent.integrations.agent.prompts import DEFAULT_AGENT_SYSTEM_PROMPT
 from sumampa_odoo_agent.services.contracts import OdooGateway, SessionStore
 from sumampa_odoo_agent.services.errors import (
     ConfigurationError,
@@ -51,14 +51,13 @@ class MicrosoftAgentFrameworkOpenAIService:
         *,
         model: str,
         system_prompt: str | None = None,
-        system_prompt_spec: str = "agent/system.md",
         api_key_env_var: str,
         odoo: OdooGateway | None = None,
         base_url: str | None = None,
         session_store: SessionStore,
     ) -> None:
         self._model = model
-        self._system_prompt = system_prompt or load_llm_spec(system_prompt_spec)
+        self._system_prompt = system_prompt or DEFAULT_AGENT_SYSTEM_PROMPT
         self._api_key_env_var = api_key_env_var
         self._base_url = base_url
         self._odoo = odoo

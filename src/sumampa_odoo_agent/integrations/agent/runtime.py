@@ -22,7 +22,6 @@ def build_agent_runtime(
         return MicrosoftAgentFrameworkOpenAIService(
             model=settings.agent.model,
             system_prompt=settings.agent.system_prompt_override,
-            system_prompt_spec=settings.agent.system_prompt_spec,
             api_key_env_var=settings.agent.api_key_env_var,
             odoo=odoo_gateway,
             base_url=settings.agent.base_url,
