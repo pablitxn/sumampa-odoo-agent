@@ -23,7 +23,12 @@ class RedisSessionCache:
         value = await self._client.get(self._key(namespace=namespace, session_id=session_id))
         if value is None:
             return None
-        return json.loads(value)  # type: ignore[no-any-return]
+        payload = json.loads(value)
+        if not isinstance(payload, dict):
+            raise ValueError("Redis session payload must be a JSON object")
+        if not all(isinstance(key, str) for key in payload):
+            raise ValueError("Redis session payload keys must be strings")
+        return dict(payload)
 
     async def save(self, *, namespace: str, session_id: str, payload: dict[str, Any]) -> None:
         await self._client.set(

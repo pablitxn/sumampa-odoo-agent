@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, ClassVar
 
 from sumampa_odoo_agent.integrations.odoo_common import (
@@ -36,7 +37,7 @@ from sumampa_odoo_agent.services.models.odoo import (
 class DryRunOdooClient:
     """Safe default client that returns the payload it would send to Odoo."""
 
-    _partners: ClassVar[list[dict[str, Any]]] = [
+    _seed_partners: ClassVar[list[dict[str, Any]]] = [
         {"id": 101, "display_name": "Consumidor Final", "vat": None, "email": None},
         {
             "id": 102,
@@ -51,7 +52,7 @@ class DryRunOdooClient:
             "email": "juan@example.com",
         },
     ]
-    _products: ClassVar[list[dict[str, Any]]] = [
+    _seed_products: ClassVar[list[dict[str, Any]]] = [
         {
             "id": 201,
             "display_name": "Bombilla inox",
@@ -93,8 +94,8 @@ class DryRunOdooClient:
     ]
 
     def __init__(self) -> None:
-        self._partners = [dict(row) for row in type(self)._partners]  # type: ignore[misc]
-        self._products = [dict(row) for row in type(self)._products]  # type: ignore[misc]
+        self._partners = deepcopy(type(self)._seed_partners)
+        self._products = deepcopy(type(self)._seed_products)
         self._next_partner_id = max((int(row["id"]) for row in self._partners), default=100) + 1
         self._next_product_id = max((int(row["id"]) for row in self._products), default=200) + 1
 
