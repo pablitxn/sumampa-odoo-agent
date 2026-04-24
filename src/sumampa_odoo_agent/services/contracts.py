@@ -22,6 +22,7 @@ from sumampa_odoo_agent.services.models.odoo import (
     ValidateDeliveryDraftQuery,
     ValidateInvoiceDraftQuery,
 )
+from sumampa_odoo_agent.services.models.runtime import AgentRunInput, AgentRunResult
 
 
 class SessionStore(Protocol):
@@ -39,6 +40,9 @@ class SessionStore(Protocol):
 
 
 class OdooGateway(Protocol):
+    async def aclose(self) -> None:
+        """Release gateway resources."""
+
     async def search_partners(self, query: SearchPartnersQuery) -> OdooSearchResult:
         """Search partners in Odoo."""
 
@@ -89,11 +93,5 @@ class OdooGateway(Protocol):
 
 
 class AgentRuntime(Protocol):
-    async def run(
-        self,
-        *,
-        prompt: str,
-        context: dict[str, Any],
-        session_id: str | None = None,
-    ) -> dict[str, Any]:
+    async def run(self, request: AgentRunInput) -> AgentRunResult:
         """Run one agent turn and return a structured payload."""

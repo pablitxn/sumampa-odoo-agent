@@ -8,6 +8,12 @@ from typing import Any
 from sumampa_odoo_agent.services.attachments import serialize_invoice_attachments
 from sumampa_odoo_agent.services.contracts import AgentRuntime
 from sumampa_odoo_agent.services.models.odoo import InvoiceAttachment, OdooMutationPlan
+from sumampa_odoo_agent.services.models.runtime import (
+    AgentRunInput,
+    ConversationRuntimeContext,
+    TransportContext,
+    WorkflowStage,
+)
 
 
 @dataclass(slots=True)
@@ -24,7 +30,7 @@ class ConversationTurnInput:
 class ConversationTurnResult:
     conversation_id: str
     assistant_text: str
-    stage: str
+    stage: WorkflowStage
     operations: list[OdooMutationPlan] | None
 
 
@@ -35,37 +41,32 @@ class ConversationService:
         self._runtime = runtime
 
     async def run_turn(self, request: ConversationTurnInput) -> ConversationTurnResult:
-        context: dict[str, Any] = {
-            "transport": {
-                "channel": request.channel,
-                "user_id": request.user_id,
-                "conversation_id": request.conversation_id,
-            }
-        }
-        if request.context:
-            context["context"] = request.context
-        if request.attachments:
-            context["attachments"] = serialize_invoice_attachments(request.attachments)
-
-        result = await self._runtime.run(
-            prompt=_conversation_prompt(
-                text=request.text,
-                has_attachments=bool(request.attachments),
+        context = ConversationRuntimeContext(
+            transport=TransportContext(
+                channel=request.channel,
+                user_id=request.user_id,
+                conversation_id=request.conversation_id,
             ),
-            session_id=request.conversation_id,
-            context=context,
+            context=request.context,
+            attachments=serialize_invoice_attachments(request.attachments),
         )
 
-        raw_operations = result.get("operations")
-        operations = None
-        if isinstance(raw_operations, list):
-            operations = [OdooMutationPlan.model_validate(item) for item in raw_operations]
+        result = await self._runtime.run(
+            AgentRunInput(
+                prompt=_conversation_prompt(
+                    text=request.text,
+                    has_attachments=bool(request.attachments),
+                ),
+                context=context,
+                session_id=request.conversation_id,
+            )
+        )
 
         return ConversationTurnResult(
-            conversation_id=str(result.get("session_id") or request.conversation_id),
-            assistant_text=str(result.get("text") or ""),
-            stage=str(result.get("stage") or "idle"),
-            operations=operations,
+            conversation_id=result.session_id,
+            assistant_text=result.text,
+            stage=result.stage,
+            operations=result.operations,
         )
 
 

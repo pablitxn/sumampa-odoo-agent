@@ -8,6 +8,11 @@ from sumampa_odoo_agent.integrations.agent_service import (
     MicrosoftAgentFrameworkOpenAIService,
 )
 from sumampa_odoo_agent.integrations.session_store_backends import InMemorySessionStore
+from sumampa_odoo_agent.services.models.runtime import (
+    AgentRunInput,
+    ConversationRuntimeContext,
+    TransportContext,
+)
 
 
 class FakeSession:
@@ -52,6 +57,20 @@ class FakeChatClient:
         return FakeAgent()
 
 
+def _agent_request(prompt: str, *, session_id: str) -> AgentRunInput:
+    return AgentRunInput(
+        prompt=prompt,
+        session_id=session_id,
+        context=ConversationRuntimeContext(
+            transport=TransportContext(
+                channel="test",
+                user_id="user-1",
+                conversation_id=session_id,
+            )
+        ),
+    )
+
+
 @pytest.mark.asyncio
 async def test_agent_service_restores_framework_session_from_store(
     monkeypatch: pytest.MonkeyPatch,
@@ -77,7 +96,7 @@ async def test_agent_service_restores_framework_session_from_store(
         api_key_env_var="OPENAI_API_KEY",
         session_store=store,
     )
-    first = await first_service.run(prompt="hola", context={}, session_id="agent-1")
+    first = await first_service.run(_agent_request("hola", session_id="agent-1"))
 
     second_service = MicrosoftAgentFrameworkOpenAIService(
         model="gpt-5.4-mini",
@@ -85,8 +104,8 @@ async def test_agent_service_restores_framework_session_from_store(
         api_key_env_var="OPENAI_API_KEY",
         session_store=store,
     )
-    second = await second_service.run(prompt="seguimos", context={}, session_id="agent-1")
+    second = await second_service.run(_agent_request("seguimos", session_id="agent-1"))
 
-    assert first["session_id"] == "agent-1"
-    assert second["session_id"] == "agent-1"
-    assert second["text"] == "history=2"
+    assert first.session_id == "agent-1"
+    assert second.session_id == "agent-1"
+    assert second.text == "history=2"

@@ -22,7 +22,10 @@ def _client(*, env: dict[str, str]) -> OdooJsonRpcClient:
 @pytest.mark.asyncio
 async def test_jsonrpc_search_partners_finds_seeded_supplier(odoo19_env: dict[str, str]) -> None:
     client = _client(env=odoo19_env)
-    result = await client.search_partners(SearchPartnersQuery(query="palacios", limit=10))
+    try:
+        result = await client.search_partners(SearchPartnersQuery(query="palacios", limit=10))
+    finally:
+        await client.aclose()
 
     assert result.mode == "jsonrpc"
     assert any(hit.display_name == "JULIO M PALACIOS" for hit in result.hits)
@@ -32,7 +35,10 @@ async def test_jsonrpc_search_partners_finds_seeded_supplier(odoo19_env: dict[st
 @pytest.mark.asyncio
 async def test_jsonrpc_search_products_finds_seeded_alias_product(odoo19_env: dict[str, str]) -> None:
     client = _client(env=odoo19_env)
-    result = await client.search_products(SearchProductsQuery(query="HAR-0008", limit=10))
+    try:
+        result = await client.search_products(SearchProductsQuery(query="HAR-0008", limit=10))
+    finally:
+        await client.aclose()
 
     assert result.mode == "jsonrpc"
     assert any(hit.extra.get("default_code") == "HAR-0008" for hit in result.hits)

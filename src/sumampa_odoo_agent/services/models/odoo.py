@@ -2,9 +2,29 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, TypeAlias
 
 from pydantic import BaseModel, Field
+
+OdooIntegrationMode: TypeAlias = Literal["dry-run", "jsonrpc"]
+OdooModelName: TypeAlias = Literal[
+    "res.partner",
+    "product.template",
+    "account.move",
+    "account.journal",
+    "account.tax",
+    "stock.picking.type",
+    "stock.location",
+    "stock.picking",
+]
+InvoiceMoveType: TypeAlias = Literal["out_invoice", "out_refund", "in_invoice", "in_refund", "entry"]
+OdooValidationOperation: TypeAlias = Literal["invoice", "argentina_invoice", "delivery"]
+OdooMutationAction: TypeAlias = Literal[
+    "create_partner",
+    "create_product",
+    "create_invoice",
+    "create_delivery",
+]
 
 
 class PartnerInput(BaseModel):
@@ -39,7 +59,7 @@ class InvoiceLineInput(BaseModel):
 
 class CreateInvoiceCommand(BaseModel):
     partner_id: int
-    move_type: str = Field(default="out_invoice")
+    move_type: InvoiceMoveType = Field(default="out_invoice")
     invoice_date: str | None = None
     lines: list[InvoiceLineInput] = Field(min_length=1)
     narration: str | None = None
@@ -98,15 +118,15 @@ class OdooSearchHit(BaseModel):
 
 
 class OdooSearchResult(BaseModel):
-    mode: str
-    model: str
+    mode: OdooIntegrationMode
+    model: OdooModelName
     hits: list[OdooSearchHit]
 
 
 class ValidateInvoiceDraftQuery(BaseModel):
     partner_id: int | None = None
     journal_id: int | None = None
-    move_type: str = Field(default="out_invoice")
+    move_type: InvoiceMoveType = Field(default="out_invoice")
     line_count: int = Field(default=0, ge=0)
 
 
@@ -139,15 +159,17 @@ class InvoiceAttachment(BaseModel):
 
 
 class OdooMutationPlan(BaseModel):
-    action: str
-    model: str
+    """Public operation DTO returned by the messages API."""
+
+    action: OdooMutationAction
+    model: OdooModelName
     record_id: int | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class OdooValidationResult(BaseModel):
-    mode: str
-    operation: str
+    mode: OdooIntegrationMode
+    operation: OdooValidationOperation
     ok: bool
     missing_fields: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
@@ -155,7 +177,7 @@ class OdooValidationResult(BaseModel):
 
 
 class OdooOperationResult(BaseModel):
-    mode: str
-    model: str
+    mode: OdooIntegrationMode
+    model: OdooModelName
     record_id: int | None = None
     payload: dict[str, Any]

@@ -10,7 +10,6 @@ from sumampa_odoo_agent.integrations.agent_runtime import build_agent_runtime
 from sumampa_odoo_agent.integrations.odoo import build_odoo_gateway
 from sumampa_odoo_agent.integrations.session_store import build_session_store
 from sumampa_odoo_agent.services.conversation import ConversationService
-from sumampa_odoo_agent.services.odoo import OdooService
 
 
 @dataclass(slots=True)
@@ -18,7 +17,6 @@ class AppServices:
     """All app-facing services assembled for one FastAPI instance."""
 
     settings: AppSettings
-    odoo: OdooService
     conversation: ConversationService
     closers: tuple[Callable[[], Awaitable[None]], ...] = ()
 
@@ -34,11 +32,9 @@ async def build_app_services(settings: AppSettings) -> AppServices:
     odoo_gateway = build_odoo_gateway(settings)
     agent_runtime = build_agent_runtime(settings, odoo_gateway, session_store)
 
-    odoo = OdooService(odoo_gateway)
     conversation = ConversationService(agent_runtime)
     return AppServices(
         settings=settings,
-        odoo=odoo,
         conversation=conversation,
-        closers=(session_store.aclose,),
+        closers=(session_store.aclose, odoo_gateway.aclose),
     )

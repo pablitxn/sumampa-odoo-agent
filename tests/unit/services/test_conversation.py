@@ -6,29 +6,25 @@ import pytest
 
 from sumampa_odoo_agent.services.conversation import ConversationService, ConversationTurnInput
 from sumampa_odoo_agent.services.models.odoo import InvoiceAttachment
+from sumampa_odoo_agent.services.models.runtime import AgentRunInput, AgentRunResult
 
 
 class _FakeRuntime:
     def __init__(self) -> None:
         self.last_call: dict[str, object] | None = None
 
-    async def run(
-        self,
-        *,
-        prompt: str,
-        context: dict[str, object],
-        session_id: str | None = None,
-    ) -> dict[str, object]:
+    async def run(self, request: AgentRunInput) -> AgentRunResult:
         self.last_call = {
-            "prompt": prompt,
-            "context": context,
-            "session_id": session_id,
+            "prompt": request.prompt,
+            "context": request.context.to_agent_context(),
+            "session_id": request.session_id,
         }
-        return {
-            "session_id": session_id,
-            "text": "Seguimos con el pedido.",
-            "stage": "idle",
-        }
+        return AgentRunResult(
+            mode="test",
+            session_id=request.session_id or "generated-session",
+            text="Seguimos con el pedido.",
+            stage="idle",
+        )
 
 
 @pytest.mark.asyncio

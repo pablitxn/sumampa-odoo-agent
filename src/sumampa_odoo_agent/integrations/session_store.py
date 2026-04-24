@@ -8,6 +8,7 @@ from sumampa_odoo_agent.integrations.session_store_backends import (
     InMemorySessionStore,
 )
 from sumampa_odoo_agent.services.contracts import SessionStore
+from sumampa_odoo_agent.services.errors import ConfigurationError
 
 
 async def build_session_store(settings: AppSettings) -> SessionStore:
@@ -29,4 +30,7 @@ async def build_session_store(settings: AppSettings) -> SessionStore:
         store = HybridSessionStore(primary=primary, cache=cache)
         await store.ensure_schema()
         return store
-    raise RuntimeError(f"Unsupported session_store.mode: {mode}")
+    raise ConfigurationError(
+        f"Unsupported session_store.mode: {mode}",
+        code="unsupported_session_store_mode",
+    )

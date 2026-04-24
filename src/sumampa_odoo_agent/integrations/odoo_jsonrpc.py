@@ -1,0 +1,373 @@
+"""JSON-RPC Odoo gateway."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import httpx
+
+from sumampa_odoo_agent.integrations.odoo_common import (
+    delivery_payload,
+    invoice_payload,
+    normalize_odoo_value,
+    validate_argentina_invoice_draft,
+    validate_delivery_draft,
+    validate_invoice_draft,
+)
+from sumampa_odoo_agent.services.errors import UpstreamServiceError
+from sumampa_odoo_agent.services.message_specs import render_message
+from sumampa_odoo_agent.services.models.odoo import (
+    CreateDeliveryCommand,
+    CreateInvoiceCommand,
+    CreatePartnerCommand,
+    CreateProductCommand,
+    OdooOperationResult,
+    OdooSearchHit,
+    OdooSearchResult,
+    OdooValidationResult,
+    SearchJournalsQuery,
+    SearchLocationsQuery,
+    SearchPartnersQuery,
+    SearchPickingTypesQuery,
+    SearchProductsQuery,
+    SearchTaxesQuery,
+    ValidateArgentinaInvoiceDraftQuery,
+    ValidateDeliveryDraftQuery,
+    ValidateInvoiceDraftQuery,
+)
+
+
+class OdooJsonRpcClient:
+    """Minimal JSON-RPC client for direct Odoo writes."""
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        database: str,
+        username: str,
+        password: str,
+        timeout_seconds: float = 15.0,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._database = database
+        self._username = username
+        self._password = password
+        self._timeout_seconds = timeout_seconds
+        self._uid: int | None = None
+        self._client = httpx.AsyncClient(
+            base_url=self._base_url,
+            timeout=self._timeout_seconds,
+            transport=transport,
+        )
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
+    async def search_partners(self, query: SearchPartnersQuery) -> OdooSearchResult:
+        rows = await self._execute_kw(
+            "res.partner",
+            "search_read",
+            [
+                [
+                    "|",
+                    "|",
+                    ("name", "ilike", query.query),
+                    ("email", "ilike", query.query),
+                    ("vat", "ilike", query.query),
+                ]
+            ],
+            {"fields": ["display_name", "vat", "email"], "limit": query.limit},
+        )
+        return OdooSearchResult(
+            mode="jsonrpc",
+            model="res.partner",
+            hits=[
+                OdooSearchHit(
+                    id=int(row["id"]),
+                    display_name=str(row["display_name"]),
+                    extra={"vat": row.get("vat"), "email": row.get("email")},
+                )
+                for row in rows
+            ],
+        )
+
+    async def search_products(self, query: SearchProductsQuery) -> OdooSearchResult:
+        rows = await self._execute_kw(
+            "product.template",
+            "search_read",
+            [
+                [
+                    "|",
+                    ("name", "ilike", query.query),
+                    ("default_code", "ilike", query.query),
+                ]
+            ],
+            {
+                "fields": ["display_name", "default_code", "list_price", "standard_price"],
+                "limit": query.limit,
+            },
+        )
+        return OdooSearchResult(
+            mode="jsonrpc",
+            model="product.template",
+            hits=[
+                OdooSearchHit(
+                    id=int(row["id"]),
+                    display_name=str(row["display_name"]),
+                    extra={
+                        "default_code": row.get("default_code"),
+                        "list_price": row.get("list_price"),
+                        "standard_price": row.get("standard_price"),
+                    },
+                )
+                for row in rows
+            ],
+        )
+
+    async def search_journals(self, query: SearchJournalsQuery) -> OdooSearchResult:
+        return await self._search_read_hits(
+            model="account.journal",
+            domain=["|", ("name", "ilike", query.query), ("code", "ilike", query.query)],
+            fields=["display_name", "code", "type"],
+            limit=query.limit,
+        )
+
+    async def search_taxes(self, query: SearchTaxesQuery) -> OdooSearchResult:
+        return await self._search_read_hits(
+            model="account.tax",
+            domain=[("name", "ilike", query.query)],
+            fields=["display_name", "amount", "type_tax_use"],
+            limit=query.limit,
+        )
+
+    async def search_picking_types(self, query: SearchPickingTypesQuery) -> OdooSearchResult:
+        return await self._search_read_hits(
+            model="stock.picking.type",
+            domain=["|", ("name", "ilike", query.query), ("code", "ilike", query.query)],
+            fields=["display_name", "code", "warehouse_id"],
+            limit=query.limit,
+        )
+
+    async def search_locations(self, query: SearchLocationsQuery) -> OdooSearchResult:
+        return await self._search_read_hits(
+            model="stock.location",
+            domain=[("complete_name", "ilike", query.query)],
+            fields=["display_name", "usage"],
+            limit=query.limit,
+        )
+
+    async def validate_invoice_draft(
+        self,
+        query: ValidateInvoiceDraftQuery,
+    ) -> OdooValidationResult:
+        return validate_invoice_draft(mode="jsonrpc", query=query)
+
+    async def validate_argentina_invoice_draft(
+        self,
+        query: ValidateArgentinaInvoiceDraftQuery,
+    ) -> OdooValidationResult:
+        return validate_argentina_invoice_draft(mode="jsonrpc", query=query)
+
+    async def validate_delivery_draft(
+        self,
+        query: ValidateDeliveryDraftQuery,
+    ) -> OdooValidationResult:
+        return validate_delivery_draft(mode="jsonrpc", query=query)
+
+    async def create_partner(self, command: CreatePartnerCommand) -> OdooOperationResult:
+        payload = command.model_dump(exclude_none=True)
+        record_id = await self._execute_kw("res.partner", "create", [payload])
+        return OdooOperationResult(
+            mode="jsonrpc",
+            model="res.partner",
+            record_id=int(record_id),
+            payload=payload,
+        )
+
+    async def create_product(self, command: CreateProductCommand) -> OdooOperationResult:
+        payload = command.model_dump(exclude_none=True)
+        record_id = await self._execute_kw("product.template", "create", [payload])
+        return OdooOperationResult(
+            mode="jsonrpc",
+            model="product.template",
+            record_id=int(record_id),
+            payload=payload,
+        )
+
+    async def create_invoice(self, command: CreateInvoiceCommand) -> OdooOperationResult:
+        payload = invoice_payload(command)
+        record_id = await self._execute_kw("account.move", "create", [payload])
+        return OdooOperationResult(
+            mode="jsonrpc",
+            model="account.move",
+            record_id=int(record_id),
+            payload=payload,
+        )
+
+    async def create_delivery(self, command: CreateDeliveryCommand) -> OdooOperationResult:
+        metadata = await self._product_template_metadata([move.product_id for move in command.moves])
+        payload = delivery_payload(command, metadata=metadata)
+        record_id = await self._execute_kw("stock.picking", "create", [payload])
+        return OdooOperationResult(
+            mode="jsonrpc",
+            model="stock.picking",
+            record_id=int(record_id),
+            payload=payload,
+        )
+
+    async def _authenticate(self) -> int:
+        if self._uid is not None:
+            return self._uid
+
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "call",
+            "params": {
+                "service": "common",
+                "method": "login",
+                "args": [self._database, self._username, self._password],
+            },
+            "id": 1,
+        }
+        body = await self._post_jsonrpc(payload, operation="authenticate")
+        uid = body.get("result")
+        if not isinstance(uid, int) or uid <= 0:
+            raise UpstreamServiceError(
+                render_message("runtime.json", "odoo_authentication_failed"),
+                code="odoo_authentication_failed",
+                details={"provider": "odoo", "operation": "authenticate"},
+            )
+        self._uid = uid
+        return uid
+
+    async def _execute_kw(
+        self,
+        model: str,
+        method: str,
+        args: list[Any],
+        kwargs: dict[str, Any] | None = None,
+    ) -> Any:
+        uid = await self._authenticate()
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "call",
+            "params": {
+                "service": "object",
+                "method": "execute_kw",
+                "args": [
+                    self._database,
+                    uid,
+                    self._password,
+                    model,
+                    method,
+                    args,
+                    kwargs or {},
+                ],
+            },
+            "id": 1,
+        }
+        body = await self._post_jsonrpc(payload, operation=f"{model}.{method}")
+        return body["result"]
+
+    async def _post_jsonrpc(self, payload: dict[str, Any], *, operation: str) -> dict[str, Any]:
+        try:
+            response = await self._client.post("/jsonrpc", json=payload)
+            response.raise_for_status()
+            body = response.json()
+        except httpx.HTTPError as exc:
+            raise UpstreamServiceError(
+                render_message("runtime.json", "odoo_upstream_failure"),
+                code="odoo_upstream_failure",
+                details={
+                    "provider": "odoo",
+                    "operation": operation,
+                    "exception_type": exc.__class__.__name__,
+                },
+            ) from exc
+        except ValueError as exc:
+            raise UpstreamServiceError(
+                render_message("runtime.json", "odoo_invalid_response"),
+                code="odoo_invalid_response",
+                details={"provider": "odoo", "operation": operation},
+            ) from exc
+        if not isinstance(body, dict):
+            raise UpstreamServiceError(
+                render_message("runtime.json", "odoo_invalid_response"),
+                code="odoo_invalid_response",
+                details={"provider": "odoo", "operation": operation},
+            )
+        if "error" in body:
+            raise UpstreamServiceError(
+                render_message("runtime.json", "odoo_upstream_failure"),
+                code="odoo_upstream_failure",
+                details={
+                    "provider": "odoo",
+                    "operation": operation,
+                    "error": body["error"],
+                },
+            )
+        return body
+
+    async def _search_read_hits(
+        self,
+        *,
+        model: str,
+        domain: list[Any],
+        fields: list[str],
+        limit: int,
+    ) -> OdooSearchResult:
+        rows = await self._execute_kw(
+            model,
+            "search_read",
+            [domain],
+            {"fields": fields, "limit": limit},
+        )
+        return OdooSearchResult(
+            mode="jsonrpc",
+            model=model,
+            hits=[
+                OdooSearchHit(
+                    id=int(row["id"]),
+                    display_name=str(row.get("display_name") or row.get("name") or row["id"]),
+                    extra={
+                        key: normalize_odoo_value(row.get(key))
+                        for key in fields
+                        if key != "display_name"
+                    },
+                )
+                for row in rows
+            ],
+        )
+
+    async def _product_template_metadata(
+        self,
+        template_ids: list[int],
+    ) -> dict[int, dict[str, int | None]]:
+        if not template_ids:
+            return {}
+        rows = await self._execute_kw(
+            "product.template",
+            "search_read",
+            [[("id", "in", template_ids)]],
+            {"fields": ["product_variant_id", "uom_id"], "limit": len(template_ids)},
+        )
+        metadata: dict[int, dict[str, int | None]] = {}
+        for row in rows:
+            template_id = int(row["id"])
+            product_variant = normalize_odoo_value(row.get("product_variant_id"))
+            uom = normalize_odoo_value(row.get("uom_id"))
+            metadata[template_id] = {
+                "product_variant_id": (
+                    int(product_variant["id"])
+                    if isinstance(product_variant, dict) and isinstance(product_variant.get("id"), int)
+                    else None
+                ),
+                "uom_id": (
+                    int(uom["id"])
+                    if isinstance(uom, dict) and isinstance(uom.get("id"), int)
+                    else None
+                ),
+            }
+        return metadata

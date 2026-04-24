@@ -1,0 +1,56 @@
+"""Unit tests for settings validation and environment overrides."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError as PydanticValidationError
+
+from sumampa_odoo_agent.config import AppSettings, load_settings
+
+
+def _write_base_config(config_dir: Path) -> None:
+    config_dir.mkdir()
+    (config_dir / "appsettings.json").write_text(
+        json.dumps(
+            {
+                "service": {"name": "sumampa-test", "version": "0.1.0"},
+                "odoo": {"mode": "dry-run", "timeout_seconds": 15.0},
+                "agent": {"mode": "disabled"},
+                "session_store": {"mode": "memory"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_settings_reject_unknown_modes() -> None:
+    with pytest.raises(PydanticValidationError):
+        AppSettings.model_validate(
+            {
+                "service": {"name": "sumampa-test", "version": "0.1.0"},
+                "odoo": {"mode": "xmlrpc"},
+            }
+        )
+
+
+def test_load_settings_applies_declarative_environment_overrides(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_dir = tmp_path / "config"
+    _write_base_config(config_dir)
+
+    monkeypatch.setenv("ORCHID_ODOO_MODE", "jsonrpc")
+    monkeypatch.setenv("ORCHID_ODOO_TIMEOUT_SECONDS", "7.5")
+    monkeypatch.setenv("ORCHID_SESSION_STORE_MODE", "hybrid")
+    monkeypatch.setenv("ORCHID_SESSION_STORE_REDIS_TTL_SECONDS", "120")
+
+    settings = load_settings(config_dir=config_dir, env="test")
+
+    assert settings.odoo.mode == "jsonrpc"
+    assert settings.odoo.timeout_seconds == 7.5
+    assert settings.session_store.mode == "hybrid"
+    assert settings.session_store.redis_ttl_seconds == 120

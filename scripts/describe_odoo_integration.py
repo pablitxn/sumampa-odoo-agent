@@ -6,7 +6,6 @@ import argparse
 import json
 import os
 import xmlrpc.client
-from pathlib import Path
 from typing import Any
 
 from bootstrap_odoo_integration import (
@@ -20,9 +19,6 @@ from bootstrap_odoo_integration import (
     authenticate,
     wait_for_odoo,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_MEMORY_PATH = REPO_ROOT / ".data" / "purchase_resolution_memory.json"
 
 
 def main() -> int:
@@ -38,8 +34,6 @@ def main() -> int:
     print("Odoo 19 local listo para pruebas")
     print(f"- URL: {summary['base_url']}")
     print(f"- DB: {summary['database']}")
-    print(f"- Memory path: {summary['resolution_memory_path']}")
-    print(f"- Memory exists: {'sí' if summary['resolution_memory_exists'] else 'no'}")
 
     defaults = summary["purchase_defaults"]
     print("- Contexto de compras sugerido:")
@@ -144,12 +138,9 @@ def build_summary() -> dict[str, Any]:
         limit=max(50, len(SUPPLIERINFO) + 10),
     )
 
-    memory_path = _resolution_memory_path()
     return {
         "base_url": base_url,
         "database": database,
-        "resolution_memory_path": str(memory_path),
-        "resolution_memory_exists": memory_path.exists(),
         "purchase_defaults": {
             "journal_id": int(purchase_journal["id"]),
             "journal_name": str(purchase_journal.get("display_name") or purchase_journal.get("name")),
@@ -234,16 +225,6 @@ def _m2o(value: Any) -> dict[str, Any]:
             "name": str(value[1]) if len(value) > 1 else str(value[0]),
         }
     return {}
-
-
-def _resolution_memory_path() -> Path:
-    raw_path = os.environ.get("ORCHID_PURCHASE_RESOLUTION_MEMORY_PATH")
-    if not raw_path:
-        return DEFAULT_MEMORY_PATH
-    path = Path(raw_path)
-    if path.is_absolute():
-        return path
-    return (REPO_ROOT / path).resolve()
 
 
 if __name__ == "__main__":

@@ -2,29 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from sumampa_odoo_agent.services.models.odoo import (
-    CreateDeliveryCommand,
-    CreateInvoiceCommand,
-    CreatePartnerCommand,
-    CreateProductCommand,
-    OdooMutationPlan,
-    OdooOperationResult,
-    OdooSearchResult,
-    OdooValidationResult,
-    SearchJournalsQuery,
-    SearchLocationsQuery,
-    SearchPartnersQuery,
-    SearchPickingTypesQuery,
-    SearchProductsQuery,
-    SearchTaxesQuery,
-    ValidateArgentinaInvoiceDraftQuery,
-    ValidateDeliveryDraftQuery,
-    ValidateInvoiceDraftQuery,
-)
+from sumampa_odoo_agent.services.models.odoo import OdooMutationPlan
+from sumampa_odoo_agent.services.models.runtime import WorkflowStage
 
 
 class AttachmentInput(BaseModel):
@@ -55,7 +38,7 @@ class ConversationMessage(BaseModel):
 
 
 class WorkflowStateResponse(BaseModel):
-    stage: str
+    stage: WorkflowStage
 
 
 class ConversationMessageResponse(BaseModel):
@@ -63,86 +46,3 @@ class ConversationMessageResponse(BaseModel):
     messages: list[ConversationMessage] = Field(min_length=1)
     workflow_state: WorkflowStateResponse
     operations: list[OdooMutationPlan] | None = None
-
-
-class PartnersLookupRequest(SearchPartnersQuery):
-    kind: Literal["partners"]
-
-
-class ProductsLookupRequest(SearchProductsQuery):
-    kind: Literal["products"]
-
-
-class JournalsLookupRequest(SearchJournalsQuery):
-    kind: Literal["journals"]
-
-
-class TaxesLookupRequest(SearchTaxesQuery):
-    kind: Literal["taxes"]
-
-
-class PickingTypesLookupRequest(SearchPickingTypesQuery):
-    kind: Literal["picking_types"]
-
-
-class LocationsLookupRequest(SearchLocationsQuery):
-    kind: Literal["locations"]
-
-
-LookupRequest = Annotated[
-    PartnersLookupRequest
-    | ProductsLookupRequest
-    | JournalsLookupRequest
-    | TaxesLookupRequest
-    | PickingTypesLookupRequest
-    | LocationsLookupRequest,
-    Field(discriminator="kind"),
-]
-
-
-class InvoiceValidationRequest(ValidateInvoiceDraftQuery):
-    kind: Literal["invoice"]
-
-
-class ArgentinaInvoiceValidationRequest(ValidateArgentinaInvoiceDraftQuery):
-    kind: Literal["argentina_invoice"]
-
-
-class DeliveryValidationRequest(ValidateDeliveryDraftQuery):
-    kind: Literal["delivery"]
-
-
-ValidationRequest = Annotated[
-    InvoiceValidationRequest | ArgentinaInvoiceValidationRequest | DeliveryValidationRequest,
-    Field(discriminator="kind"),
-]
-
-
-class CreatePartnerMutation(CreatePartnerCommand):
-    kind: Literal["create_partner"]
-
-
-class CreateProductMutation(CreateProductCommand):
-    kind: Literal["create_product"]
-
-
-class CreateInvoiceMutation(CreateInvoiceCommand):
-    kind: Literal["create_invoice"]
-
-
-class CreateDeliveryMutation(CreateDeliveryCommand):
-    kind: Literal["create_delivery"]
-
-
-MutationRequest = Annotated[
-    CreatePartnerMutation
-    | CreateProductMutation
-    | CreateInvoiceMutation
-    | CreateDeliveryMutation,
-    Field(discriminator="kind"),
-]
-
-
-MutationResponse = OdooOperationResult
-LookupResponse = OdooSearchResult
-ValidationResponse = OdooValidationResult

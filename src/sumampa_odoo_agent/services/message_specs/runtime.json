@@ -1,13 +1,11 @@
 {
-  "runtime_not_initialized": "Runtime is not initialized. Call startup_runtime() first.",
   "agent_module_disabled": "El módulo agent está deshabilitado. Configurá ORCHID_AGENT_MODE=openai para usarlo.",
-  "invoice_image_required": "At least one invoice image is required.",
   "request_validation_failed": "Request validation failed",
   "unexpected_error": "An unexpected error occurred",
   "agent_rate_limited": "El modelo esta temporalmente saturado. Reintenta en unos segundos.",
   "agent_upstream_failure": "El servicio del agente no pudo completar la solicitud.",
-  "unknown_tool": "Unknown tool: {name}",
-  "unsupported_invoice_extraction_mode": "Unsupported invoice extraction mode: {mode}",
-  "unsupported_agent_mode": "Unsupported agent mode: {mode}",
-  "unsupported_session_store_mode": "Unsupported session store mode: {mode}"
+  "attachment_download_failed": "No se pudo descargar el adjunto.",
+  "odoo_authentication_failed": "No se pudo autenticar contra Odoo.",
+  "odoo_upstream_failure": "Odoo no pudo completar la solicitud.",
+  "odoo_invalid_response": "Odoo devolvio una respuesta invalida."
 }

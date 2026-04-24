@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import os
-import re
 import time
 import xmlrpc.client
 from collections.abc import Iterable
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -19,56 +16,6 @@ DEFAULT_DATABASE = "sumampa_integration"
 DEFAULT_ADMIN_LOGIN = "admin"
 DEFAULT_ADMIN_PASSWORD = ""
 DEFAULT_MASTER_PASSWORD = ""
-REPO_ROOT = Path(__file__).resolve().parents[1]
-SNAPSHOT_PRODUCTS_DIR = (
-    REPO_ROOT / "tests" / "integration" / "fixtures" / "purchase_invoice_extractions"
-)
-
-
-def _normalize_seed_name(value: str) -> str:
-    return " ".join(value.casefold().replace(".", " ").split())
-
-
-def _generated_default_code(description: str, seen_codes: set[str]) -> str:
-    slug = re.sub(r"[^A-Z0-9]+", "-", description.upper()).strip("-") or "ITEM"
-    slug = slug[:18].strip("-") or "ITEM"
-    base = f"FIX-{slug}"
-    candidate = base
-    suffix = 1
-    while candidate in seen_codes:
-        suffix += 1
-        candidate = f"{base[:14]}-{suffix}"
-    seen_codes.add(candidate)
-    return candidate
-
-
-def _snapshot_seed_products(*, skip_names: set[str] | None = None) -> tuple[dict[str, Any], ...]:
-    seen_names = {_normalize_seed_name(product["name"]) for product in BASE_PRODUCTS}
-    seen_codes = {str(product["default_code"]) for product in BASE_PRODUCTS}
-    skipped_names = {_normalize_seed_name(name) for name in (skip_names or set())}
-    products: list[dict[str, Any]] = []
-    for path in sorted(SNAPSHOT_PRODUCTS_DIR.glob("*.json")):
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        for line in payload.get("lines", []):
-            description = str(line.get("description") or "").strip()
-            if not description:
-                continue
-            normalized_name = _normalize_seed_name(description)
-            if normalized_name in seen_names or normalized_name in skipped_names:
-                continue
-            gross_price = float(line.get("unit_price_gross") or 0.0)
-            vat_rate = float(line.get("vat_rate") or 0.0)
-            net_price = gross_price / (1 + (vat_rate / 100)) if vat_rate else gross_price
-            products.append(
-                {
-                    "name": description,
-                    "default_code": _generated_default_code(description, seen_codes),
-                    "list_price": round(gross_price * 1.3, 2),
-                    "standard_price": round(net_price, 2),
-                }
-            )
-            seen_names.add(normalized_name)
-    return tuple(products)
 
 PARTNERS = (
     {
@@ -186,13 +133,7 @@ SUPPLIERINFO = (
     },
 )
 
-PRODUCTS = BASE_PRODUCTS + _snapshot_seed_products(
-    skip_names={
-        str(row["supplier_product_name"])
-        for row in SUPPLIERINFO
-        if row.get("supplier_product_name")
-    }
-)
+PRODUCTS = BASE_PRODUCTS
 
 
 def main() -> int:

@@ -8,6 +8,7 @@ from sumampa_odoo_agent.integrations.agent_service import (
     MicrosoftAgentFrameworkOpenAIService,
 )
 from sumampa_odoo_agent.services.contracts import AgentRuntime, OdooGateway, SessionStore
+from sumampa_odoo_agent.services.errors import ConfigurationError
 
 
 def build_agent_runtime(
@@ -29,4 +30,7 @@ def build_agent_runtime(
         )
     if settings.agent.mode == "disabled":
         return DisabledAgentService()
-    raise RuntimeError(f"Unsupported agent.mode: {settings.agent.mode}")
+    raise ConfigurationError(
+        f"Unsupported agent.mode: {settings.agent.mode}",
+        code="unsupported_agent_mode",
+    )

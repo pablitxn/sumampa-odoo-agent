@@ -7,19 +7,14 @@ Backend FastAPI orientado a un bot de WhatsApp que orquesta flujos operativos so
 - `src/sumampa_odoo_agent/api`: surface HTTP.
 - `src/sumampa_odoo_agent/services`: orquestación y reglas de negocio.
 - `src/sumampa_odoo_agent/integrations`: armado de backends concretos.
-- `src/sumampa_odoo_agent/infrastructure`: implementaciones low-level reutilizables.
-- `src/sumampa_odoo_agent/application`: modelos compartidos, prompts y use cases reutilizados.
 
 La app ya no usa `MCP`, buses de commands/queries ni registro dinámico de módulos.
+Odoo se opera desde tools internas del agente; no hay una API HTTP directa para mutaciones o lookups.
 
 ## Endpoints
 
 - `GET /health`
 - `POST /api/v1/messages`
-- `POST /api/v1/purchase-invoices/analyze`
-- `POST /api/v1/odoo/lookups`
-- `POST /api/v1/odoo/validations`
-- `POST /api/v1/odoo/mutations`
 
 ## Desarrollo
 
@@ -42,7 +37,6 @@ uv run mypy src tests
 - Odoo: `dry-run` y `jsonrpc`
 - Session store: `memory` y `hybrid`
 - Agent runtime: `openai` y `disabled`
-- Extracción de facturas: `openai`
 
 ## Integración local con Odoo 19
 

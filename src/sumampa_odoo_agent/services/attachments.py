@@ -6,8 +6,10 @@ import base64
 
 import httpx
 
-from sumampa_odoo_agent.services.errors import ValidationError
+from sumampa_odoo_agent.services.errors import UpstreamServiceError, ValidationError
+from sumampa_odoo_agent.services.message_specs import render_message
 from sumampa_odoo_agent.services.models.odoo import InvoiceAttachment
+from sumampa_odoo_agent.services.models.runtime import SerializedInvoiceAttachment
 
 
 async def resolve_invoice_attachment(
@@ -39,9 +41,20 @@ async def resolve_invoice_attachment(
         )
 
     if download_url:
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-            response = await client.get(download_url)
-            response.raise_for_status()
+        try:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                response = await client.get(download_url)
+                response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise UpstreamServiceError(
+                render_message("runtime.json", "attachment_download_failed"),
+                code="attachment_download_failed",
+                details={
+                    "filename": filename,
+                    "download_url": download_url,
+                    "exception_type": exc.__class__.__name__,
+                },
+            ) from exc
         if not response.content:
             raise ValidationError(
                 "attachment payload is empty",
@@ -61,14 +74,14 @@ async def resolve_invoice_attachment(
 
 def serialize_invoice_attachments(
     attachments: list[InvoiceAttachment],
-) -> list[dict[str, str | None]]:
-    """Serialize attachments for the persisted purchase workflow context."""
+) -> list[SerializedInvoiceAttachment]:
+    """Serialize attachments for the agent runtime context."""
 
     return [
-        {
-            "filename": attachment.filename,
-            "content_type": attachment.content_type,
-            "content_base64": base64.b64encode(attachment.content_bytes).decode("ascii"),
-        }
+        SerializedInvoiceAttachment(
+            filename=attachment.filename,
+            content_type=attachment.content_type,
+            content_base64=base64.b64encode(attachment.content_bytes).decode("ascii"),
+        )
         for attachment in attachments
     ]

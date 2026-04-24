@@ -4,13 +4,27 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field
 
 DEFAULT_ENV = "development"
 DEFAULT_CONFIG_DIR = Path("config")
+
+OdooMode = Literal["dry-run", "jsonrpc"]
+AgentMode = Literal["disabled", "openai"]
+SessionStoreMode = Literal["memory", "hybrid"]
+LoggingFormat = Literal["json", "text"]
+
+
+@dataclass(frozen=True, slots=True)
+class EnvOverride:
+    env_var: str
+    path: tuple[str, str]
+    coerce: Callable[[str], object] = str
 
 
 class ServiceSettings(BaseModel):
@@ -22,11 +36,11 @@ class ServiceSettings(BaseModel):
 
 class LoggingSettings(BaseModel):
     level: str = "INFO"
-    format: str = "json"
+    format: LoggingFormat = "json"
 
 
 class OdooSettings(BaseModel):
-    mode: str = "dry-run"
+    mode: OdooMode = "dry-run"
     base_url: str = "http://localhost:8069"
     database: str = "odoo"
     username: str = "admin"
@@ -35,7 +49,7 @@ class OdooSettings(BaseModel):
 
 
 class AgentSettings(BaseModel):
-    mode: str = "disabled"
+    mode: AgentMode = "disabled"
     model: str = "gpt-5.4-mini"
     api_key_env_var: str = "OPENAI_API_KEY"
     base_url: str | None = None
@@ -44,7 +58,7 @@ class AgentSettings(BaseModel):
 
 
 class SessionStoreSettings(BaseModel):
-    mode: str = "memory"
+    mode: SessionStoreMode = "memory"
     postgres_dsn: str = ""
     redis_url: str = "redis://127.0.0.1:6379/0"
     redis_ttl_seconds: int = Field(default=86400, ge=60)
@@ -57,6 +71,24 @@ class AppSettings(BaseModel):
     odoo: OdooSettings = Field(default_factory=OdooSettings)
     agent: AgentSettings = Field(default_factory=AgentSettings)
     session_store: SessionStoreSettings = Field(default_factory=SessionStoreSettings)
+
+
+_ENV_OVERRIDES: tuple[EnvOverride, ...] = (
+    EnvOverride("ORCHID_AGENT_MODE", ("agent", "mode")),
+    EnvOverride("ORCHID_AGENT_SYSTEM_PROMPT_SPEC", ("agent", "system_prompt_spec")),
+    EnvOverride("ORCHID_AGENT_SYSTEM_PROMPT_OVERRIDE", ("agent", "system_prompt_override")),
+    EnvOverride("ORCHID_ODOO_MODE", ("odoo", "mode")),
+    EnvOverride("ORCHID_ODOO_BASE_URL", ("odoo", "base_url")),
+    EnvOverride("ORCHID_ODOO_DATABASE", ("odoo", "database")),
+    EnvOverride("ORCHID_ODOO_USERNAME", ("odoo", "username")),
+    EnvOverride("ORCHID_ODOO_PASSWORD", ("odoo", "password")),
+    EnvOverride("ORCHID_ODOO_TIMEOUT_SECONDS", ("odoo", "timeout_seconds"), float),
+    EnvOverride("ORCHID_SESSION_STORE_MODE", ("session_store", "mode")),
+    EnvOverride("ORCHID_SESSION_STORE_POSTGRES_DSN", ("session_store", "postgres_dsn")),
+    EnvOverride("ORCHID_SESSION_STORE_REDIS_URL", ("session_store", "redis_url")),
+    EnvOverride("ORCHID_SESSION_STORE_REDIS_TTL_SECONDS", ("session_store", "redis_ttl_seconds"), int),
+    EnvOverride("ORCHID_SESSION_STORE_REDIS_KEY_PREFIX", ("session_store", "redis_key_prefix")),
+)
 
 
 def resolve_environment(env: str | None = None) -> str:
@@ -94,61 +126,12 @@ def _load_env_file(env_path: Path) -> None:
 def _apply_env_overrides(settings: AppSettings) -> AppSettings:
     updates: dict[str, Any] = {}
 
-    agent_mode = os.environ.get("ORCHID_AGENT_MODE")
-    if agent_mode:
-        updates.setdefault("agent", {})["mode"] = agent_mode
-
-    agent_system_prompt_spec = os.environ.get("ORCHID_AGENT_SYSTEM_PROMPT_SPEC")
-    if agent_system_prompt_spec:
-        updates.setdefault("agent", {})["system_prompt_spec"] = agent_system_prompt_spec
-
-    agent_system_prompt_override = os.environ.get("ORCHID_AGENT_SYSTEM_PROMPT_OVERRIDE")
-    if agent_system_prompt_override:
-        updates.setdefault("agent", {})["system_prompt_override"] = agent_system_prompt_override
-
-    odoo_mode = os.environ.get("ORCHID_ODOO_MODE")
-    if odoo_mode:
-        updates.setdefault("odoo", {})["mode"] = odoo_mode
-
-    odoo_base_url = os.environ.get("ORCHID_ODOO_BASE_URL")
-    if odoo_base_url:
-        updates.setdefault("odoo", {})["base_url"] = odoo_base_url
-
-    odoo_database = os.environ.get("ORCHID_ODOO_DATABASE")
-    if odoo_database:
-        updates.setdefault("odoo", {})["database"] = odoo_database
-
-    odoo_username = os.environ.get("ORCHID_ODOO_USERNAME")
-    if odoo_username:
-        updates.setdefault("odoo", {})["username"] = odoo_username
-
-    odoo_password = os.environ.get("ORCHID_ODOO_PASSWORD")
-    if odoo_password:
-        updates.setdefault("odoo", {})["password"] = odoo_password
-
-    odoo_timeout_seconds = os.environ.get("ORCHID_ODOO_TIMEOUT_SECONDS")
-    if odoo_timeout_seconds:
-        updates.setdefault("odoo", {})["timeout_seconds"] = float(odoo_timeout_seconds)
-
-    session_store_mode = os.environ.get("ORCHID_SESSION_STORE_MODE")
-    if session_store_mode:
-        updates.setdefault("session_store", {})["mode"] = session_store_mode
-
-    session_store_postgres_dsn = os.environ.get("ORCHID_SESSION_STORE_POSTGRES_DSN")
-    if session_store_postgres_dsn:
-        updates.setdefault("session_store", {})["postgres_dsn"] = session_store_postgres_dsn
-
-    session_store_redis_url = os.environ.get("ORCHID_SESSION_STORE_REDIS_URL")
-    if session_store_redis_url:
-        updates.setdefault("session_store", {})["redis_url"] = session_store_redis_url
-
-    session_store_redis_ttl = os.environ.get("ORCHID_SESSION_STORE_REDIS_TTL_SECONDS")
-    if session_store_redis_ttl:
-        updates.setdefault("session_store", {})["redis_ttl_seconds"] = int(session_store_redis_ttl)
-
-    session_store_redis_prefix = os.environ.get("ORCHID_SESSION_STORE_REDIS_KEY_PREFIX")
-    if session_store_redis_prefix:
-        updates.setdefault("session_store", {})["redis_key_prefix"] = session_store_redis_prefix
+    for override in _ENV_OVERRIDES:
+        raw_value = os.environ.get(override.env_var)
+        if raw_value:
+            section, field_name = override.path
+            section_updates = cast(dict[str, Any], updates.setdefault(section, {}))
+            section_updates[field_name] = override.coerce(raw_value)
 
     if not updates:
         return settings

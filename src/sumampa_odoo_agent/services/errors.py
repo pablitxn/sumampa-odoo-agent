@@ -83,6 +83,24 @@ class ConflictError(ApplicationError):
         )
 
 
+class ConfigurationError(ApplicationError):
+    """Raised when the service is missing required runtime configuration."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "configuration_error",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            code=code,
+            details={} if details is None else details,
+            status_code=500,
+        )
+
+
 class TooManyRequestsError(ApplicationError):
     """Raised when the caller should retry later."""
 

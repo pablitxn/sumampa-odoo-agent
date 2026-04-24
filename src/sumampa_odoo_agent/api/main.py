@@ -12,7 +12,6 @@ from sumampa_odoo_agent.api.error_handler import register_exception_handlers
 from sumampa_odoo_agent.api.routes import (
     core_router,
     messages_router,
-    odoo_router,
 )
 from sumampa_odoo_agent.config import AppSettings, load_settings, resolve_environment
 from sumampa_odoo_agent.services import build_app_services
@@ -53,7 +52,6 @@ def create_app(*, settings: AppSettings | None = None, env: str | None = None) -
 
     app.include_router(core_router)
     app.include_router(messages_router)
-    app.include_router(odoo_router)
     return app
 
 

@@ -12,14 +12,12 @@ if TYPE_CHECKING:
         ConversationTurnInput,
         ConversationTurnResult,
     )
-    from sumampa_odoo_agent.services.odoo import OdooService
 
 __all__ = [
     "AppServices",
     "ConversationService",
     "ConversationTurnInput",
     "ConversationTurnResult",
-    "OdooService",
     "build_app_services",
 ]
 
@@ -38,7 +36,6 @@ _EXPORTS = {
         "sumampa_odoo_agent.services.conversation",
         "ConversationTurnResult",
     ),
-    "OdooService": ("sumampa_odoo_agent.services.odoo", "OdooService"),
 }
 
 
