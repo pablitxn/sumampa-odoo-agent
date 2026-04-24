@@ -39,10 +39,10 @@ async def _dump_model(result: Awaitable[BaseModel]) -> dict[str, Any]:
 
 def _create_partner_tool(odoo: OdooGateway) -> ToolCallable:
     async def create_partner(
-        name: Annotated[str, "Nombre del partner"],
-        vat: Annotated[str | None, "CUIT/CUIL del partner"] = None,
-        email: Annotated[str | None, "Email del partner"] = None,
-        supplier_rank: Annotated[int, "Rank de proveedor"] = 1,
+        name: Annotated[str, "Partner name"],
+        vat: Annotated[str | None, "Partner tax ID or VAT number"] = None,
+        email: Annotated[str | None, "Partner email address"] = None,
+        supplier_rank: Annotated[int, "Supplier rank"] = 1,
     ) -> dict[str, Any]:
         """Create a partner in Odoo and return the resulting payload."""
         return await _dump_model(
@@ -61,8 +61,8 @@ def _create_partner_tool(odoo: OdooGateway) -> ToolCallable:
 
 def _search_partners_tool(odoo: OdooGateway) -> ToolCallable:
     async def search_partners(
-        query: Annotated[str, "Nombre, email o CUIT parcial del cliente"],
-        limit: Annotated[int, "Cantidad maxima de resultados"] = 10,
+        query: Annotated[str, "Partial customer name, email, tax ID, or VAT number"],
+        limit: Annotated[int, "Maximum number of results"] = 10,
     ) -> dict[str, Any]:
         """Search partners in Odoo and return candidate IDs."""
         return await _dump_model(odoo.search_partners(SearchInput(query=query, limit=limit)))
@@ -72,8 +72,8 @@ def _search_partners_tool(odoo: OdooGateway) -> ToolCallable:
 
 def _search_products_tool(odoo: OdooGateway) -> ToolCallable:
     async def search_products(
-        query: Annotated[str, "Nombre o SKU parcial del producto"],
-        limit: Annotated[int, "Cantidad maxima de resultados"] = 10,
+        query: Annotated[str, "Partial product name or SKU"],
+        limit: Annotated[int, "Maximum number of results"] = 10,
     ) -> dict[str, Any]:
         """Search products in Odoo and return candidate IDs."""
         return await _dump_model(odoo.search_products(SearchInput(query=query, limit=limit)))
@@ -83,8 +83,8 @@ def _search_products_tool(odoo: OdooGateway) -> ToolCallable:
 
 def _search_journals_tool(odoo: OdooGateway) -> ToolCallable:
     async def search_journals(
-        query: Annotated[str, "Nombre o codigo parcial del diario"],
-        limit: Annotated[int, "Cantidad maxima de resultados"] = 10,
+        query: Annotated[str, "Partial journal name or code"],
+        limit: Annotated[int, "Maximum number of results"] = 10,
     ) -> dict[str, Any]:
         """Search journals in Odoo and return candidate IDs."""
         return await _dump_model(odoo.search_journals(SearchInput(query=query, limit=limit)))
@@ -94,8 +94,8 @@ def _search_journals_tool(odoo: OdooGateway) -> ToolCallable:
 
 def _search_taxes_tool(odoo: OdooGateway) -> ToolCallable:
     async def search_taxes(
-        query: Annotated[str, "Nombre parcial del impuesto, por ejemplo IVA 21"],
-        limit: Annotated[int, "Cantidad maxima de resultados"] = 10,
+        query: Annotated[str, "Partial tax name, for example VAT 21"],
+        limit: Annotated[int, "Maximum number of results"] = 10,
     ) -> dict[str, Any]:
         """Search taxes in Odoo and return candidate IDs."""
         return await _dump_model(odoo.search_taxes(SearchInput(query=query, limit=limit)))
@@ -105,8 +105,8 @@ def _search_taxes_tool(odoo: OdooGateway) -> ToolCallable:
 
 def _search_picking_types_tool(odoo: OdooGateway) -> ToolCallable:
     async def search_picking_types(
-        query: Annotated[str, "Nombre o codigo parcial del tipo de picking"],
-        limit: Annotated[int, "Cantidad maxima de resultados"] = 10,
+        query: Annotated[str, "Partial picking type name or code"],
+        limit: Annotated[int, "Maximum number of results"] = 10,
     ) -> dict[str, Any]:
         """Search picking types in Odoo and return candidate IDs."""
         return await _dump_model(
@@ -118,8 +118,8 @@ def _search_picking_types_tool(odoo: OdooGateway) -> ToolCallable:
 
 def _search_locations_tool(odoo: OdooGateway) -> ToolCallable:
     async def search_locations(
-        query: Annotated[str, "Nombre parcial de la ubicacion"],
-        limit: Annotated[int, "Cantidad maxima de resultados"] = 10,
+        query: Annotated[str, "Partial stock location name"],
+        limit: Annotated[int, "Maximum number of results"] = 10,
     ) -> dict[str, Any]:
         """Search stock locations in Odoo and return candidate IDs."""
         return await _dump_model(odoo.search_locations(SearchInput(query=query, limit=limit)))
@@ -129,10 +129,10 @@ def _search_locations_tool(odoo: OdooGateway) -> ToolCallable:
 
 def _validate_invoice_draft_tool(odoo: OdooGateway) -> ToolCallable:
     async def validate_invoice_draft(
-        partner_id: Annotated[int | None, "ID del cliente"] = None,
-        journal_id: Annotated[int | None, "ID del diario de ventas"] = None,
-        move_type: Annotated[InvoiceMoveType, "Tipo de comprobante"] = "out_invoice",
-        line_count: Annotated[int, "Cantidad de lineas de factura"] = 0,
+        partner_id: Annotated[int | None, "Customer partner ID"] = None,
+        journal_id: Annotated[int | None, "Sales journal ID"] = None,
+        move_type: Annotated[InvoiceMoveType, "Invoice move type"] = "out_invoice",
+        line_count: Annotated[int, "Number of invoice lines"] = 0,
     ) -> dict[str, Any]:
         """Validate invoice prerequisites before trying to create it."""
         return await _dump_model(
@@ -151,20 +151,20 @@ def _validate_invoice_draft_tool(odoo: OdooGateway) -> ToolCallable:
 
 def _validate_argentina_invoice_draft_tool(odoo: OdooGateway) -> ToolCallable:
     async def validate_argentina_invoice_draft(
-        emitter_vat: Annotated[str | None, "CUIT del emisor"] = None,
+        emitter_vat: Annotated[str | None, "Emitter tax ID or VAT number"] = None,
         emitter_taxpayer_type: Annotated[
             str | None,
-            "Responsable inscripto, monotributo, exento, etc.",
+            "Emitter taxpayer category such as registered taxpayer, simplified regime, or exempt",
         ] = None,
-        point_of_sale: Annotated[int | None, "Punto de venta AFIP/ARCA"] = None,
-        wsfe_service: Annotated[str, "Servicio fiscal esperado, normalmente wsfev1"] = "wsfev1",
-        document_letter: Annotated[str | None, "Letra del comprobante: A, B o C"] = None,
-        partner_name: Annotated[str | None, "Nombre del receptor"] = None,
-        partner_vat: Annotated[str | None, "CUIT o identificacion fiscal del receptor"] = None,
-        partner_doc_type: Annotated[str | None, "Tipo de documento del receptor"] = None,
-        partner_taxpayer_type: Annotated[str | None, "Condicion fiscal del receptor"] = None,
-        line_count: Annotated[int, "Cantidad de lineas de factura"] = 0,
-        email_to: Annotated[str | None, "Email para envio del comprobante"] = None,
+        point_of_sale: Annotated[int | None, "AFIP/ARCA point of sale"] = None,
+        wsfe_service: Annotated[str, "Expected fiscal web service, usually wsfev1"] = "wsfev1",
+        document_letter: Annotated[str | None, "Invoice document letter: A, B, or C"] = None,
+        partner_name: Annotated[str | None, "Recipient name or legal name"] = None,
+        partner_vat: Annotated[str | None, "Recipient tax ID or VAT number"] = None,
+        partner_doc_type: Annotated[str | None, "Recipient document type"] = None,
+        partner_taxpayer_type: Annotated[str | None, "Recipient taxpayer category"] = None,
+        line_count: Annotated[int, "Number of invoice lines"] = 0,
+        email_to: Annotated[str | None, "Recipient email address for invoice delivery"] = None,
     ) -> dict[str, Any]:
         """Validate Argentine electronic invoice prerequisites before issuing a document."""
         return await _dump_model(
@@ -190,11 +190,11 @@ def _validate_argentina_invoice_draft_tool(odoo: OdooGateway) -> ToolCallable:
 
 def _validate_delivery_draft_tool(odoo: OdooGateway) -> ToolCallable:
     async def validate_delivery_draft(
-        partner_id: Annotated[int | None, "ID del cliente"] = None,
-        picking_type_id: Annotated[int | None, "ID del tipo de picking"] = None,
-        location_id: Annotated[int | None, "ID de ubicacion origen"] = None,
-        location_dest_id: Annotated[int | None, "ID de ubicacion destino"] = None,
-        move_count: Annotated[int, "Cantidad de movimientos"] = 0,
+        partner_id: Annotated[int | None, "Customer partner ID"] = None,
+        picking_type_id: Annotated[int | None, "Picking type ID"] = None,
+        location_id: Annotated[int | None, "Source stock location ID"] = None,
+        location_dest_id: Annotated[int | None, "Destination stock location ID"] = None,
+        move_count: Annotated[int, "Number of stock moves"] = 0,
     ) -> dict[str, Any]:
         """Validate delivery prerequisites before trying to create it."""
         return await _dump_model(
@@ -214,11 +214,11 @@ def _validate_delivery_draft_tool(odoo: OdooGateway) -> ToolCallable:
 
 def _create_product_tool(odoo: OdooGateway) -> ToolCallable:
     async def create_product(
-        name: Annotated[str, "Nombre comercial del producto"],
-        default_code: Annotated[str | None, "Codigo interno o SKU"] = None,
-        list_price: Annotated[float, "Precio de venta"] = 0.0,
-        standard_price: Annotated[float | None, "Costo estandar"] = None,
-        description_sale: Annotated[str | None, "Descripcion para ventas"] = None,
+        name: Annotated[str, "Product commercial name"],
+        default_code: Annotated[str | None, "Internal code or SKU"] = None,
+        list_price: Annotated[float, "Sales price"] = 0.0,
+        standard_price: Annotated[float | None, "Standard cost"] = None,
+        description_sale: Annotated[str | None, "Sales description"] = None,
     ) -> dict[str, Any]:
         """Create a product in Odoo and return the resulting payload."""
         return await _dump_model(
@@ -238,17 +238,17 @@ def _create_product_tool(odoo: OdooGateway) -> ToolCallable:
 
 def _create_invoice_tool(odoo: OdooGateway) -> ToolCallable:
     async def create_invoice(
-        partner_id: Annotated[int, "ID del partner o cliente en Odoo"],
+        partner_id: Annotated[int, "Odoo partner or customer ID"],
         lines: Annotated[
             list[dict[str, Any]],
-            "Lineas con product_id, quantity, price_unit y name opcional",
+            "Invoice lines with product_id, quantity, price_unit, and optional name",
         ],
         move_type: Annotated[
             InvoiceMoveType,
-            "Tipo de comprobante, por defecto out_invoice",
+            "Invoice move type, defaults to out_invoice",
         ] = "out_invoice",
-        invoice_date: Annotated[str | None, "Fecha ISO de factura"] = None,
-        narration: Annotated[str | None, "Notas internas o leyenda"] = None,
+        invoice_date: Annotated[str | None, "Invoice date in ISO format"] = None,
+        narration: Annotated[str | None, "Internal notes or invoice narration"] = None,
     ) -> dict[str, Any]:
         """Create an invoice in Odoo and return the resulting payload."""
         return await _dump_model(
@@ -268,16 +268,16 @@ def _create_invoice_tool(odoo: OdooGateway) -> ToolCallable:
 
 def _create_delivery_tool(odoo: OdooGateway) -> ToolCallable:
     async def create_delivery(
-        partner_id: Annotated[int, "ID del partner o cliente en Odoo"],
-        picking_type_id: Annotated[int, "Tipo de operacion de stock"],
-        location_id: Annotated[int, "Ubicacion origen"],
-        location_dest_id: Annotated[int, "Ubicacion destino"],
+        partner_id: Annotated[int, "Odoo partner or customer ID"],
+        picking_type_id: Annotated[int, "Stock picking type ID"],
+        location_id: Annotated[int, "Source stock location ID"],
+        location_dest_id: Annotated[int, "Destination stock location ID"],
         moves: Annotated[
             list[dict[str, Any]],
-            "Movimientos con product_id, quantity y name opcional",
+            "Stock moves with product_id, quantity, and optional name",
         ],
-        origin: Annotated[str | None, "Origen comercial del remito"] = None,
-        scheduled_date: Annotated[str | None, "Fecha programada ISO"] = None,
+        origin: Annotated[str | None, "Commercial origin for the delivery order"] = None,
+        scheduled_date: Annotated[str | None, "Scheduled date in ISO format"] = None,
     ) -> dict[str, Any]:
         """Create a delivery order in Odoo and return the resulting payload."""
         return await _dump_model(

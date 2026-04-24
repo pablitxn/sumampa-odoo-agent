@@ -20,7 +20,7 @@ def build_agent_tools(*, odoo: OdooGateway | None) -> list[Any]:
         """Explain what this Sumampa Odoo agent can currently do."""
         names = ", ".join(_tool_names(include_odoo=odoo is not None))
         return (
-            "Puedo explicar la POC y, si el backend Odoo esta habilitado, ejecutar estas tools: "
+            "I can explain the POC and, when the Odoo backend is enabled, run these tools: "
             f"{names}."
         )
 
