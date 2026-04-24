@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from sumampa_odoo_agent.config import AppSettings
-from sumampa_odoo_agent.integrations.session_store_backends import (
-    HybridSessionStore,
-    InMemorySessionStore,
-)
+from sumampa_odoo_agent.integrations.sessions.hybrid import HybridSessionStore
+from sumampa_odoo_agent.integrations.sessions.memory import InMemorySessionStore
 from sumampa_odoo_agent.services.contracts import SessionStore
 from sumampa_odoo_agent.services.errors import ConfigurationError
 
@@ -18,8 +16,8 @@ async def build_session_store(settings: AppSettings) -> SessionStore:
     if mode == "memory":
         return InMemorySessionStore()
     if mode == "hybrid":
-        from sumampa_odoo_agent.integrations.postgres_session_store import PostgresSessionStore
-        from sumampa_odoo_agent.integrations.redis_session_cache import RedisSessionCache
+        from sumampa_odoo_agent.integrations.sessions.postgres import PostgresSessionStore
+        from sumampa_odoo_agent.integrations.sessions.redis import RedisSessionCache
 
         primary = PostgresSessionStore(dsn=settings.session_store.postgres_dsn)
         cache = RedisSessionCache(

@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
-from sumampa_odoo_agent.integrations.postgres_session_store import PostgresSessionStore
-from sumampa_odoo_agent.integrations.redis_session_cache import RedisSessionCache
-from sumampa_odoo_agent.integrations.session_store_backends import HybridSessionStore
+from sumampa_odoo_agent.integrations.sessions import HybridSessionStore
 
 
 class _PrimaryStore:
@@ -60,8 +58,8 @@ async def test_hybrid_session_store_logs_cache_failures_and_uses_primary(
 ) -> None:
     primary = _PrimaryStore(payload={"status": "active"})
     store = HybridSessionStore(
-        primary=cast(PostgresSessionStore, primary),
-        cache=cast(RedisSessionCache, _FailingCache()),
+        primary=primary,
+        cache=_FailingCache(),
     )
 
     with caplog.at_level(logging.WARNING):

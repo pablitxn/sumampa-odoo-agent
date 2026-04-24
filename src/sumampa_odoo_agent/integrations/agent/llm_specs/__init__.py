@@ -1,6 +1,6 @@
 """Helpers and assets for versioned LLM specifications."""
 
-from sumampa_odoo_agent.integrations.llm_specs.loader import (
+from sumampa_odoo_agent.integrations.agent.llm_specs.loader import (
     load_llm_spec,
 )
 

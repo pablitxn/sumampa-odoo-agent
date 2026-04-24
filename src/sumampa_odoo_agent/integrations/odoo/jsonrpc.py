@@ -6,10 +6,12 @@ from typing import Any
 
 import httpx
 
-from sumampa_odoo_agent.integrations.odoo_common import (
+from sumampa_odoo_agent.integrations.odoo.mapping import normalize_odoo_value
+from sumampa_odoo_agent.integrations.odoo.payloads import (
     delivery_payload,
     invoice_payload,
-    normalize_odoo_value,
+)
+from sumampa_odoo_agent.integrations.odoo.validation import (
     validate_argentina_invoice_draft,
     validate_delivery_draft,
     validate_invoice_draft,
@@ -230,7 +232,9 @@ class OdooJsonRpcClient:
             "id": 1,
         }
         body = await self._post_jsonrpc(payload, operation="authenticate")
-        uid = body.get("result")
+        if "result" not in body:
+            raise _invalid_response_error("authenticate")
+        uid = body["result"]
         if not isinstance(uid, int) or uid <= 0:
             raise UpstreamServiceError(
                 ODOO_AUTHENTICATION_FAILED_MESSAGE,
@@ -267,6 +271,8 @@ class OdooJsonRpcClient:
             "id": 1,
         }
         body = await self._post_jsonrpc(payload, operation=f"{model}.{method}")
+        if "result" not in body:
+            raise _invalid_response_error(f"{model}.{method}")
         return body["result"]
 
     async def _post_jsonrpc(self, payload: dict[str, Any], *, operation: str) -> dict[str, Any]:
@@ -369,3 +375,11 @@ class OdooJsonRpcClient:
                 ),
             }
         return metadata
+
+
+def _invalid_response_error(operation: str) -> UpstreamServiceError:
+    return UpstreamServiceError(
+        ODOO_INVALID_RESPONSE_MESSAGE,
+        code="odoo_invalid_response",
+        details={"provider": "odoo", "operation": operation},
+    )

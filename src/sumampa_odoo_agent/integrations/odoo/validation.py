@@ -1,19 +1,12 @@
-"""Shared helpers for Odoo gateway implementations."""
+"""Validation helpers shared by Odoo gateway implementations."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any
-
 from sumampa_odoo_agent.services.models.odoo import (
     ArgentinaInvoiceValidationInput,
-    DeliveryInput,
-    DeliveryMoveInput,
     DeliveryValidationInput,
-    InvoiceInput,
     InvoiceValidationInput,
     OdooIntegrationMode,
-    OdooSearchHit,
     OdooValidationResult,
 )
 
@@ -139,91 +132,6 @@ def validate_delivery_draft(
         warnings=[],
         suggested_actions=_delivery_actions(missing),
     )
-
-
-def filter_hits(
-    rows: list[dict[str, Any]],
-    *,
-    query: str,
-    limit: int,
-    extra_keys: tuple[str, ...],
-) -> list[OdooSearchHit]:
-    needle = query.casefold()
-    hits: list[OdooSearchHit] = []
-    for row in rows:
-        searchable = [str(row.get("display_name", "")), *[str(row.get(key, "")) for key in extra_keys]]
-        if not any(needle in value.casefold() for value in searchable):
-            continue
-        hits.append(
-            OdooSearchHit(
-                id=int(row["id"]),
-                display_name=str(row["display_name"]),
-                extra={key: row.get(key) for key in extra_keys},
-            )
-        )
-        if len(hits) >= limit:
-            break
-    return hits
-
-
-def delivery_move_payload(
-    *,
-    move: DeliveryMoveInput,
-    metadata: dict[str, int | None],
-) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "product_id": metadata.get("product_variant_id") or move.product_id,
-        "product_uom_qty": move.quantity,
-        "name": move.name or f"Move {move.product_id}",
-    }
-    if metadata.get("uom_id") is not None:
-        payload["product_uom"] = metadata["uom_id"]
-    return payload
-
-
-def invoice_payload(invoice: InvoiceInput) -> dict[str, Any]:
-    payload = invoice.model_dump(exclude_none=True, exclude={"lines"})
-    payload["invoice_line_ids"] = [
-        (
-            0,
-            0,
-            {
-                "product_id": line.product_id,
-                "quantity": line.quantity,
-                "price_unit": line.price_unit,
-                "name": line.name,
-            },
-        )
-        for line in invoice.lines
-    ]
-    return payload
-
-
-def delivery_payload(
-    delivery: DeliveryInput,
-    *,
-    metadata: Mapping[int, Mapping[str, int | None]] | None = None,
-) -> dict[str, Any]:
-    resolved_metadata = metadata or {}
-    payload = delivery.model_dump(exclude_none=True, exclude={"moves"})
-    payload["move_ids"] = [
-        (
-            0,
-            0,
-            delivery_move_payload(
-                move=move,
-                metadata=dict(resolved_metadata.get(move.product_id, {})),
-            ),
-        )
-        for move in delivery.moves
-    ]
-    return payload
-
-
-def normalize_odoo_value(value: Any) -> Any:
-    if isinstance(value, (list, tuple)) and len(value) == 2 and isinstance(value[0], int):
-        return {"id": value[0], "name": value[1]}
-    return value
 
 
 def _odoo_validation_message(key: str, **context: object) -> str:

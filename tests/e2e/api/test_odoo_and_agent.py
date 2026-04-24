@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from sumampa_odoo_agent.api.main import create_app
-from sumampa_odoo_agent.integrations.agent_service import (
+from sumampa_odoo_agent.integrations.agent import (
     MicrosoftAgentFrameworkOpenAIService,
 )
 from sumampa_odoo_agent.services.models.runtime import AgentRunInput, AgentRunResult

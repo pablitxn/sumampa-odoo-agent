@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sumampa_odoo_agent.integrations.odoo_jsonrpc import OdooJsonRpcClient
+from sumampa_odoo_agent.integrations.odoo import OdooJsonRpcClient
 from sumampa_odoo_agent.services.models.odoo import SearchInput
 
 

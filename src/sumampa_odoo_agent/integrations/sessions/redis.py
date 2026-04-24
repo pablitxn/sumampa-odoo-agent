@@ -3,16 +3,37 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Protocol, cast
 
 from redis.asyncio import Redis
+
+
+class RedisClient(Protocol):
+    async def get(self, name: str) -> str | None:
+        """Return one decoded value."""
+
+    async def set(self, name: str, value: str, *, ex: int) -> object:
+        """Set one value with an expiry."""
+
+    async def delete(self, *names: str) -> object:
+        """Delete one or more values."""
+
+    async def aclose(self) -> None:
+        """Close the client."""
 
 
 class RedisSessionCache:
     """Best-effort Redis cache for session payloads."""
 
-    def __init__(self, *, url: str, key_prefix: str, ttl_seconds: int) -> None:
-        self._client = Redis.from_url(url, decode_responses=True)
+    def __init__(
+        self,
+        *,
+        url: str,
+        key_prefix: str,
+        ttl_seconds: int,
+        client: RedisClient | None = None,
+    ) -> None:
+        self._client = client or cast(RedisClient, Redis.from_url(url, decode_responses=True))
         self._key_prefix = key_prefix
         self._ttl_seconds = ttl_seconds
 

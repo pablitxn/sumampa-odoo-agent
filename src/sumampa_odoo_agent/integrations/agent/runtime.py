@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sumampa_odoo_agent.config import AppSettings
-from sumampa_odoo_agent.integrations.agent_service import (
+from sumampa_odoo_agent.integrations.agent.service import (
     DisabledAgentService,
     MicrosoftAgentFrameworkOpenAIService,
 )

@@ -5,9 +5,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from sumampa_odoo_agent.integrations.odoo_common import delivery_payload, invoice_payload
-from sumampa_odoo_agent.integrations.odoo_dry_run import DryRunOdooClient
-from sumampa_odoo_agent.integrations.odoo_jsonrpc import OdooJsonRpcClient
+from sumampa_odoo_agent.integrations.odoo import DryRunOdooClient, OdooJsonRpcClient
+from sumampa_odoo_agent.integrations.odoo.payloads import delivery_payload, invoice_payload
 from sumampa_odoo_agent.services.errors import UpstreamServiceError
 from sumampa_odoo_agent.services.models.odoo import (
     ArgentinaInvoiceValidationInput,
@@ -133,5 +132,33 @@ async def test_jsonrpc_translates_odoo_error_payload_to_application_error() -> N
         await client.aclose()
 
     assert exc_info.value.code == "odoo_upstream_failure"
+    assert exc_info.value.details["provider"] == "odoo"
+    assert exc_info.value.details["operation"] == "authenticate"
+
+
+@pytest.mark.asyncio
+async def test_jsonrpc_rejects_missing_result_payload_as_invalid_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            request=request,
+            json={"jsonrpc": "2.0"},
+        )
+
+    client = OdooJsonRpcClient(
+        base_url="http://127.0.0.1:8069",
+        database="sumampa",
+        username="admin",
+        password="admin",
+        transport=httpx.MockTransport(handler),
+    )
+
+    try:
+        with pytest.raises(UpstreamServiceError) as exc_info:
+            await client.search_products(SearchInput(query="yerba", limit=5))
+    finally:
+        await client.aclose()
+
+    assert exc_info.value.code == "odoo_invalid_response"
     assert exc_info.value.details["provider"] == "odoo"
     assert exc_info.value.details["operation"] == "authenticate"

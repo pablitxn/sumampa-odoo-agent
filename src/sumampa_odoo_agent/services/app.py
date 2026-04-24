@@ -6,9 +6,9 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from sumampa_odoo_agent.config import AppSettings
-from sumampa_odoo_agent.integrations.agent_runtime import build_agent_runtime
+from sumampa_odoo_agent.integrations.agent import build_agent_runtime
 from sumampa_odoo_agent.integrations.odoo import build_odoo_gateway
-from sumampa_odoo_agent.integrations.session_store import build_session_store
+from sumampa_odoo_agent.integrations.sessions import build_session_store
 from sumampa_odoo_agent.services.conversation import ConversationService
 
 

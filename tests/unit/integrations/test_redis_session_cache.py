@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 import pytest
-from redis.asyncio import Redis
 
-from sumampa_odoo_agent.integrations.redis_session_cache import RedisSessionCache
+from sumampa_odoo_agent.integrations.sessions import RedisSessionCache
 
 
 class _FakeRedis:
@@ -21,21 +18,20 @@ class _FakeRedis:
     async def set(self, key: str, value: str, *, ex: int) -> None:
         del key, value, ex
 
-    async def delete(self, key: str) -> None:
-        del key
+    async def delete(self, *names: str) -> None:
+        del names
 
     async def aclose(self) -> None:
         return None
 
 
 def _cache_with_value(value: str | None) -> RedisSessionCache:
-    cache = RedisSessionCache(
+    return RedisSessionCache(
         url="redis://127.0.0.1:6379/0",
         key_prefix="test",
         ttl_seconds=60,
+        client=_FakeRedis(value),
     )
-    cache._client = cast(Redis, _FakeRedis(value))
-    return cache
 
 
 @pytest.mark.asyncio

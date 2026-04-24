@@ -4,10 +4,10 @@ from typing import Any, cast
 
 import pytest
 
-from sumampa_odoo_agent.integrations.agent_service import (
+from sumampa_odoo_agent.integrations.agent import (
     MicrosoftAgentFrameworkOpenAIService,
 )
-from sumampa_odoo_agent.integrations.session_store_backends import InMemorySessionStore
+from sumampa_odoo_agent.integrations.sessions import InMemorySessionStore
 from sumampa_odoo_agent.services.models.runtime import (
     AgentRunInput,
     ConversationRuntimeContext,
@@ -77,15 +77,15 @@ async def test_agent_service_restores_framework_session_from_store(
 ) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setattr(
-        "sumampa_odoo_agent.integrations.agent_service._load_openai_chat_client",
+        "sumampa_odoo_agent.integrations.agent.service._load_openai_chat_client",
         lambda: FakeChatClient,
     )
     monkeypatch.setattr(
-        "sumampa_odoo_agent.integrations.agent_service._load_agent_type",
+        "sumampa_odoo_agent.integrations.agent.service._load_agent_type",
         lambda: FakeAgent,
     )
     monkeypatch.setattr(
-        "sumampa_odoo_agent.integrations.agent_service._load_agent_session_type",
+        "sumampa_odoo_agent.integrations.agent.service._load_agent_session_type",
         lambda: FakeSession,
     )
 

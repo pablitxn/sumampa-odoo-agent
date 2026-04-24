@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from sumampa_odoo_agent.integrations.postgres_session_store import PostgresSessionStore
+from sumampa_odoo_agent.integrations.sessions import PostgresSessionStore
 
 
 @pytest.mark.integration

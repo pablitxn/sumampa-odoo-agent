@@ -1,38 +1,16 @@
-"""Session store implementations."""
+"""Hybrid session store implementation."""
 
 from __future__ import annotations
 
 import logging
-from copy import deepcopy
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from sumampa_odoo_agent.integrations.postgres_session_store import PostgresSessionStore
-    from sumampa_odoo_agent.integrations.redis_session_cache import RedisSessionCache
+from sumampa_odoo_agent.integrations.sessions.protocols import (
+    DurableSessionStore,
+    SessionCache,
+)
 
 logger = logging.getLogger(__name__)
-
-
-class InMemorySessionStore:
-    """Simple in-process fallback store for tests and dev."""
-
-    def __init__(self) -> None:
-        self._payloads: dict[tuple[str, str], dict[str, Any]] = {}
-
-    async def load(self, *, namespace: str, session_id: str) -> dict[str, Any] | None:
-        payload = self._payloads.get((namespace, session_id))
-        if payload is None:
-            return None
-        return deepcopy(payload)
-
-    async def save(self, *, namespace: str, session_id: str, payload: dict[str, Any]) -> None:
-        self._payloads[(namespace, session_id)] = deepcopy(payload)
-
-    async def delete(self, *, namespace: str, session_id: str) -> None:
-        self._payloads.pop((namespace, session_id), None)
-
-    async def aclose(self) -> None:
-        return None
 
 
 class HybridSessionStore:
@@ -41,8 +19,8 @@ class HybridSessionStore:
     def __init__(
         self,
         *,
-        primary: PostgresSessionStore,
-        cache: RedisSessionCache,
+        primary: DurableSessionStore,
+        cache: SessionCache,
     ) -> None:
         self._primary = primary
         self._cache = cache

@@ -6,9 +6,9 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from sumampa_odoo_agent.integrations.agent_runtime import build_agent_runtime
+    from sumampa_odoo_agent.integrations.agent import build_agent_runtime
     from sumampa_odoo_agent.integrations.odoo import build_odoo_gateway
-    from sumampa_odoo_agent.integrations.session_store import build_session_store
+    from sumampa_odoo_agent.integrations.sessions import build_session_store
 
 __all__ = [
     "build_agent_runtime",
@@ -18,12 +18,15 @@ __all__ = [
 
 _EXPORTS = {
     "build_agent_runtime": (
-        "sumampa_odoo_agent.integrations.agent_runtime",
+        "sumampa_odoo_agent.integrations.agent",
         "build_agent_runtime",
     ),
-    "build_odoo_gateway": ("sumampa_odoo_agent.integrations.odoo", "build_odoo_gateway"),
+    "build_odoo_gateway": (
+        "sumampa_odoo_agent.integrations.odoo",
+        "build_odoo_gateway",
+    ),
     "build_session_store": (
-        "sumampa_odoo_agent.integrations.session_store",
+        "sumampa_odoo_agent.integrations.sessions",
         "build_session_store",
     ),
 }

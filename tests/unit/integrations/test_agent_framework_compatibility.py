@@ -5,7 +5,7 @@ from typing import Any, cast
 import agent_framework
 import pytest
 
-from sumampa_odoo_agent.integrations.agent_service import (
+from sumampa_odoo_agent.integrations.agent.framework import (
     _load_agent_session_type,
     _load_agent_type,
     _load_openai_chat_client,

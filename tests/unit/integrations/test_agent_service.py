@@ -3,10 +3,8 @@
 import httpx
 from openai import RateLimitError
 
-from sumampa_odoo_agent.integrations.agent_service import (
-    _load_openai_chat_client,
-    _translate_agent_run_error,
-)
+from sumampa_odoo_agent.integrations.agent.errors import _translate_agent_run_error
+from sumampa_odoo_agent.integrations.agent.framework import _load_openai_chat_client
 from sumampa_odoo_agent.services.errors import TooManyRequestsError
 
 

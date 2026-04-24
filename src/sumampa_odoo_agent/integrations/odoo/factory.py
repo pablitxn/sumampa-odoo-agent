@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from sumampa_odoo_agent.config import AppSettings
-from sumampa_odoo_agent.integrations.odoo_dry_run import DryRunOdooClient
-from sumampa_odoo_agent.integrations.odoo_jsonrpc import OdooJsonRpcClient
+from sumampa_odoo_agent.integrations.odoo.dry_run import DryRunOdooClient
+from sumampa_odoo_agent.integrations.odoo.jsonrpc import OdooJsonRpcClient
 from sumampa_odoo_agent.services.contracts import OdooGateway
 from sumampa_odoo_agent.services.errors import ConfigurationError
 

@@ -5,10 +5,12 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, ClassVar
 
-from sumampa_odoo_agent.integrations.odoo_common import (
+from sumampa_odoo_agent.integrations.odoo.payloads import (
     delivery_payload,
-    filter_hits,
     invoice_payload,
+)
+from sumampa_odoo_agent.integrations.odoo.search import filter_hits
+from sumampa_odoo_agent.integrations.odoo.validation import (
     validate_argentina_invoice_draft,
     validate_delivery_draft,
     validate_invoice_draft,
