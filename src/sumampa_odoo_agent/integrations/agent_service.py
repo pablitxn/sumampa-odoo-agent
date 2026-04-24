@@ -20,11 +20,15 @@ from sumampa_odoo_agent.services.errors import (
     TooManyRequestsError,
     UpstreamServiceError,
 )
-from sumampa_odoo_agent.services.message_specs import render_message
 from sumampa_odoo_agent.services.models.runtime import AgentRunInput, AgentRunResult
 from sumampa_odoo_agent.tools import build_agent_tools
 
 AGENT_SESSION_NAMESPACE = "agent"
+AGENT_MODULE_DISABLED_MESSAGE = (
+    "El módulo agent está deshabilitado. Configurá ORCHID_AGENT_MODE=openai para usarlo."
+)
+AGENT_RATE_LIMITED_MESSAGE = "El modelo esta temporalmente saturado. Reintenta en unos segundos."
+AGENT_UPSTREAM_FAILURE_MESSAGE = "El servicio del agente no pudo completar la solicitud."
 _RATE_LIMIT_RETRY_AFTER_PATTERN = re.compile(
     r"Please try again in (?P<seconds>\d+(?:\.\d+)?)s",
     re.IGNORECASE,
@@ -39,7 +43,7 @@ class DisabledAgentService:
     async def run(self, request: AgentRunInput) -> AgentRunResult:
         del request
         raise ConfigurationError(
-            render_message("runtime.json", "agent_module_disabled"),
+            AGENT_MODULE_DISABLED_MESSAGE,
             code="agent_module_disabled",
         )
 
@@ -90,7 +94,7 @@ class MicrosoftAgentFrameworkOpenAIService:
         )
         if not isinstance(agent, Agent):
             raise UpstreamServiceError(
-                render_message("runtime.json", "agent_upstream_failure"),
+                AGENT_UPSTREAM_FAILURE_MESSAGE,
                 code="agent_creation_failed",
                 details={"provider": "openai", "model": self._model},
             )
@@ -239,14 +243,14 @@ def _translate_agent_run_error(
         if retry_after_seconds is not None:
             details["retry_after_seconds"] = retry_after_seconds
         return TooManyRequestsError(
-            render_message("runtime.json", "agent_rate_limited"),
+            AGENT_RATE_LIMITED_MESSAGE,
             code="agent_rate_limited",
             details=details,
         )
 
     if any(_is_chat_client_exception(error) for error in _exception_chain(exc)):
         return UpstreamServiceError(
-            render_message("runtime.json", "agent_upstream_failure"),
+            AGENT_UPSTREAM_FAILURE_MESSAGE,
             code="agent_upstream_failure",
             details={
                 "provider": "openai",

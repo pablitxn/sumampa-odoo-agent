@@ -7,9 +7,10 @@ import base64
 import httpx
 
 from sumampa_odoo_agent.services.errors import UpstreamServiceError, ValidationError
-from sumampa_odoo_agent.services.message_specs import render_message
 from sumampa_odoo_agent.services.models.odoo import InvoiceAttachment
 from sumampa_odoo_agent.services.models.runtime import SerializedInvoiceAttachment
+
+ATTACHMENT_DOWNLOAD_FAILED_MESSAGE = "No se pudo descargar el adjunto."
 
 
 async def resolve_invoice_attachment(
@@ -47,7 +48,7 @@ async def resolve_invoice_attachment(
                 response.raise_for_status()
         except httpx.HTTPError as exc:
             raise UpstreamServiceError(
-                render_message("runtime.json", "attachment_download_failed"),
+                ATTACHMENT_DOWNLOAD_FAILED_MESSAGE,
                 code="attachment_download_failed",
                 details={
                     "filename": filename,

@@ -15,7 +15,6 @@ from sumampa_odoo_agent.integrations.odoo_common import (
     validate_invoice_draft,
 )
 from sumampa_odoo_agent.services.errors import UpstreamServiceError
-from sumampa_odoo_agent.services.message_specs import render_message
 from sumampa_odoo_agent.services.models.odoo import (
     ArgentinaInvoiceValidationInput,
     DeliveryInput,
@@ -30,6 +29,10 @@ from sumampa_odoo_agent.services.models.odoo import (
     ProductInput,
     SearchInput,
 )
+
+ODOO_AUTHENTICATION_FAILED_MESSAGE = "No se pudo autenticar contra Odoo."
+ODOO_UPSTREAM_FAILURE_MESSAGE = "Odoo no pudo completar la solicitud."
+ODOO_INVALID_RESPONSE_MESSAGE = "Odoo devolvio una respuesta invalida."
 
 
 class OdooJsonRpcClient:
@@ -230,7 +233,7 @@ class OdooJsonRpcClient:
         uid = body.get("result")
         if not isinstance(uid, int) or uid <= 0:
             raise UpstreamServiceError(
-                render_message("runtime.json", "odoo_authentication_failed"),
+                ODOO_AUTHENTICATION_FAILED_MESSAGE,
                 code="odoo_authentication_failed",
                 details={"provider": "odoo", "operation": "authenticate"},
             )
@@ -273,7 +276,7 @@ class OdooJsonRpcClient:
             body = response.json()
         except httpx.HTTPError as exc:
             raise UpstreamServiceError(
-                render_message("runtime.json", "odoo_upstream_failure"),
+                ODOO_UPSTREAM_FAILURE_MESSAGE,
                 code="odoo_upstream_failure",
                 details={
                     "provider": "odoo",
@@ -283,19 +286,19 @@ class OdooJsonRpcClient:
             ) from exc
         except ValueError as exc:
             raise UpstreamServiceError(
-                render_message("runtime.json", "odoo_invalid_response"),
+                ODOO_INVALID_RESPONSE_MESSAGE,
                 code="odoo_invalid_response",
                 details={"provider": "odoo", "operation": operation},
             ) from exc
         if not isinstance(body, dict):
             raise UpstreamServiceError(
-                render_message("runtime.json", "odoo_invalid_response"),
+                ODOO_INVALID_RESPONSE_MESSAGE,
                 code="odoo_invalid_response",
                 details={"provider": "odoo", "operation": operation},
             )
         if "error" in body:
             raise UpstreamServiceError(
-                render_message("runtime.json", "odoo_upstream_failure"),
+                ODOO_UPSTREAM_FAILURE_MESSAGE,
                 code="odoo_upstream_failure",
                 details={
                     "provider": "odoo",

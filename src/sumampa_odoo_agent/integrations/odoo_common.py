@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from sumampa_odoo_agent.services.message_specs import render_message
 from sumampa_odoo_agent.services.models.odoo import (
     ArgentinaInvoiceValidationInput,
     DeliveryInput,
@@ -17,6 +16,15 @@ from sumampa_odoo_agent.services.models.odoo import (
     OdooSearchHit,
     OdooValidationResult,
 )
+
+_ODOO_VALIDATION_MESSAGES = {
+    "move_type_actual": "move_type actual: {move_type}",
+    "wsfe_service_actual": "wsfe_service actual: {wsfe_service}",
+    "document_letter_mismatch": "Letra esperada {expected_letter}, pero vino {document_letter}.",
+    "document_letter_missing": "Falta definir letra de comprobante; sugerida: {expected_letter}.",
+    "partner_tax_id_or_doc_type_missing": "Falta CUIT o tipo de documento del receptor.",
+    "email_to_missing": "No hay email destino para el envio posterior de la factura.",
+}
 
 
 def validate_invoice_draft(
@@ -219,7 +227,7 @@ def normalize_odoo_value(value: Any) -> Any:
 
 
 def _odoo_validation_message(key: str, **context: object) -> str:
-    return render_message("odoo_validation.json", key, **context)
+    return _ODOO_VALIDATION_MESSAGES[key].format(**context)
 
 
 def _invoice_actions(missing: list[str]) -> list[str]:
