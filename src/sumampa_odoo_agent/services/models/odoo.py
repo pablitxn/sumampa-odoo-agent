@@ -34,20 +34,12 @@ class PartnerInput(BaseModel):
     supplier_rank: int = Field(default=1, ge=0)
 
 
-class CreatePartnerCommand(PartnerInput):
-    pass
-
-
 class ProductInput(BaseModel):
     name: str = Field(min_length=1)
     default_code: str | None = None
     list_price: float = Field(default=0.0, ge=0)
     standard_price: float | None = Field(default=None, ge=0)
     description_sale: str | None = None
-
-
-class CreateProductCommand(ProductInput):
-    pass
 
 
 class InvoiceLineInput(BaseModel):
@@ -57,7 +49,7 @@ class InvoiceLineInput(BaseModel):
     name: str | None = None
 
 
-class CreateInvoiceCommand(BaseModel):
+class InvoiceInput(BaseModel):
     partner_id: int
     move_type: InvoiceMoveType = Field(default="out_invoice")
     invoice_date: str | None = None
@@ -71,7 +63,7 @@ class DeliveryMoveInput(BaseModel):
     name: str | None = None
 
 
-class CreateDeliveryCommand(BaseModel):
+class DeliveryInput(BaseModel):
     partner_id: int
     picking_type_id: int
     location_id: int
@@ -81,32 +73,7 @@ class CreateDeliveryCommand(BaseModel):
     scheduled_date: str | None = None
 
 
-class SearchPartnersQuery(BaseModel):
-    query: str = Field(min_length=1)
-    limit: int = Field(default=10, ge=1, le=50)
-
-
-class SearchProductsQuery(BaseModel):
-    query: str = Field(min_length=1)
-    limit: int = Field(default=10, ge=1, le=50)
-
-
-class SearchJournalsQuery(BaseModel):
-    query: str = Field(min_length=1)
-    limit: int = Field(default=10, ge=1, le=50)
-
-
-class SearchTaxesQuery(BaseModel):
-    query: str = Field(min_length=1)
-    limit: int = Field(default=10, ge=1, le=50)
-
-
-class SearchPickingTypesQuery(BaseModel):
-    query: str = Field(min_length=1)
-    limit: int = Field(default=10, ge=1, le=50)
-
-
-class SearchLocationsQuery(BaseModel):
+class SearchInput(BaseModel):
     query: str = Field(min_length=1)
     limit: int = Field(default=10, ge=1, le=50)
 
@@ -123,14 +90,14 @@ class OdooSearchResult(BaseModel):
     hits: list[OdooSearchHit]
 
 
-class ValidateInvoiceDraftQuery(BaseModel):
+class InvoiceValidationInput(BaseModel):
     partner_id: int | None = None
     journal_id: int | None = None
     move_type: InvoiceMoveType = Field(default="out_invoice")
     line_count: int = Field(default=0, ge=0)
 
 
-class ValidateDeliveryDraftQuery(BaseModel):
+class DeliveryValidationInput(BaseModel):
     partner_id: int | None = None
     picking_type_id: int | None = None
     location_id: int | None = None
@@ -138,7 +105,7 @@ class ValidateDeliveryDraftQuery(BaseModel):
     move_count: int = Field(default=0, ge=0)
 
 
-class ValidateArgentinaInvoiceDraftQuery(BaseModel):
+class ArgentinaInvoiceValidationInput(BaseModel):
     emitter_vat: str | None = None
     emitter_taxpayer_type: str | None = None
     point_of_sale: int | None = None

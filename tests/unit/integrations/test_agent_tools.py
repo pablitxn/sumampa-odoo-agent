@@ -7,8 +7,8 @@ from typing import Any, cast
 
 import pytest
 
-from sumampa_odoo_agent.integrations.agent_tools import build_agent_tools
 from sumampa_odoo_agent.integrations.odoo_client import DryRunOdooClient
+from sumampa_odoo_agent.tools import build_agent_tools
 
 AgentTool = Callable[..., Awaitable[dict[str, Any]]]
 

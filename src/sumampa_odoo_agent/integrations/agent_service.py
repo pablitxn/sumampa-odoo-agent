@@ -13,7 +13,6 @@ from uuid import uuid4
 
 from openai import RateLimitError
 
-from sumampa_odoo_agent.integrations.agent_tools import build_agent_tools
 from sumampa_odoo_agent.integrations.llm_specs import load_llm_spec
 from sumampa_odoo_agent.services.contracts import OdooGateway, SessionStore
 from sumampa_odoo_agent.services.errors import (
@@ -23,6 +22,7 @@ from sumampa_odoo_agent.services.errors import (
 )
 from sumampa_odoo_agent.services.message_specs import render_message
 from sumampa_odoo_agent.services.models.runtime import AgentRunInput, AgentRunResult
+from sumampa_odoo_agent.tools import build_agent_tools
 
 AGENT_SESSION_NAMESPACE = "agent"
 _RATE_LIMIT_RETRY_AFTER_PATTERN = re.compile(

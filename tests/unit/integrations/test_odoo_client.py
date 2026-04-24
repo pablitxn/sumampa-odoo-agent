@@ -9,14 +9,14 @@ from sumampa_odoo_agent.integrations.odoo_client import DryRunOdooClient, OdooJs
 from sumampa_odoo_agent.integrations.odoo_common import delivery_payload, invoice_payload
 from sumampa_odoo_agent.services.errors import UpstreamServiceError
 from sumampa_odoo_agent.services.models.odoo import (
-    CreateDeliveryCommand,
-    CreateInvoiceCommand,
-    CreateProductCommand,
+    ArgentinaInvoiceValidationInput,
+    DeliveryInput,
     DeliveryMoveInput,
+    InvoiceInput,
     InvoiceLineInput,
-    SearchProductsQuery,
-    ValidateArgentinaInvoiceDraftQuery,
-    ValidateInvoiceDraftQuery,
+    InvoiceValidationInput,
+    ProductInput,
+    SearchInput,
 )
 
 
@@ -25,13 +25,13 @@ async def test_dry_run_client_searches_and_mutates_in_memory() -> None:
     client = DryRunOdooClient()
 
     created = await client.create_product(
-        CreateProductCommand(
+        ProductInput(
             name="Termo acero",
             default_code="TERMO-ACERO",
             list_price=45.0,
         )
     )
-    search = await client.search_products(SearchProductsQuery(query="termo", limit=5))
+    search = await client.search_products(SearchInput(query="termo", limit=5))
 
     assert created.mode == "dry-run"
     assert created.model == "product.template"
@@ -49,7 +49,7 @@ async def test_validation_results_match_between_dry_run_and_jsonrpc_modes() -> N
     )
 
     try:
-        query = ValidateInvoiceDraftQuery()
+        query = InvoiceValidationInput()
         dry_run_result = await dry_run.validate_invoice_draft(query)
         jsonrpc_result = await jsonrpc.validate_invoice_draft(query)
     finally:
@@ -67,7 +67,7 @@ async def test_argentina_invoice_validation_reports_fiscal_warnings() -> None:
     client = DryRunOdooClient()
 
     result = await client.validate_argentina_invoice_draft(
-        ValidateArgentinaInvoiceDraftQuery(
+        ArgentinaInvoiceValidationInput(
             emitter_vat="30123456789",
             emitter_taxpayer_type="responsable_inscripto",
             point_of_sale=1,
@@ -87,12 +87,12 @@ async def test_argentina_invoice_validation_reports_fiscal_warnings() -> None:
 @pytest.mark.asyncio
 async def test_dry_run_invoice_and_delivery_use_shared_payload_builders() -> None:
     client = DryRunOdooClient()
-    invoice = CreateInvoiceCommand(
+    invoice = InvoiceInput(
         partner_id=101,
         lines=[InvoiceLineInput(product_id=201, quantity=2, price_unit=12.5, name="Bombilla")],
         narration="Pedido WhatsApp",
     )
-    delivery = CreateDeliveryCommand(
+    delivery = DeliveryInput(
         partner_id=101,
         picking_type_id=501,
         location_id=601,
@@ -127,7 +127,7 @@ async def test_jsonrpc_translates_odoo_error_payload_to_application_error() -> N
 
     try:
         with pytest.raises(UpstreamServiceError) as exc_info:
-            await client.search_products(SearchProductsQuery(query="yerba", limit=5))
+            await client.search_products(SearchInput(query="yerba", limit=5))
     finally:
         await client.aclose()
 

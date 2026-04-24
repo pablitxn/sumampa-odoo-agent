@@ -7,34 +7,34 @@ from typing import Any
 
 from sumampa_odoo_agent.services.message_specs import render_message
 from sumampa_odoo_agent.services.models.odoo import (
-    CreateDeliveryCommand,
-    CreateInvoiceCommand,
+    ArgentinaInvoiceValidationInput,
+    DeliveryInput,
     DeliveryMoveInput,
+    DeliveryValidationInput,
+    InvoiceInput,
+    InvoiceValidationInput,
     OdooIntegrationMode,
     OdooSearchHit,
     OdooValidationResult,
-    ValidateArgentinaInvoiceDraftQuery,
-    ValidateDeliveryDraftQuery,
-    ValidateInvoiceDraftQuery,
 )
 
 
 def validate_invoice_draft(
     *,
     mode: OdooIntegrationMode,
-    query: ValidateInvoiceDraftQuery,
+    draft: InvoiceValidationInput,
 ) -> OdooValidationResult:
     missing: list[str] = []
-    if not query.partner_id:
+    if not draft.partner_id:
         missing.append("partner_id")
-    if not query.journal_id:
+    if not draft.journal_id:
         missing.append("journal_id")
-    if query.line_count <= 0:
+    if draft.line_count <= 0:
         missing.append("lines")
 
     warnings: list[str] = []
-    if query.move_type != "out_invoice":
-        warnings.append(_odoo_validation_message("move_type_actual", move_type=query.move_type))
+    if draft.move_type != "out_invoice":
+        warnings.append(_odoo_validation_message("move_type_actual", move_type=draft.move_type))
 
     return OdooValidationResult(
         mode=mode,
@@ -49,51 +49,51 @@ def validate_invoice_draft(
 def validate_argentina_invoice_draft(
     *,
     mode: OdooIntegrationMode,
-    query: ValidateArgentinaInvoiceDraftQuery,
+    draft: ArgentinaInvoiceValidationInput,
 ) -> OdooValidationResult:
     missing: list[str] = []
-    if not query.emitter_vat:
+    if not draft.emitter_vat:
         missing.append("emitter_vat")
-    if not query.emitter_taxpayer_type:
+    if not draft.emitter_taxpayer_type:
         missing.append("emitter_taxpayer_type")
-    if not query.point_of_sale:
+    if not draft.point_of_sale:
         missing.append("point_of_sale")
-    if not query.partner_name:
+    if not draft.partner_name:
         missing.append("partner_name")
-    if query.line_count <= 0:
+    if draft.line_count <= 0:
         missing.append("lines")
 
     warnings: list[str] = []
-    if query.wsfe_service and query.wsfe_service.casefold() != "wsfev1":
+    if draft.wsfe_service and draft.wsfe_service.casefold() != "wsfev1":
         warnings.append(
             _odoo_validation_message(
                 "wsfe_service_actual",
-                wsfe_service=query.wsfe_service,
+                wsfe_service=draft.wsfe_service,
             )
         )
 
     expected_letter = _expected_ar_document_letter(
-        emitter_taxpayer_type=query.emitter_taxpayer_type,
-        partner_taxpayer_type=query.partner_taxpayer_type,
+        emitter_taxpayer_type=draft.emitter_taxpayer_type,
+        partner_taxpayer_type=draft.partner_taxpayer_type,
     )
-    if expected_letter and query.document_letter and query.document_letter.upper() != expected_letter:
+    if expected_letter and draft.document_letter and draft.document_letter.upper() != expected_letter:
         warnings.append(
             _odoo_validation_message(
                 "document_letter_mismatch",
                 expected_letter=expected_letter,
-                document_letter=query.document_letter.upper(),
+                document_letter=draft.document_letter.upper(),
             )
         )
-    if expected_letter and not query.document_letter:
+    if expected_letter and not draft.document_letter:
         warnings.append(
             _odoo_validation_message(
                 "document_letter_missing",
                 expected_letter=expected_letter,
             )
         )
-    if not query.partner_vat and not query.partner_doc_type:
+    if not draft.partner_vat and not draft.partner_doc_type:
         warnings.append(_odoo_validation_message("partner_tax_id_or_doc_type_missing"))
-    if not query.email_to:
+    if not draft.email_to:
         warnings.append(_odoo_validation_message("email_to_missing"))
 
     return OdooValidationResult(
@@ -109,18 +109,18 @@ def validate_argentina_invoice_draft(
 def validate_delivery_draft(
     *,
     mode: OdooIntegrationMode,
-    query: ValidateDeliveryDraftQuery,
+    draft: DeliveryValidationInput,
 ) -> OdooValidationResult:
     missing: list[str] = []
-    if not query.partner_id:
+    if not draft.partner_id:
         missing.append("partner_id")
-    if not query.picking_type_id:
+    if not draft.picking_type_id:
         missing.append("picking_type_id")
-    if not query.location_id:
+    if not draft.location_id:
         missing.append("location_id")
-    if not query.location_dest_id:
+    if not draft.location_dest_id:
         missing.append("location_dest_id")
-    if query.move_count <= 0:
+    if draft.move_count <= 0:
         missing.append("moves")
 
     return OdooValidationResult(
@@ -173,8 +173,8 @@ def delivery_move_payload(
     return payload
 
 
-def invoice_payload(command: CreateInvoiceCommand) -> dict[str, Any]:
-    payload = command.model_dump(exclude_none=True, exclude={"lines"})
+def invoice_payload(invoice: InvoiceInput) -> dict[str, Any]:
+    payload = invoice.model_dump(exclude_none=True, exclude={"lines"})
     payload["invoice_line_ids"] = [
         (
             0,
@@ -186,18 +186,18 @@ def invoice_payload(command: CreateInvoiceCommand) -> dict[str, Any]:
                 "name": line.name,
             },
         )
-        for line in command.lines
+        for line in invoice.lines
     ]
     return payload
 
 
 def delivery_payload(
-    command: CreateDeliveryCommand,
+    delivery: DeliveryInput,
     *,
     metadata: Mapping[int, Mapping[str, int | None]] | None = None,
 ) -> dict[str, Any]:
     resolved_metadata = metadata or {}
-    payload = command.model_dump(exclude_none=True, exclude={"moves"})
+    payload = delivery.model_dump(exclude_none=True, exclude={"moves"})
     payload["move_ids"] = [
         (
             0,
@@ -207,7 +207,7 @@ def delivery_payload(
                 metadata=dict(resolved_metadata.get(move.product_id, {})),
             ),
         )
-        for move in command.moves
+        for move in delivery.moves
     ]
     return payload
 

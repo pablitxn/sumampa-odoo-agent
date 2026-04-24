@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sumampa_odoo_agent.integrations.odoo_client import OdooJsonRpcClient
-from sumampa_odoo_agent.services.models.odoo import SearchPartnersQuery, SearchProductsQuery
+from sumampa_odoo_agent.services.models.odoo import SearchInput
 
 
 def _client(*, env: dict[str, str]) -> OdooJsonRpcClient:
@@ -23,7 +23,7 @@ def _client(*, env: dict[str, str]) -> OdooJsonRpcClient:
 async def test_jsonrpc_search_partners_finds_seeded_supplier(odoo19_env: dict[str, str]) -> None:
     client = _client(env=odoo19_env)
     try:
-        result = await client.search_partners(SearchPartnersQuery(query="palacios", limit=10))
+        result = await client.search_partners(SearchInput(query="palacios", limit=10))
     finally:
         await client.aclose()
 
@@ -36,7 +36,7 @@ async def test_jsonrpc_search_partners_finds_seeded_supplier(odoo19_env: dict[st
 async def test_jsonrpc_search_products_finds_seeded_alias_product(odoo19_env: dict[str, str]) -> None:
     client = _client(env=odoo19_env)
     try:
-        result = await client.search_products(SearchProductsQuery(query="HAR-0008", limit=10))
+        result = await client.search_products(SearchInput(query="HAR-0008", limit=10))
     finally:
         await client.aclose()
 

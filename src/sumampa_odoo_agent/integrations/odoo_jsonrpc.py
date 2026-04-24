@@ -17,23 +17,18 @@ from sumampa_odoo_agent.integrations.odoo_common import (
 from sumampa_odoo_agent.services.errors import UpstreamServiceError
 from sumampa_odoo_agent.services.message_specs import render_message
 from sumampa_odoo_agent.services.models.odoo import (
-    CreateDeliveryCommand,
-    CreateInvoiceCommand,
-    CreatePartnerCommand,
-    CreateProductCommand,
+    ArgentinaInvoiceValidationInput,
+    DeliveryInput,
+    DeliveryValidationInput,
+    InvoiceInput,
+    InvoiceValidationInput,
     OdooOperationResult,
     OdooSearchHit,
     OdooSearchResult,
     OdooValidationResult,
-    SearchJournalsQuery,
-    SearchLocationsQuery,
-    SearchPartnersQuery,
-    SearchPickingTypesQuery,
-    SearchProductsQuery,
-    SearchTaxesQuery,
-    ValidateArgentinaInvoiceDraftQuery,
-    ValidateDeliveryDraftQuery,
-    ValidateInvoiceDraftQuery,
+    PartnerInput,
+    ProductInput,
+    SearchInput,
 )
 
 
@@ -65,7 +60,7 @@ class OdooJsonRpcClient:
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def search_partners(self, query: SearchPartnersQuery) -> OdooSearchResult:
+    async def search_partners(self, query: SearchInput) -> OdooSearchResult:
         rows = await self._execute_kw(
             "res.partner",
             "search_read",
@@ -93,7 +88,7 @@ class OdooJsonRpcClient:
             ],
         )
 
-    async def search_products(self, query: SearchProductsQuery) -> OdooSearchResult:
+    async def search_products(self, query: SearchInput) -> OdooSearchResult:
         rows = await self._execute_kw(
             "product.template",
             "search_read",
@@ -126,7 +121,7 @@ class OdooJsonRpcClient:
             ],
         )
 
-    async def search_journals(self, query: SearchJournalsQuery) -> OdooSearchResult:
+    async def search_journals(self, query: SearchInput) -> OdooSearchResult:
         return await self._search_read_hits(
             model="account.journal",
             domain=["|", ("name", "ilike", query.query), ("code", "ilike", query.query)],
@@ -134,7 +129,7 @@ class OdooJsonRpcClient:
             limit=query.limit,
         )
 
-    async def search_taxes(self, query: SearchTaxesQuery) -> OdooSearchResult:
+    async def search_taxes(self, query: SearchInput) -> OdooSearchResult:
         return await self._search_read_hits(
             model="account.tax",
             domain=[("name", "ilike", query.query)],
@@ -142,7 +137,7 @@ class OdooJsonRpcClient:
             limit=query.limit,
         )
 
-    async def search_picking_types(self, query: SearchPickingTypesQuery) -> OdooSearchResult:
+    async def search_picking_types(self, query: SearchInput) -> OdooSearchResult:
         return await self._search_read_hits(
             model="stock.picking.type",
             domain=["|", ("name", "ilike", query.query), ("code", "ilike", query.query)],
@@ -150,7 +145,7 @@ class OdooJsonRpcClient:
             limit=query.limit,
         )
 
-    async def search_locations(self, query: SearchLocationsQuery) -> OdooSearchResult:
+    async def search_locations(self, query: SearchInput) -> OdooSearchResult:
         return await self._search_read_hits(
             model="stock.location",
             domain=[("complete_name", "ilike", query.query)],
@@ -160,24 +155,24 @@ class OdooJsonRpcClient:
 
     async def validate_invoice_draft(
         self,
-        query: ValidateInvoiceDraftQuery,
+        draft: InvoiceValidationInput,
     ) -> OdooValidationResult:
-        return validate_invoice_draft(mode="jsonrpc", query=query)
+        return validate_invoice_draft(mode="jsonrpc", draft=draft)
 
     async def validate_argentina_invoice_draft(
         self,
-        query: ValidateArgentinaInvoiceDraftQuery,
+        draft: ArgentinaInvoiceValidationInput,
     ) -> OdooValidationResult:
-        return validate_argentina_invoice_draft(mode="jsonrpc", query=query)
+        return validate_argentina_invoice_draft(mode="jsonrpc", draft=draft)
 
     async def validate_delivery_draft(
         self,
-        query: ValidateDeliveryDraftQuery,
+        draft: DeliveryValidationInput,
     ) -> OdooValidationResult:
-        return validate_delivery_draft(mode="jsonrpc", query=query)
+        return validate_delivery_draft(mode="jsonrpc", draft=draft)
 
-    async def create_partner(self, command: CreatePartnerCommand) -> OdooOperationResult:
-        payload = command.model_dump(exclude_none=True)
+    async def create_partner(self, partner: PartnerInput) -> OdooOperationResult:
+        payload = partner.model_dump(exclude_none=True)
         record_id = await self._execute_kw("res.partner", "create", [payload])
         return OdooOperationResult(
             mode="jsonrpc",
@@ -186,8 +181,8 @@ class OdooJsonRpcClient:
             payload=payload,
         )
 
-    async def create_product(self, command: CreateProductCommand) -> OdooOperationResult:
-        payload = command.model_dump(exclude_none=True)
+    async def create_product(self, product: ProductInput) -> OdooOperationResult:
+        payload = product.model_dump(exclude_none=True)
         record_id = await self._execute_kw("product.template", "create", [payload])
         return OdooOperationResult(
             mode="jsonrpc",
@@ -196,8 +191,8 @@ class OdooJsonRpcClient:
             payload=payload,
         )
 
-    async def create_invoice(self, command: CreateInvoiceCommand) -> OdooOperationResult:
-        payload = invoice_payload(command)
+    async def create_invoice(self, invoice: InvoiceInput) -> OdooOperationResult:
+        payload = invoice_payload(invoice)
         record_id = await self._execute_kw("account.move", "create", [payload])
         return OdooOperationResult(
             mode="jsonrpc",
@@ -206,9 +201,9 @@ class OdooJsonRpcClient:
             payload=payload,
         )
 
-    async def create_delivery(self, command: CreateDeliveryCommand) -> OdooOperationResult:
-        metadata = await self._product_template_metadata([move.product_id for move in command.moves])
-        payload = delivery_payload(command, metadata=metadata)
+    async def create_delivery(self, delivery: DeliveryInput) -> OdooOperationResult:
+        metadata = await self._product_template_metadata([move.product_id for move in delivery.moves])
+        payload = delivery_payload(delivery, metadata=metadata)
         record_id = await self._execute_kw("stock.picking", "create", [payload])
         return OdooOperationResult(
             mode="jsonrpc",

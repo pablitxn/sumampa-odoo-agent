@@ -14,23 +14,18 @@ from sumampa_odoo_agent.integrations.odoo_common import (
     validate_invoice_draft,
 )
 from sumampa_odoo_agent.services.models.odoo import (
-    CreateDeliveryCommand,
-    CreateInvoiceCommand,
-    CreatePartnerCommand,
-    CreateProductCommand,
+    ArgentinaInvoiceValidationInput,
+    DeliveryInput,
+    DeliveryValidationInput,
+    InvoiceInput,
+    InvoiceValidationInput,
     OdooOperationResult,
     OdooSearchHit,
     OdooSearchResult,
     OdooValidationResult,
-    SearchJournalsQuery,
-    SearchLocationsQuery,
-    SearchPartnersQuery,
-    SearchPickingTypesQuery,
-    SearchProductsQuery,
-    SearchTaxesQuery,
-    ValidateArgentinaInvoiceDraftQuery,
-    ValidateDeliveryDraftQuery,
-    ValidateInvoiceDraftQuery,
+    PartnerInput,
+    ProductInput,
+    SearchInput,
 )
 
 
@@ -102,7 +97,7 @@ class DryRunOdooClient:
     async def aclose(self) -> None:
         return None
 
-    async def search_partners(self, query: SearchPartnersQuery) -> OdooSearchResult:
+    async def search_partners(self, query: SearchInput) -> OdooSearchResult:
         needle = query.query.casefold()
         hits = [
             OdooSearchHit(
@@ -117,7 +112,7 @@ class DryRunOdooClient:
         ][: query.limit]
         return OdooSearchResult(mode="dry-run", model="res.partner", hits=hits)
 
-    async def search_products(self, query: SearchProductsQuery) -> OdooSearchResult:
+    async def search_products(self, query: SearchInput) -> OdooSearchResult:
         needle = query.query.casefold()
         hits = [
             OdooSearchHit(
@@ -135,7 +130,7 @@ class DryRunOdooClient:
         ][: query.limit]
         return OdooSearchResult(mode="dry-run", model="product.template", hits=hits)
 
-    async def search_journals(self, query: SearchJournalsQuery) -> OdooSearchResult:
+    async def search_journals(self, query: SearchInput) -> OdooSearchResult:
         return OdooSearchResult(
             mode="dry-run",
             model="account.journal",
@@ -147,7 +142,7 @@ class DryRunOdooClient:
             ),
         )
 
-    async def search_taxes(self, query: SearchTaxesQuery) -> OdooSearchResult:
+    async def search_taxes(self, query: SearchInput) -> OdooSearchResult:
         return OdooSearchResult(
             mode="dry-run",
             model="account.tax",
@@ -159,7 +154,7 @@ class DryRunOdooClient:
             ),
         )
 
-    async def search_picking_types(self, query: SearchPickingTypesQuery) -> OdooSearchResult:
+    async def search_picking_types(self, query: SearchInput) -> OdooSearchResult:
         return OdooSearchResult(
             mode="dry-run",
             model="stock.picking.type",
@@ -171,7 +166,7 @@ class DryRunOdooClient:
             ),
         )
 
-    async def search_locations(self, query: SearchLocationsQuery) -> OdooSearchResult:
+    async def search_locations(self, query: SearchInput) -> OdooSearchResult:
         return OdooSearchResult(
             mode="dry-run",
             model="stock.location",
@@ -185,24 +180,24 @@ class DryRunOdooClient:
 
     async def validate_invoice_draft(
         self,
-        query: ValidateInvoiceDraftQuery,
+        draft: InvoiceValidationInput,
     ) -> OdooValidationResult:
-        return validate_invoice_draft(mode="dry-run", query=query)
+        return validate_invoice_draft(mode="dry-run", draft=draft)
 
     async def validate_argentina_invoice_draft(
         self,
-        query: ValidateArgentinaInvoiceDraftQuery,
+        draft: ArgentinaInvoiceValidationInput,
     ) -> OdooValidationResult:
-        return validate_argentina_invoice_draft(mode="dry-run", query=query)
+        return validate_argentina_invoice_draft(mode="dry-run", draft=draft)
 
     async def validate_delivery_draft(
         self,
-        query: ValidateDeliveryDraftQuery,
+        draft: DeliveryValidationInput,
     ) -> OdooValidationResult:
-        return validate_delivery_draft(mode="dry-run", query=query)
+        return validate_delivery_draft(mode="dry-run", draft=draft)
 
-    async def create_partner(self, command: CreatePartnerCommand) -> OdooOperationResult:
-        payload = command.model_dump(exclude_none=True)
+    async def create_partner(self, partner: PartnerInput) -> OdooOperationResult:
+        payload = partner.model_dump(exclude_none=True)
         payload.setdefault("vat", None)
         payload.setdefault("email", None)
         record_id = self._next_partner_id
@@ -223,8 +218,8 @@ class DryRunOdooClient:
             payload=payload,
         )
 
-    async def create_product(self, command: CreateProductCommand) -> OdooOperationResult:
-        payload = command.model_dump(exclude_none=True)
+    async def create_product(self, product: ProductInput) -> OdooOperationResult:
+        payload = product.model_dump(exclude_none=True)
         payload.setdefault("default_code", None)
         payload.setdefault("standard_price", 0.0)
         record_id = self._next_product_id
@@ -245,8 +240,8 @@ class DryRunOdooClient:
             payload=payload,
         )
 
-    async def create_invoice(self, command: CreateInvoiceCommand) -> OdooOperationResult:
-        payload = invoice_payload(command)
+    async def create_invoice(self, invoice: InvoiceInput) -> OdooOperationResult:
+        payload = invoice_payload(invoice)
         return OdooOperationResult(
             mode="dry-run",
             model="account.move",
@@ -254,8 +249,8 @@ class DryRunOdooClient:
             payload=payload,
         )
 
-    async def create_delivery(self, command: CreateDeliveryCommand) -> OdooOperationResult:
-        payload = delivery_payload(command)
+    async def create_delivery(self, delivery: DeliveryInput) -> OdooOperationResult:
+        payload = delivery_payload(delivery)
         return OdooOperationResult(
             mode="dry-run",
             model="stock.picking",

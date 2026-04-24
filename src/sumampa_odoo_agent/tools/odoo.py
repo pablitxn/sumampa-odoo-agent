@@ -1,4 +1,4 @@
-"""Agent tools backed by Odoo gateways."""
+"""Odoo tools available to the agent."""
 
 from __future__ import annotations
 
@@ -10,22 +10,17 @@ from pydantic import BaseModel
 
 from sumampa_odoo_agent.services.contracts import OdooGateway
 from sumampa_odoo_agent.services.models.odoo import (
-    CreateDeliveryCommand,
-    CreateInvoiceCommand,
-    CreatePartnerCommand,
-    CreateProductCommand,
+    ArgentinaInvoiceValidationInput,
+    DeliveryInput,
     DeliveryMoveInput,
+    DeliveryValidationInput,
+    InvoiceInput,
     InvoiceLineInput,
     InvoiceMoveType,
-    SearchJournalsQuery,
-    SearchLocationsQuery,
-    SearchPartnersQuery,
-    SearchPickingTypesQuery,
-    SearchProductsQuery,
-    SearchTaxesQuery,
-    ValidateArgentinaInvoiceDraftQuery,
-    ValidateDeliveryDraftQuery,
-    ValidateInvoiceDraftQuery,
+    InvoiceValidationInput,
+    PartnerInput,
+    ProductInput,
+    SearchInput,
 )
 
 ToolCallable = Callable[..., Awaitable[dict[str, Any]]]
@@ -52,7 +47,7 @@ def _create_partner_tool(odoo: OdooGateway) -> ToolCallable:
         """Create a partner in Odoo and return the resulting payload."""
         return await _dump_model(
             odoo.create_partner(
-                CreatePartnerCommand(
+                PartnerInput(
                     name=name,
                     vat=vat,
                     email=email,
@@ -70,7 +65,7 @@ def _search_partners_tool(odoo: OdooGateway) -> ToolCallable:
         limit: Annotated[int, "Cantidad maxima de resultados"] = 10,
     ) -> dict[str, Any]:
         """Search partners in Odoo and return candidate IDs."""
-        return await _dump_model(odoo.search_partners(SearchPartnersQuery(query=query, limit=limit)))
+        return await _dump_model(odoo.search_partners(SearchInput(query=query, limit=limit)))
 
     return search_partners
 
@@ -81,7 +76,7 @@ def _search_products_tool(odoo: OdooGateway) -> ToolCallable:
         limit: Annotated[int, "Cantidad maxima de resultados"] = 10,
     ) -> dict[str, Any]:
         """Search products in Odoo and return candidate IDs."""
-        return await _dump_model(odoo.search_products(SearchProductsQuery(query=query, limit=limit)))
+        return await _dump_model(odoo.search_products(SearchInput(query=query, limit=limit)))
 
     return search_products
 
@@ -92,7 +87,7 @@ def _search_journals_tool(odoo: OdooGateway) -> ToolCallable:
         limit: Annotated[int, "Cantidad maxima de resultados"] = 10,
     ) -> dict[str, Any]:
         """Search journals in Odoo and return candidate IDs."""
-        return await _dump_model(odoo.search_journals(SearchJournalsQuery(query=query, limit=limit)))
+        return await _dump_model(odoo.search_journals(SearchInput(query=query, limit=limit)))
 
     return search_journals
 
@@ -103,7 +98,7 @@ def _search_taxes_tool(odoo: OdooGateway) -> ToolCallable:
         limit: Annotated[int, "Cantidad maxima de resultados"] = 10,
     ) -> dict[str, Any]:
         """Search taxes in Odoo and return candidate IDs."""
-        return await _dump_model(odoo.search_taxes(SearchTaxesQuery(query=query, limit=limit)))
+        return await _dump_model(odoo.search_taxes(SearchInput(query=query, limit=limit)))
 
     return search_taxes
 
@@ -115,7 +110,7 @@ def _search_picking_types_tool(odoo: OdooGateway) -> ToolCallable:
     ) -> dict[str, Any]:
         """Search picking types in Odoo and return candidate IDs."""
         return await _dump_model(
-            odoo.search_picking_types(SearchPickingTypesQuery(query=query, limit=limit))
+            odoo.search_picking_types(SearchInput(query=query, limit=limit))
         )
 
     return search_picking_types
@@ -127,7 +122,7 @@ def _search_locations_tool(odoo: OdooGateway) -> ToolCallable:
         limit: Annotated[int, "Cantidad maxima de resultados"] = 10,
     ) -> dict[str, Any]:
         """Search stock locations in Odoo and return candidate IDs."""
-        return await _dump_model(odoo.search_locations(SearchLocationsQuery(query=query, limit=limit)))
+        return await _dump_model(odoo.search_locations(SearchInput(query=query, limit=limit)))
 
     return search_locations
 
@@ -142,7 +137,7 @@ def _validate_invoice_draft_tool(odoo: OdooGateway) -> ToolCallable:
         """Validate invoice prerequisites before trying to create it."""
         return await _dump_model(
             odoo.validate_invoice_draft(
-                ValidateInvoiceDraftQuery(
+                InvoiceValidationInput(
                     partner_id=partner_id,
                     journal_id=journal_id,
                     move_type=move_type,
@@ -174,7 +169,7 @@ def _validate_argentina_invoice_draft_tool(odoo: OdooGateway) -> ToolCallable:
         """Validate Argentine electronic invoice prerequisites before issuing a document."""
         return await _dump_model(
             odoo.validate_argentina_invoice_draft(
-                ValidateArgentinaInvoiceDraftQuery(
+                ArgentinaInvoiceValidationInput(
                     emitter_vat=emitter_vat,
                     emitter_taxpayer_type=emitter_taxpayer_type,
                     point_of_sale=point_of_sale,
@@ -204,7 +199,7 @@ def _validate_delivery_draft_tool(odoo: OdooGateway) -> ToolCallable:
         """Validate delivery prerequisites before trying to create it."""
         return await _dump_model(
             odoo.validate_delivery_draft(
-                ValidateDeliveryDraftQuery(
+                DeliveryValidationInput(
                     partner_id=partner_id,
                     picking_type_id=picking_type_id,
                     location_id=location_id,
@@ -228,7 +223,7 @@ def _create_product_tool(odoo: OdooGateway) -> ToolCallable:
         """Create a product in Odoo and return the resulting payload."""
         return await _dump_model(
             odoo.create_product(
-                CreateProductCommand(
+                ProductInput(
                     name=name,
                     default_code=default_code,
                     list_price=list_price,
@@ -258,7 +253,7 @@ def _create_invoice_tool(odoo: OdooGateway) -> ToolCallable:
         """Create an invoice in Odoo and return the resulting payload."""
         return await _dump_model(
             odoo.create_invoice(
-                CreateInvoiceCommand(
+                InvoiceInput(
                     partner_id=partner_id,
                     move_type=move_type,
                     invoice_date=invoice_date,
@@ -287,7 +282,7 @@ def _create_delivery_tool(odoo: OdooGateway) -> ToolCallable:
         """Create a delivery order in Odoo and return the resulting payload."""
         return await _dump_model(
             odoo.create_delivery(
-                CreateDeliveryCommand(
+                DeliveryInput(
                     partner_id=partner_id,
                     picking_type_id=picking_type_id,
                     location_id=location_id,
@@ -319,25 +314,9 @@ _ODOO_TOOL_SPECS: tuple[OdooToolSpec, ...] = (
 )
 
 
-def _tool_names(*, include_odoo: bool) -> list[str]:
-    names = ["explain_capabilities"]
-    if include_odoo:
-        names.extend(spec.name for spec in _ODOO_TOOL_SPECS)
-    return names
+def odoo_tool_names() -> list[str]:
+    return [spec.name for spec in _ODOO_TOOL_SPECS]
 
 
-def build_agent_tools(*, odoo: OdooGateway | None) -> list[Any]:
-    async def explain_capabilities() -> str:
-        """Explain what this Sumampa Odoo agent can currently do."""
-        names = ", ".join(_tool_names(include_odoo=odoo is not None))
-        return (
-            "Puedo explicar la POC y, si el backend Odoo esta habilitado, ejecutar estas tools: "
-            f"{names}."
-        )
-
-    tools: list[Any] = [explain_capabilities]
-    if odoo is None:
-        return tools
-
-    tools.extend(spec.build(odoo) for spec in _ODOO_TOOL_SPECS)
-    return tools
+def build_odoo_tools(odoo: OdooGateway) -> list[Any]:
+    return [spec.build(odoo) for spec in _ODOO_TOOL_SPECS]

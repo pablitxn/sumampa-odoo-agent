@@ -5,22 +5,17 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from sumampa_odoo_agent.services.models.odoo import (
-    CreateDeliveryCommand,
-    CreateInvoiceCommand,
-    CreatePartnerCommand,
-    CreateProductCommand,
+    ArgentinaInvoiceValidationInput,
+    DeliveryInput,
+    DeliveryValidationInput,
+    InvoiceInput,
+    InvoiceValidationInput,
     OdooOperationResult,
     OdooSearchResult,
     OdooValidationResult,
-    SearchJournalsQuery,
-    SearchLocationsQuery,
-    SearchPartnersQuery,
-    SearchPickingTypesQuery,
-    SearchProductsQuery,
-    SearchTaxesQuery,
-    ValidateArgentinaInvoiceDraftQuery,
-    ValidateDeliveryDraftQuery,
-    ValidateInvoiceDraftQuery,
+    PartnerInput,
+    ProductInput,
+    SearchInput,
 )
 from sumampa_odoo_agent.services.models.runtime import AgentRunInput, AgentRunResult
 
@@ -43,52 +38,52 @@ class OdooGateway(Protocol):
     async def aclose(self) -> None:
         """Release gateway resources."""
 
-    async def search_partners(self, query: SearchPartnersQuery) -> OdooSearchResult:
+    async def search_partners(self, query: SearchInput) -> OdooSearchResult:
         """Search partners in Odoo."""
 
-    async def search_products(self, query: SearchProductsQuery) -> OdooSearchResult:
+    async def search_products(self, query: SearchInput) -> OdooSearchResult:
         """Search products in Odoo."""
 
-    async def search_journals(self, query: SearchJournalsQuery) -> OdooSearchResult:
+    async def search_journals(self, query: SearchInput) -> OdooSearchResult:
         """Search journals in Odoo."""
 
-    async def search_taxes(self, query: SearchTaxesQuery) -> OdooSearchResult:
+    async def search_taxes(self, query: SearchInput) -> OdooSearchResult:
         """Search taxes in Odoo."""
 
-    async def search_picking_types(self, query: SearchPickingTypesQuery) -> OdooSearchResult:
+    async def search_picking_types(self, query: SearchInput) -> OdooSearchResult:
         """Search picking types in Odoo."""
 
-    async def search_locations(self, query: SearchLocationsQuery) -> OdooSearchResult:
+    async def search_locations(self, query: SearchInput) -> OdooSearchResult:
         """Search stock locations in Odoo."""
 
     async def validate_invoice_draft(
         self,
-        query: ValidateInvoiceDraftQuery,
+        draft: InvoiceValidationInput,
     ) -> OdooValidationResult:
         """Validate an invoice draft before creation."""
 
     async def validate_argentina_invoice_draft(
         self,
-        query: ValidateArgentinaInvoiceDraftQuery,
+        draft: ArgentinaInvoiceValidationInput,
     ) -> OdooValidationResult:
         """Validate an Argentina electronic invoice draft before creation."""
 
     async def validate_delivery_draft(
         self,
-        query: ValidateDeliveryDraftQuery,
+        draft: DeliveryValidationInput,
     ) -> OdooValidationResult:
         """Validate a delivery draft before creation."""
 
-    async def create_partner(self, command: CreatePartnerCommand) -> OdooOperationResult:
+    async def create_partner(self, partner: PartnerInput) -> OdooOperationResult:
         """Create a partner in Odoo."""
 
-    async def create_product(self, command: CreateProductCommand) -> OdooOperationResult:
+    async def create_product(self, product: ProductInput) -> OdooOperationResult:
         """Create a product in Odoo."""
 
-    async def create_invoice(self, command: CreateInvoiceCommand) -> OdooOperationResult:
+    async def create_invoice(self, invoice: InvoiceInput) -> OdooOperationResult:
         """Create an invoice in Odoo."""
 
-    async def create_delivery(self, command: CreateDeliveryCommand) -> OdooOperationResult:
+    async def create_delivery(self, delivery: DeliveryInput) -> OdooOperationResult:
         """Create a delivery order in Odoo."""
 
 

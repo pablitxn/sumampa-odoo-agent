@@ -7,8 +7,9 @@ Backend FastAPI orientado a un bot de WhatsApp que orquesta flujos operativos so
 - `src/sumampa_odoo_agent/api`: surface HTTP.
 - `src/sumampa_odoo_agent/services`: orquestación y reglas de negocio.
 - `src/sumampa_odoo_agent/integrations`: armado de backends concretos.
+- `src/sumampa_odoo_agent/tools`: tools concretas que el agente puede invocar.
 
-La app ya no usa `MCP`, buses de commands/queries ni registro dinámico de módulos.
+La app ya no usa `MCP`, buses internos ni registro dinámico de módulos.
 Odoo se opera desde tools internas del agente; no hay una API HTTP directa para mutaciones o lookups.
 
 ## Endpoints
