@@ -63,11 +63,11 @@ def main() -> int:
 
 
 def build_summary() -> dict[str, Any]:
-    base_url = os.environ.get("ORCHID_ODOO_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
-    database = os.environ.get("ORCHID_ODOO_DATABASE", DEFAULT_DATABASE)
-    admin_login = os.environ.get("ORCHID_ODOO_USERNAME", DEFAULT_ADMIN_LOGIN)
-    admin_password = os.environ.get("ORCHID_ODOO_PASSWORD", DEFAULT_ADMIN_PASSWORD)
-    timeout_seconds = float(os.environ.get("ORCHID_ODOO_TIMEOUT_SECONDS", "30"))
+    base_url = os.environ.get("ODOO_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
+    database = os.environ.get("ODOO_DATABASE", DEFAULT_DATABASE)
+    admin_login = os.environ.get("ODOO_USERNAME", DEFAULT_ADMIN_LOGIN)
+    admin_password = os.environ.get("ODOO_PASSWORD", DEFAULT_ADMIN_PASSWORD)
+    timeout_seconds = float(os.environ.get("ODOO_TIMEOUT_SECONDS", "30"))
 
     wait_for_odoo(base_url=base_url, timeout_seconds=timeout_seconds)
     uid = authenticate(

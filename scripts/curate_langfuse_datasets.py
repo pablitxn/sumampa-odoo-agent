@@ -16,7 +16,7 @@ from sumampa_odoo_agent.config import AppSettings, load_settings
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("dataset_name", help="Target Langfuse dataset name")
-    parser.add_argument("--env", default=None, help="ORCHID_ENV-compatible config environment")
+    parser.add_argument("--env", default=None, help="PYTHON_ENV-compatible config environment")
     parser.add_argument("--limit", type=int, default=50)
     parser.add_argument("--session-id", default=None)
     parser.add_argument("--tag", action="append", dest="tags", default=[])

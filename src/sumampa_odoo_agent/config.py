@@ -74,8 +74,8 @@ class AttachmentSettings(BaseModel):
     endpoint_url: str = "http://127.0.0.1:9000"
     access_key: str | None = None
     secret_key: str | None = None
-    access_key_env_var: str = "ORCHID_ATTACHMENT_STORE_ACCESS_KEY"
-    secret_key_env_var: str = "ORCHID_ATTACHMENT_STORE_SECRET_KEY"
+    access_key_env_var: str = "ATTACHMENT_STORE_ACCESS_KEY"
+    secret_key_env_var: str = "ATTACHMENT_STORE_SECRET_KEY"
     region_name: str = "us-east-1"
     key_prefix: str = "attachments"
     retention_ttl_seconds: int = Field(default=604800, ge=60)
@@ -125,64 +125,64 @@ def _coerce_bool(value: str) -> bool:
 
 
 _ENV_OVERRIDES: tuple[EnvOverride, ...] = (
-    EnvOverride("ORCHID_AGENT_MODE", ("agent", "mode")),
-    EnvOverride("ORCHID_AGENT_SYSTEM_PROMPT_OVERRIDE", ("agent", "system_prompt_override")),
-    EnvOverride("ORCHID_ODOO_MODE", ("odoo", "mode")),
-    EnvOverride("ORCHID_ODOO_BASE_URL", ("odoo", "base_url")),
-    EnvOverride("ORCHID_ODOO_DATABASE", ("odoo", "database")),
-    EnvOverride("ORCHID_ODOO_USERNAME", ("odoo", "username")),
-    EnvOverride("ORCHID_ODOO_PASSWORD", ("odoo", "password")),
-    EnvOverride("ORCHID_ODOO_TIMEOUT_SECONDS", ("odoo", "timeout_seconds"), float),
-    EnvOverride("ORCHID_SESSION_STORE_MODE", ("session_store", "mode")),
-    EnvOverride("ORCHID_SESSION_STORE_POSTGRES_DSN", ("session_store", "postgres_dsn")),
-    EnvOverride("ORCHID_SESSION_STORE_REDIS_URL", ("session_store", "redis_url")),
-    EnvOverride("ORCHID_SESSION_STORE_REDIS_TTL_SECONDS", ("session_store", "redis_ttl_seconds"), int),
-    EnvOverride("ORCHID_SESSION_STORE_REDIS_KEY_PREFIX", ("session_store", "redis_key_prefix")),
-    EnvOverride("ORCHID_ATTACHMENT_STORE_MODE", ("attachments", "store_mode")),
-    EnvOverride("ORCHID_ATTACHMENT_STORE_BUCKET", ("attachments", "bucket_name")),
-    EnvOverride("ORCHID_ATTACHMENT_STORE_ENDPOINT_URL", ("attachments", "endpoint_url")),
-    EnvOverride("ORCHID_ATTACHMENT_STORE_ACCESS_KEY", ("attachments", "access_key")),
-    EnvOverride("ORCHID_ATTACHMENT_STORE_SECRET_KEY", ("attachments", "secret_key")),
-    EnvOverride("ORCHID_ATTACHMENT_STORE_ACCESS_KEY_ENV_VAR", ("attachments", "access_key_env_var")),
-    EnvOverride("ORCHID_ATTACHMENT_STORE_SECRET_KEY_ENV_VAR", ("attachments", "secret_key_env_var")),
-    EnvOverride("ORCHID_ATTACHMENT_STORE_REGION", ("attachments", "region_name")),
-    EnvOverride("ORCHID_ATTACHMENT_STORE_KEY_PREFIX", ("attachments", "key_prefix")),
-    EnvOverride("ORCHID_ATTACHMENT_RETENTION_TTL_SECONDS", ("attachments", "retention_ttl_seconds"), int),
-    EnvOverride("ORCHID_ATTACHMENT_MAX_BYTES", ("attachments", "max_attachment_bytes"), int),
-    EnvOverride("ORCHID_ATTACHMENT_MAX_TEXT_CHARS", ("attachments", "max_text_chars"), int),
-    EnvOverride("ORCHID_ATTACHMENT_MAX_PDF_PAGES", ("attachments", "max_pdf_pages"), int),
-    EnvOverride("ORCHID_OBSERVABILITY_MODE", ("observability", "mode")),
-    EnvOverride("ORCHID_OBSERVABILITY_ENVIRONMENT", ("observability", "environment")),
-    EnvOverride("ORCHID_OBSERVABILITY_CAPTURE_MODE", ("observability", "capture_mode")),
-    EnvOverride("ORCHID_OBSERVABILITY_SAMPLE_RATE", ("observability", "sample_rate"), float),
-    EnvOverride("ORCHID_LANGFUSE_PUBLIC_KEY_ENV_VAR", ("observability", "public_key_env_var")),
-    EnvOverride("ORCHID_LANGFUSE_SECRET_KEY_ENV_VAR", ("observability", "secret_key_env_var")),
-    EnvOverride("ORCHID_LANGFUSE_BASE_URL", ("observability", "base_url")),
+    EnvOverride("AGENT_MODE", ("agent", "mode")),
+    EnvOverride("AGENT_SYSTEM_PROMPT_OVERRIDE", ("agent", "system_prompt_override")),
+    EnvOverride("ODOO_MODE", ("odoo", "mode")),
+    EnvOverride("ODOO_BASE_URL", ("odoo", "base_url")),
+    EnvOverride("ODOO_DATABASE", ("odoo", "database")),
+    EnvOverride("ODOO_USERNAME", ("odoo", "username")),
+    EnvOverride("ODOO_PASSWORD", ("odoo", "password")),
+    EnvOverride("ODOO_TIMEOUT_SECONDS", ("odoo", "timeout_seconds"), float),
+    EnvOverride("SESSION_STORE_MODE", ("session_store", "mode")),
+    EnvOverride("SESSION_STORE_POSTGRES_DSN", ("session_store", "postgres_dsn")),
+    EnvOverride("SESSION_STORE_REDIS_URL", ("session_store", "redis_url")),
+    EnvOverride("SESSION_STORE_REDIS_TTL_SECONDS", ("session_store", "redis_ttl_seconds"), int),
+    EnvOverride("SESSION_STORE_REDIS_KEY_PREFIX", ("session_store", "redis_key_prefix")),
+    EnvOverride("ATTACHMENT_STORE_MODE", ("attachments", "store_mode")),
+    EnvOverride("ATTACHMENT_STORE_BUCKET", ("attachments", "bucket_name")),
+    EnvOverride("ATTACHMENT_STORE_ENDPOINT_URL", ("attachments", "endpoint_url")),
+    EnvOverride("ATTACHMENT_STORE_ACCESS_KEY", ("attachments", "access_key")),
+    EnvOverride("ATTACHMENT_STORE_SECRET_KEY", ("attachments", "secret_key")),
+    EnvOverride("ATTACHMENT_STORE_ACCESS_KEY_ENV_VAR", ("attachments", "access_key_env_var")),
+    EnvOverride("ATTACHMENT_STORE_SECRET_KEY_ENV_VAR", ("attachments", "secret_key_env_var")),
+    EnvOverride("ATTACHMENT_STORE_REGION", ("attachments", "region_name")),
+    EnvOverride("ATTACHMENT_STORE_KEY_PREFIX", ("attachments", "key_prefix")),
+    EnvOverride("ATTACHMENT_RETENTION_TTL_SECONDS", ("attachments", "retention_ttl_seconds"), int),
+    EnvOverride("ATTACHMENT_MAX_BYTES", ("attachments", "max_attachment_bytes"), int),
+    EnvOverride("ATTACHMENT_MAX_TEXT_CHARS", ("attachments", "max_text_chars"), int),
+    EnvOverride("ATTACHMENT_MAX_PDF_PAGES", ("attachments", "max_pdf_pages"), int),
+    EnvOverride("OBSERVABILITY_MODE", ("observability", "mode")),
+    EnvOverride("OBSERVABILITY_ENVIRONMENT", ("observability", "environment")),
+    EnvOverride("OBSERVABILITY_CAPTURE_MODE", ("observability", "capture_mode")),
+    EnvOverride("OBSERVABILITY_SAMPLE_RATE", ("observability", "sample_rate"), float),
+    EnvOverride("LANGFUSE_PUBLIC_KEY_ENV_VAR", ("observability", "public_key_env_var")),
+    EnvOverride("LANGFUSE_SECRET_KEY_ENV_VAR", ("observability", "secret_key_env_var")),
+    EnvOverride("LANGFUSE_BASE_URL", ("observability", "base_url")),
     EnvOverride(
-        "ORCHID_OBSERVABILITY_FLUSH_ON_SHUTDOWN",
+        "OBSERVABILITY_FLUSH_ON_SHUTDOWN",
         ("observability", "flush_on_shutdown"),
         _coerce_bool,
     ),
-    EnvOverride("ORCHID_TELEMETRY_ENABLED", ("telemetry", "enabled"), _coerce_bool),
-    EnvOverride("ORCHID_TELEMETRY_SERVICE_NAME", ("telemetry", "service_name")),
-    EnvOverride("ORCHID_TELEMETRY_ENVIRONMENT", ("telemetry", "environment")),
-    EnvOverride("ORCHID_TELEMETRY_CLUSTER", ("telemetry", "cluster")),
-    EnvOverride("ORCHID_OTEL_EXPORTER_OTLP_ENDPOINT", ("telemetry", "otlp_endpoint")),
-    EnvOverride("ORCHID_TELEMETRY_OTLP_PROTOCOL", ("telemetry", "otlp_protocol")),
-    EnvOverride("ORCHID_TELEMETRY_TRACES_ENABLED", ("telemetry", "traces_enabled"), _coerce_bool),
-    EnvOverride("ORCHID_TELEMETRY_METRICS_ENABLED", ("telemetry", "metrics_enabled"), _coerce_bool),
-    EnvOverride("ORCHID_TELEMETRY_LOGS_ENABLED", ("telemetry", "logs_enabled"), _coerce_bool),
-    EnvOverride("ORCHID_TELEMETRY_SAMPLE_RATE", ("telemetry", "sample_rate"), float),
-    EnvOverride("ORCHID_TELEMETRY_CAPTURE_PAYLOADS", ("telemetry", "capture_payloads"), _coerce_bool),
+    EnvOverride("TELEMETRY_ENABLED", ("telemetry", "enabled"), _coerce_bool),
+    EnvOverride("TELEMETRY_SERVICE_NAME", ("telemetry", "service_name")),
+    EnvOverride("TELEMETRY_ENVIRONMENT", ("telemetry", "environment")),
+    EnvOverride("TELEMETRY_CLUSTER", ("telemetry", "cluster")),
+    EnvOverride("OTEL_EXPORTER_OTLP_ENDPOINT", ("telemetry", "otlp_endpoint")),
+    EnvOverride("TELEMETRY_OTLP_PROTOCOL", ("telemetry", "otlp_protocol")),
+    EnvOverride("TELEMETRY_TRACES_ENABLED", ("telemetry", "traces_enabled"), _coerce_bool),
+    EnvOverride("TELEMETRY_METRICS_ENABLED", ("telemetry", "metrics_enabled"), _coerce_bool),
+    EnvOverride("TELEMETRY_LOGS_ENABLED", ("telemetry", "logs_enabled"), _coerce_bool),
+    EnvOverride("TELEMETRY_SAMPLE_RATE", ("telemetry", "sample_rate"), float),
+    EnvOverride("TELEMETRY_CAPTURE_PAYLOADS", ("telemetry", "capture_payloads"), _coerce_bool),
 )
 
 
 def resolve_environment(env: str | None = None) -> str:
-    """Resolve target environment using `ORCHID_ENV` as fallback."""
+    """Resolve target environment using `PYTHON_ENV` as fallback."""
 
     if env:
         return env
-    return os.environ.get("ORCHID_ENV", DEFAULT_ENV)
+    return os.environ.get("PYTHON_ENV", DEFAULT_ENV)
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

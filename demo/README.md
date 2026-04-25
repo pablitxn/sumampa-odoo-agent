@@ -14,7 +14,7 @@ El pill del panel consulta `GET /health` sobre el mismo origen del endpoint conf
 Levantar la API:
 
 ```bash
-ORCHID_ATTACHMENT_STORE_MODE=memory uv run sumampa_odoo_agent --reload
+ATTACHMENT_STORE_MODE=memory uv run sumampa_odoo_agent --reload
 ```
 
 Endpoint default:
@@ -45,7 +45,7 @@ El demo envia el contrato actual de la API:
 }
 ```
 
-`ORCHID_ATTACHMENT_STORE_MODE=memory` evita depender de MinIO para pruebas rapidas con adjuntos.
+`ATTACHMENT_STORE_MODE=memory` evita depender de MinIO para pruebas rapidas con adjuntos.
 
 Los shortcuts de facturas cargan una imagen mock en el composer para simular el caso
 `mensaje + imagen` de WhatsApp.

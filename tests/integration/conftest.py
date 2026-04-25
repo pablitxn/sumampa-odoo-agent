@@ -23,12 +23,12 @@ def odoo19_env() -> dict[str, str]:
         pytest.skip("Set RUN_ODOO19_INTEGRATION=1 to run against local Odoo 19.")
 
     env = os.environ.copy()
-    env.setdefault("ORCHID_ODOO_BASE_URL", "http://127.0.0.1:8069")
-    env.setdefault("ORCHID_ODOO_DATABASE", "sumampa_integration")
-    env.setdefault("ORCHID_ODOO_USERNAME", "admin")
-    env.setdefault("ORCHID_ODOO_PASSWORD", "admin")
+    env.setdefault("ODOO_BASE_URL", "http://127.0.0.1:8069")
+    env.setdefault("ODOO_DATABASE", "sumampa_integration")
+    env.setdefault("ODOO_USERNAME", "admin")
+    env.setdefault("ODOO_PASSWORD", "")
     env.setdefault("ODOO_MASTER_PASSWORD", "")
-    env.setdefault("ORCHID_ODOO_TIMEOUT_SECONDS", "30")
+    env.setdefault("ODOO_TIMEOUT_SECONDS", "30")
 
     subprocess.run(
         [sys.executable, str(PROJECT_ROOT / "scripts" / "bootstrap_odoo_integration.py")],

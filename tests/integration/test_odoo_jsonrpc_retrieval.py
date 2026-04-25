@@ -10,11 +10,11 @@ from sumampa_odoo_agent.services.models.odoo import SearchInput
 
 def _client(*, env: dict[str, str]) -> OdooJsonRpcClient:
     return OdooJsonRpcClient(
-        base_url=env["ORCHID_ODOO_BASE_URL"],
-        database=env["ORCHID_ODOO_DATABASE"],
-        username=env["ORCHID_ODOO_USERNAME"],
-        password=env["ORCHID_ODOO_PASSWORD"],
-        timeout_seconds=float(env["ORCHID_ODOO_TIMEOUT_SECONDS"]),
+        base_url=env["ODOO_BASE_URL"],
+        database=env["ODOO_DATABASE"],
+        username=env["ODOO_USERNAME"],
+        password=env["ODOO_PASSWORD"],
+        timeout_seconds=float(env["ODOO_TIMEOUT_SECONDS"]),
     )
 
 

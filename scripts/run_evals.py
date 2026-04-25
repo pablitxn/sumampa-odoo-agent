@@ -22,7 +22,7 @@ from sumampa_odoo_agent.services.models.attachments import AttachmentSource
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("dataset_name")
-    parser.add_argument("--env", default=None, help="ORCHID_ENV-compatible config environment")
+    parser.add_argument("--env", default=None, help="PYTHON_ENV-compatible config environment")
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--description", default="Sumampa Odoo agent regression eval")
     parser.add_argument("--repetitions", type=int, default=1)

@@ -75,14 +75,14 @@ docker compose --profile odoo --profile observability up -d \
 Then run the app with OTLP export enabled:
 
 ```bash
-ORCHID_SESSION_STORE_MODE=hybrid \
-ORCHID_ODOO_MODE=jsonrpc \
-ORCHID_ODOO_BASE_URL=http://127.0.0.1:8069 \
-ORCHID_ODOO_DATABASE=sumampa_integration \
-ORCHID_ODOO_USERNAME=admin \
-ORCHID_ODOO_PASSWORD="${ODOO_PASSWORD:?Set private credentials}" \
-ORCHID_TELEMETRY_ENABLED=true \
-ORCHID_OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317 \
+SESSION_STORE_MODE=hybrid \
+ODOO_MODE=jsonrpc \
+ODOO_BASE_URL=http://127.0.0.1:8069 \
+ODOO_DATABASE=sumampa_integration \
+ODOO_USERNAME=admin \
+ODOO_PASSWORD="${ODOO_PASSWORD:?Set private credentials}" \
+TELEMETRY_ENABLED=true \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317 \
 uv run sumampa_odoo_agent --reload
 ```
 
@@ -104,8 +104,8 @@ Open `http://localhost:3000`, create a project, then add the project keys to thi
 `.env`:
 
 ```bash
-ORCHID_OBSERVABILITY_MODE=langfuse
-ORCHID_LANGFUSE_BASE_URL=http://localhost:3000
+OBSERVABILITY_MODE=langfuse
+LANGFUSE_BASE_URL=http://localhost:3000
 LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 ```

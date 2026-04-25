@@ -87,7 +87,7 @@ SCORE_CONFIGS: tuple[dict[str, Any], ...] = (
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--env", default=None, help="ORCHID_ENV-compatible config environment")
+    parser.add_argument("--env", default=None, help="PYTHON_ENV-compatible config environment")
     args = parser.parse_args()
 
     settings = load_settings(env=args.env)

@@ -33,7 +33,7 @@ from sumampa_odoo_agent.tools import build_agent_tools
 
 AGENT_SESSION_NAMESPACE = "agent"
 AGENT_MODULE_DISABLED_MESSAGE = (
-    "The agent module is disabled. Set ORCHID_AGENT_MODE=openai to use it."
+    "The agent module is disabled. Set AGENT_MODE=openai to use it."
 )
 
 

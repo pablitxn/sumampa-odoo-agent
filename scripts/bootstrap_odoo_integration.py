@@ -137,12 +137,12 @@ PRODUCTS = BASE_PRODUCTS
 
 
 def main() -> int:
-    base_url = os.environ.get("ORCHID_ODOO_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
-    database = os.environ.get("ORCHID_ODOO_DATABASE", DEFAULT_DATABASE)
-    admin_login = os.environ.get("ORCHID_ODOO_USERNAME", DEFAULT_ADMIN_LOGIN)
-    admin_password = os.environ.get("ORCHID_ODOO_PASSWORD", DEFAULT_ADMIN_PASSWORD)
+    base_url = os.environ.get("ODOO_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
+    database = os.environ.get("ODOO_DATABASE", DEFAULT_DATABASE)
+    admin_login = os.environ.get("ODOO_USERNAME", DEFAULT_ADMIN_LOGIN)
+    admin_password = os.environ.get("ODOO_PASSWORD", DEFAULT_ADMIN_PASSWORD)
     master_password = os.environ.get("ODOO_MASTER_PASSWORD", DEFAULT_MASTER_PASSWORD)
-    timeout_seconds = float(os.environ.get("ORCHID_ODOO_TIMEOUT_SECONDS", "30"))
+    timeout_seconds = float(os.environ.get("ODOO_TIMEOUT_SECONDS", "30"))
     modules = tuple(
         module.strip()
         for module in os.environ.get("ODOO_BOOTSTRAP_MODULES", ",".join(DEFAULT_MODULES)).split(",")

@@ -15,7 +15,7 @@ def langfuse_client() -> Langfuse:
         pytest.skip("Langfuse credentials are not configured")
     client = Langfuse(
         base_url=os.environ.get("LANGFUSE_BASE_URL", "http://localhost:3000"),
-        environment=os.environ.get("ORCHID_OBSERVABILITY_ENVIRONMENT", "integration"),
+        environment=os.environ.get("OBSERVABILITY_ENVIRONMENT", "integration"),
     )
     if not client.auth_check():
         pytest.skip("Langfuse auth check failed")

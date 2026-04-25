@@ -47,7 +47,7 @@ def _test_settings() -> AppSettings:
 
 @pytest.fixture(autouse=True)
 def patch_runtime_for_api_tests(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ORCHID_AGENT_MODE", "openai")
+    monkeypatch.setenv("AGENT_MODE", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
 
