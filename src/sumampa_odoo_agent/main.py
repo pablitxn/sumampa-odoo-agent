@@ -7,6 +7,7 @@ import argparse
 import uvicorn
 
 from sumampa_odoo_agent.config import load_settings, resolve_environment
+from sumampa_odoo_agent.services.logging import configure_logging
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -22,11 +23,13 @@ def build_parser() -> argparse.ArgumentParser:
 def run_api(reload: bool) -> None:
     environment = resolve_environment()
     settings = load_settings(env=environment)
+    configure_logging(settings)
     uvicorn.run(
         "sumampa_odoo_agent.api.main:app",
         host=settings.service.host,
         port=settings.service.port,
         reload=reload,
+        log_config=None,
     )
 
 

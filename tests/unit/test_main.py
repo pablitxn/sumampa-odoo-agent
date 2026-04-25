@@ -29,14 +29,16 @@ def test_run_api_uses_resolved_environment_and_uvicorn(monkeypatch: pytest.Monke
             service=SimpleNamespace(host="127.0.0.1", port=9090),
         ),
     )
+    monkeypatch.setattr("sumampa_odoo_agent.main.configure_logging", lambda settings: None)
     monkeypatch.setattr(
         "sumampa_odoo_agent.main.uvicorn.run",
-        lambda app, host, port, reload: uvicorn_calls.append(
+        lambda app, host, port, reload, log_config: uvicorn_calls.append(
             {
                 "app": app,
                 "host": host,
                 "port": port,
                 "reload": reload,
+                "log_config": log_config,
             }
         ),
     )
@@ -49,6 +51,7 @@ def test_run_api_uses_resolved_environment_and_uvicorn(monkeypatch: pytest.Monke
             "host": "127.0.0.1",
             "port": 9090,
             "reload": True,
+            "log_config": None,
         }
     ]
 

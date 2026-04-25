@@ -82,7 +82,90 @@ services:
     - test -n "$${MINIO_ROOT_USER}" && test -n "$${MINIO_ROOT_PASSWORD}"; mc alias
       set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}";
       mc mb --ignore-existing "local/$${ATTACHMENT_BUCKET}"
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: sumampa-odoo-agent-otel-collector
+    profiles:
+    - observability
+    command:
+    - --config=/etc/otelcol/config.yml
+    volumes:
+    - ./observability/otel-collector.yml:/etc/otelcol/config.yml:ro
+    ports:
+    - 127.0.0.1:4317:4317
+    - 127.0.0.1:4318:4318
+    depends_on:
+    - tempo
+    - loki
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: sumampa-odoo-agent-prometheus
+    profiles:
+    - observability
+    command:
+    - --config.file=/etc/prometheus/prometheus.yml
+    - --storage.tsdb.path=/prometheus
+    - --web.enable-otlp-receiver
+    volumes:
+    - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    - prometheus_data:/prometheus
+    ports:
+    - 127.0.0.1:9090:9090
+    depends_on:
+    - otel-collector
+  loki:
+    image: grafana/loki:latest
+    container_name: sumampa-odoo-agent-loki
+    profiles:
+    - observability
+    command:
+    - -config.file=/etc/loki/config.yml
+    volumes:
+    - ./observability/loki.yml:/etc/loki/config.yml:ro
+    - loki_data:/loki
+    ports:
+    - 127.0.0.1:3100:3100
+  tempo:
+    image: grafana/tempo:latest
+    container_name: sumampa-odoo-agent-tempo
+    profiles:
+    - observability
+    command:
+    - -config.file=/etc/tempo/config.yml
+    volumes:
+    - ./observability/tempo.yml:/etc/tempo/config.yml:ro
+    - tempo_data:/tmp/tempo
+    ports:
+    - 127.0.0.1:3200:3200
+  grafana:
+    image: grafana/grafana:latest
+    container_name: sumampa-odoo-agent-grafana
+    profiles:
+    - observability
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+    volumes:
+    - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    - grafana_data:/var/lib/grafana
+    ports:
+    - 127.0.0.1:3001:3000
+    depends_on:
+    - prometheus
+    - loki
+    - tempo
+    entrypoint:
+    - /bin/sh
+    - -ec
+    - test -n "$${GF_SECURITY_ADMIN_PASSWORD}" || { echo "Set private Grafana credentials"
+      >&2; exit 1; }; exec /run.sh
 volumes:
   postgres_data: null
   redis_data: null
   minio_data: null
+  prometheus_data: null
+  loki_data: null
+  tempo_data: null
+  grafana_data: null

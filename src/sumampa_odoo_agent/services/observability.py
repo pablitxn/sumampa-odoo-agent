@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping, Sequence
-from contextlib import AbstractContextManager, nullcontext
+from contextlib import AbstractContextManager, ExitStack, nullcontext
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel
@@ -171,6 +171,163 @@ class NoOpObservabilityProvider:
 
     async def aclose(self) -> None:
         return None
+
+
+class CompositeObservation:
+    """Observation facade that fans updates out to multiple providers."""
+
+    def __init__(self, observations: Sequence[Observation]) -> None:
+        self._observations = tuple(observations)
+
+    def update(
+        self,
+        *,
+        input: Any | None = None,
+        output: Any | None = None,
+        metadata: Any | None = None,
+        level: ObservationLevel | None = None,
+        status_message: str | None = None,
+        model: str | None = None,
+    ) -> None:
+        for observation in self._observations:
+            try:
+                observation.update(
+                    input=input,
+                    output=output,
+                    metadata=metadata,
+                    level=level,
+                    status_message=status_message,
+                    model=model,
+                )
+            except Exception:
+                continue
+
+    def score_trace(
+        self,
+        *,
+        name: str,
+        value: float | str | bool,
+        data_type: str | None = None,
+        comment: str | None = None,
+        metadata: Any | None = None,
+    ) -> None:
+        for observation in self._observations:
+            try:
+                observation.score_trace(
+                    name=name,
+                    value=value,
+                    data_type=data_type,
+                    comment=comment,
+                    metadata=metadata,
+                )
+            except Exception:
+                continue
+
+
+class _CompositeObservationContext(AbstractContextManager[Observation]):
+    def __init__(
+        self,
+        *,
+        providers: Sequence[ObservabilityProvider],
+        kwargs: dict[str, Any],
+    ) -> None:
+        self._providers = tuple(providers)
+        self._kwargs = kwargs
+        self._stack = ExitStack()
+
+    def __enter__(self) -> Observation:
+        observations: list[Observation] = []
+        for provider in self._providers:
+            try:
+                context = provider.start_observation(**self._kwargs)
+                observations.append(self._stack.enter_context(context))
+            except Exception:
+                continue
+        return CompositeObservation(observations) if observations else NoOpObservation()
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> Literal[False]:
+        self._stack.__exit__(exc_type, exc_value, traceback)
+        return False
+
+
+class CompositeObservabilityProvider:
+    """Observability provider that fans out to each configured backend."""
+
+    def __init__(self, providers: Sequence[ObservabilityProvider]) -> None:
+        self._providers = tuple(providers)
+
+    def start_observation(
+        self,
+        *,
+        name: str,
+        as_type: ObservationType = "span",
+        input: Any | None = None,
+        output: Any | None = None,
+        metadata: Any | None = None,
+        level: ObservationLevel | None = None,
+        status_message: str | None = None,
+        user_id: str | None = None,
+        session_id: str | None = None,
+        tags: list[str] | None = None,
+        version: str | None = None,
+        model: str | None = None,
+    ) -> AbstractContextManager[Observation]:
+        return _CompositeObservationContext(
+            providers=self._providers,
+            kwargs={
+                "name": name,
+                "as_type": as_type,
+                "input": input,
+                "output": output,
+                "metadata": metadata,
+                "level": level,
+                "status_message": status_message,
+                "user_id": user_id,
+                "session_id": session_id,
+                "tags": tags,
+                "version": version,
+                "model": model,
+            },
+        )
+
+    def create_score(
+        self,
+        *,
+        name: str,
+        value: float | str | bool,
+        session_id: str | None = None,
+        trace_id: str | None = None,
+        data_type: str | None = None,
+        comment: str | None = None,
+        metadata: Any | None = None,
+    ) -> None:
+        for provider in self._providers:
+            try:
+                provider.create_score(
+                    name=name,
+                    value=value,
+                    session_id=session_id,
+                    trace_id=trace_id,
+                    data_type=data_type,
+                    comment=comment,
+                    metadata=metadata,
+                )
+            except Exception:
+                continue
+
+    def flush(self) -> None:
+        for provider in self._providers:
+            try:
+                provider.flush()
+            except Exception:
+                continue
+
+    async def aclose(self) -> None:
+        for provider in reversed(self._providers):
+            try:
+                await provider.aclose()
+            except Exception:
+                continue
 
 
 def to_observability_payload(value: Any) -> Any:

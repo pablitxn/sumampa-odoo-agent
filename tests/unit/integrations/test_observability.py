@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import AbstractContextManager
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import pytest
 
@@ -13,12 +13,14 @@ from sumampa_odoo_agent.integrations.observability.langfuse import (
 )
 from sumampa_odoo_agent.integrations.observability.odoo import ObservedOdooGateway
 from sumampa_odoo_agent.integrations.odoo.dry_run import DryRunOdooClient
+from sumampa_odoo_agent.integrations.telemetry import OpenTelemetryObservabilityProvider
 from sumampa_odoo_agent.services.attachments import AttachmentIngestionService
 from sumampa_odoo_agent.services.conversation import ConversationService, ConversationTurnInput
 from sumampa_odoo_agent.services.errors import ConfigurationError
 from sumampa_odoo_agent.services.models.odoo import SearchInput
 from sumampa_odoo_agent.services.models.runtime import AgentRunInput, AgentRunResult
 from sumampa_odoo_agent.services.observability import (
+    CompositeObservabilityProvider,
     Observation,
     ObservationLevel,
     ObservationType,
@@ -146,6 +148,22 @@ class RecordingObservabilityProvider:
         return None
 
 
+class BrokenObservabilityProvider:
+    def start_observation(self, **kwargs: Any) -> AbstractContextManager[Observation]:
+        del kwargs
+        raise RuntimeError("provider unavailable")
+
+    def create_score(self, **kwargs: Any) -> None:
+        del kwargs
+        raise RuntimeError("provider unavailable")
+
+    def flush(self) -> None:
+        raise RuntimeError("provider unavailable")
+
+    async def aclose(self) -> None:
+        raise RuntimeError("provider unavailable")
+
+
 class FakeRuntime:
     async def run(self, request: AgentRunInput) -> AgentRunResult:
         return AgentRunResult(
@@ -179,6 +197,15 @@ class FlushClient:
         self.shutdown_called = True
 
 
+class ForceFlushProvider:
+    def __init__(self) -> None:
+        self.timeout_millis: int | None = None
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        self.timeout_millis = timeout_millis
+        return True
+
+
 def test_langfuse_provider_requires_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
     monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
@@ -204,6 +231,54 @@ def test_agent_framework_observability_handles_missing_version(
     _enable_agent_framework_observability(enable_sensitive_data=True)
     assert getattr(agent_framework, "__version__", None) is not None
     _ensure_agent_framework_version(agent_framework)
+
+
+def test_composite_observability_fans_out_to_all_healthy_providers() -> None:
+    first = RecordingObservabilityProvider()
+    second = RecordingObservabilityProvider()
+    provider = CompositeObservabilityProvider([first, second])
+
+    with provider.start_observation(name="conversation.turn") as observation:
+        observation.update(output={"ok": True})
+        observation.score_trace(name="error", value=0.0)
+
+    assert [record["name"] for record in first.records] == ["conversation.turn"]
+    assert [record["name"] for record in second.records] == ["conversation.turn"]
+    assert first.records[0]["updates"][0]["output"] == {"ok": True}
+    assert second.records[0]["scores"][0]["name"] == "error"
+
+
+def test_composite_observability_ignores_broken_providers() -> None:
+    healthy = RecordingObservabilityProvider()
+    provider = CompositeObservabilityProvider([BrokenObservabilityProvider(), healthy])
+
+    with provider.start_observation(name="conversation.turn") as observation:
+        observation.update(output={"ok": True})
+        observation.score_trace(name="error", value=0.0)
+
+    provider.create_score(name="quality", value=1.0)
+    provider.flush()
+
+    assert [record["name"] for record in healthy.records] == ["conversation.turn"]
+
+
+def test_otel_provider_flushes_traces_metrics_and_logs() -> None:
+    tracer_provider = ForceFlushProvider()
+    meter_provider = ForceFlushProvider()
+    logger_provider = ForceFlushProvider()
+    provider = OpenTelemetryObservabilityProvider(
+        tracer=cast(Any, object()),
+        capture_payloads=True,
+        tracer_provider=cast(Any, tracer_provider),
+        meter_provider=cast(Any, meter_provider),
+        logger_provider=cast(Any, logger_provider),
+    )
+
+    provider.flush()
+
+    assert tracer_provider.timeout_millis == 2000
+    assert meter_provider.timeout_millis == 2000
+    assert logger_provider.timeout_millis == 2000
 
 
 @pytest.mark.asyncio

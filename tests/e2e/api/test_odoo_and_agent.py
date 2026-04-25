@@ -195,6 +195,52 @@ def test_messages_endpoint_contract_is_unchanged_with_observability(
     assert "conversation.turn" in observability.names
 
 
+def test_messages_endpoint_records_operational_metrics_and_traces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_run(
+        self: MicrosoftAgentFrameworkOpenAIService,
+        request: AgentRunInput,
+    ) -> AgentRunResult:
+        del self
+        return AgentRunResult(
+            mode="microsoft-agent-framework-openai",
+            session_id=request.session_id or "metrics-session",
+            text="Metrics recorded.",
+        )
+
+    observability = _RecordingObservability()
+    metrics = _RecordingMetrics()
+    monkeypatch.setattr(
+        "sumampa_odoo_agent.services.app.build_observability_provider",
+        lambda settings: observability,
+    )
+    monkeypatch.setattr(
+        "sumampa_odoo_agent.api.main.bootstrap_telemetry",
+        lambda settings: _FakeTelemetryRuntime(metrics),
+    )
+    monkeypatch.setattr(MicrosoftAgentFrameworkOpenAIService, "run", fake_run)
+    app = create_app(settings=_test_settings())
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/messages",
+            json={
+                "conversation_id": "metrics-session",
+                "channel": "whatsapp",
+                "user_id": "5491112345678",
+                "text": "hola",
+            },
+        )
+
+    assert response.status_code == 200
+    assert "conversation.turn" in observability.names
+    assert metrics.http_requests[0]["route"] == "/api/v1/messages"
+    assert metrics.http_requests[0]["status"] == 200
+    assert metrics.conversation_turns[0]["channel"] == "whatsapp"
+    assert metrics.conversation_turns[0]["result"] == "success"
+
+
 class _RecordingObservation:
     def update(self, **kwargs: Any) -> None:
         del kwargs
@@ -232,6 +278,34 @@ class _RecordingObservability:
 
     def flush(self) -> None:
         return None
+
+    async def aclose(self) -> None:
+        return None
+
+
+class _RecordingMetrics:
+    def __init__(self) -> None:
+        self.http_requests: list[dict[str, Any]] = []
+        self.conversation_turns: list[dict[str, Any]] = []
+
+    def start_timer(self) -> Any:
+        return lambda: 0.001
+
+    def record_http_request(self, **kwargs: Any) -> None:
+        self.http_requests.append(dict(kwargs))
+
+    def record_conversation_turn(self, **kwargs: Any) -> None:
+        self.conversation_turns.append(dict(kwargs))
+
+    def record_odoo_operation(self, **kwargs: Any) -> None:
+        del kwargs
+
+
+class _FakeTelemetryRuntime:
+    def __init__(self, metrics: _RecordingMetrics) -> None:
+        self.observability = _RecordingObservability()
+        self.metrics = metrics
+        self.enabled = True
 
     async def aclose(self) -> None:
         return None

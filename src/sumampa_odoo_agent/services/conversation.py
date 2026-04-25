@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any
 
 from sumampa_odoo_agent.services.attachments import AttachmentIngestionService
 from sumampa_odoo_agent.services.contracts import AgentRuntime
+from sumampa_odoo_agent.services.metrics import AppMetrics
 from sumampa_odoo_agent.services.models.attachments import AttachmentSource
 from sumampa_odoo_agent.services.models.runtime import (
     AgentRunInput,
@@ -45,14 +47,17 @@ class ConversationService:
         *,
         attachment_ingestion: AttachmentIngestionService,
         observability: ObservabilityProvider | None = None,
+        metrics: AppMetrics | None = None,
         trace_metadata: dict[str, Any] | None = None,
     ) -> None:
         self._runtime = runtime
         self._attachment_ingestion = attachment_ingestion
         self._observability = observability or NoOpObservabilityProvider()
+        self._metrics = metrics
         self._trace_metadata = trace_metadata or {}
 
     async def run_turn(self, request: ConversationTurnInput) -> ConversationTurnResult:
+        started_at = time.perf_counter()
         trace_metadata = {
             **self._trace_metadata,
             "transport.channel": request.channel,
@@ -136,6 +141,12 @@ class ConversationService:
                     )
                 )
             except Exception as exc:
+                self._record_turn_metric(
+                    channel=request.channel,
+                    mode="unknown",
+                    result="error",
+                    started_at=started_at,
+                )
                 turn_observation.update(
                     level="ERROR",
                     status_message=f"{exc.__class__.__name__}: {exc}",
@@ -165,10 +176,33 @@ class ConversationService:
                 data_type="NUMERIC",
                 comment="Turn completed without exception.",
             )
+            self._record_turn_metric(
+                channel=request.channel,
+                mode=result.mode,
+                result="success",
+                started_at=started_at,
+            )
 
         return ConversationTurnResult(
             conversation_id=result.session_id,
             assistant_text=result.text,
+        )
+
+    def _record_turn_metric(
+        self,
+        *,
+        channel: str,
+        mode: str,
+        result: str,
+        started_at: float,
+    ) -> None:
+        if self._metrics is None:
+            return
+        self._metrics.record_conversation_turn(
+            channel=channel,
+            mode=mode,
+            result=result,
+            duration_seconds=time.perf_counter() - started_at,
         )
 
 

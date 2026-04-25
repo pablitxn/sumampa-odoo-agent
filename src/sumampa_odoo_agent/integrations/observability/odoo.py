@@ -8,6 +8,7 @@ from typing import TypeVar
 from pydantic import BaseModel
 
 from sumampa_odoo_agent.services.contracts import OdooGateway
+from sumampa_odoo_agent.services.metrics import AppMetrics
 from sumampa_odoo_agent.services.models.odoo import (
     ArgentinaInvoiceValidationInput,
     DeliveryInput,
@@ -38,10 +39,12 @@ class ObservedOdooGateway:
         wrapped: OdooGateway,
         observability: ObservabilityProvider,
         mode: str,
+        metrics: AppMetrics | None = None,
     ) -> None:
         self._wrapped = wrapped
         self._observability = observability
         self._mode = mode
+        self._metrics = metrics
 
     async def aclose(self) -> None:
         await self._wrapped.aclose()
@@ -166,6 +169,7 @@ class ObservedOdooGateway:
             try:
                 result = await call()
             except Exception as exc:
+                self._record_metric(operation=operation, result="error")
                 observation.update(
                     level="ERROR",
                     status_message=f"{exc.__class__.__name__}: {exc}",
@@ -180,4 +184,14 @@ class ObservedOdooGateway:
                     "result.model": getattr(result, "model", None),
                 },
             )
+            self._record_metric(operation=operation, result="success")
             return result
+
+    def _record_metric(self, *, operation: str, result: str) -> None:
+        if self._metrics is None:
+            return
+        self._metrics.record_odoo_operation(
+            operation=operation,
+            mode=self._mode,
+            result=result,
+        )

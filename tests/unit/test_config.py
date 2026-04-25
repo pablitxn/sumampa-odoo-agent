@@ -50,6 +50,11 @@ def test_load_settings_applies_declarative_environment_overrides(
     monkeypatch.setenv("ORCHID_OBSERVABILITY_MODE", "langfuse")
     monkeypatch.setenv("ORCHID_OBSERVABILITY_SAMPLE_RATE", "0.5")
     monkeypatch.setenv("ORCHID_OBSERVABILITY_FLUSH_ON_SHUTDOWN", "false")
+    monkeypatch.setenv("ORCHID_TELEMETRY_ENABLED", "true")
+    monkeypatch.setenv("ORCHID_TELEMETRY_SERVICE_NAME", "sumampa-odoo-agent")
+    monkeypatch.setenv("ORCHID_TELEMETRY_ENVIRONMENT", "production")
+    monkeypatch.setenv("ORCHID_TELEMETRY_CLUSTER", "production")
+    monkeypatch.setenv("ORCHID_OTEL_EXPORTER_OTLP_ENDPOINT", "https://otel.orchid-labs.xyz:443")
 
     settings = load_settings(config_dir=config_dir, env="test")
 
@@ -60,3 +65,8 @@ def test_load_settings_applies_declarative_environment_overrides(
     assert settings.observability.mode == "langfuse"
     assert settings.observability.sample_rate == 0.5
     assert settings.observability.flush_on_shutdown is False
+    assert settings.telemetry.enabled is True
+    assert settings.telemetry.service_name == "sumampa-odoo-agent"
+    assert settings.telemetry.environment == "production"
+    assert settings.telemetry.cluster == "production"
+    assert settings.telemetry.otlp_endpoint == "https://otel.orchid-labs.xyz:443"

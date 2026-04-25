@@ -21,6 +21,7 @@ AttachmentStoreMode = Literal["memory", "s3"]
 LoggingFormat = Literal["json", "text"]
 ObservabilityMode = Literal["disabled", "langfuse"]
 ObservabilityCaptureMode = Literal["full"]
+TelemetryProtocol = Literal["grpc", "http/protobuf"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +95,20 @@ class ObservabilitySettings(BaseModel):
     flush_on_shutdown: bool = True
 
 
+class TelemetrySettings(BaseModel):
+    enabled: bool = False
+    service_name: str = "sumampa-odoo-agent"
+    environment: str = DEFAULT_ENV
+    cluster: str = "local"
+    otlp_endpoint: str = "http://127.0.0.1:4317"
+    otlp_protocol: TelemetryProtocol = "grpc"
+    traces_enabled: bool = True
+    metrics_enabled: bool = True
+    logs_enabled: bool = True
+    sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    capture_payloads: bool = True
+
+
 class AppSettings(BaseModel):
     service: ServiceSettings
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
@@ -102,6 +117,7 @@ class AppSettings(BaseModel):
     session_store: SessionStoreSettings = Field(default_factory=SessionStoreSettings)
     attachments: AttachmentSettings = Field(default_factory=AttachmentSettings)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
+    telemetry: TelemetrySettings = Field(default_factory=TelemetrySettings)
 
 
 def _coerce_bool(value: str) -> bool:
@@ -147,6 +163,17 @@ _ENV_OVERRIDES: tuple[EnvOverride, ...] = (
         ("observability", "flush_on_shutdown"),
         _coerce_bool,
     ),
+    EnvOverride("ORCHID_TELEMETRY_ENABLED", ("telemetry", "enabled"), _coerce_bool),
+    EnvOverride("ORCHID_TELEMETRY_SERVICE_NAME", ("telemetry", "service_name")),
+    EnvOverride("ORCHID_TELEMETRY_ENVIRONMENT", ("telemetry", "environment")),
+    EnvOverride("ORCHID_TELEMETRY_CLUSTER", ("telemetry", "cluster")),
+    EnvOverride("ORCHID_OTEL_EXPORTER_OTLP_ENDPOINT", ("telemetry", "otlp_endpoint")),
+    EnvOverride("ORCHID_TELEMETRY_OTLP_PROTOCOL", ("telemetry", "otlp_protocol")),
+    EnvOverride("ORCHID_TELEMETRY_TRACES_ENABLED", ("telemetry", "traces_enabled"), _coerce_bool),
+    EnvOverride("ORCHID_TELEMETRY_METRICS_ENABLED", ("telemetry", "metrics_enabled"), _coerce_bool),
+    EnvOverride("ORCHID_TELEMETRY_LOGS_ENABLED", ("telemetry", "logs_enabled"), _coerce_bool),
+    EnvOverride("ORCHID_TELEMETRY_SAMPLE_RATE", ("telemetry", "sample_rate"), float),
+    EnvOverride("ORCHID_TELEMETRY_CAPTURE_PAYLOADS", ("telemetry", "capture_payloads"), _coerce_bool),
 )
 
 

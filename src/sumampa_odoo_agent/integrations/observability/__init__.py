@@ -5,6 +5,7 @@ from __future__ import annotations
 from sumampa_odoo_agent.integrations.observability.factory import build_observability_provider
 from sumampa_odoo_agent.integrations.observability.odoo import ObservedOdooGateway
 from sumampa_odoo_agent.services.observability import (
+    CompositeObservabilityProvider,
     NoOpObservabilityProvider,
     NoOpObservation,
     ObservabilityProvider,
@@ -12,6 +13,7 @@ from sumampa_odoo_agent.services.observability import (
 )
 
 __all__ = [
+    "CompositeObservabilityProvider",
     "NoOpObservabilityProvider",
     "NoOpObservation",
     "ObservabilityProvider",

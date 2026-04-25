@@ -57,6 +57,27 @@ Attachments are stored as originals in MinIO, then normalized before they are se
 Agent Framework runtime. PDF and audio normalization expect `pdftotext`, `pdftoppm`, and
 `ffmpeg` to be available on the app host.
 
+## Local Operational Observability
+
+Run the local OTel stack alongside Postgres, Redis, and MinIO:
+
+```bash
+docker compose --profile observability up -d \
+  postgres redis minio minio-init otel-collector prometheus loki tempo grafana
+```
+
+Then run the app with OTLP export enabled:
+
+```bash
+ORCHID_TELEMETRY_ENABLED=true \
+ORCHID_OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317 \
+uv run sumampa_odoo_agent --reload
+```
+
+Grafana is available at `http://localhost:3001` with Prometheus, Loki, and Tempo
+datasources provisioned. The app emits stable operational metrics under
+`service_name="sumampa-odoo-agent"` and traces/logs through the local collector.
+
 ## Local Langfuse Observability
 
 Run Langfuse locally with the upstream v3 Docker Compose setup:

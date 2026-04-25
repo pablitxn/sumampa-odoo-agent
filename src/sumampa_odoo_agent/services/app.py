@@ -16,6 +16,12 @@ from sumampa_odoo_agent.integrations.sessions import build_session_store
 from sumampa_odoo_agent.integrations.storage import build_attachment_store
 from sumampa_odoo_agent.services.attachments import AttachmentIngestionService
 from sumampa_odoo_agent.services.conversation import ConversationService
+from sumampa_odoo_agent.services.metrics import AppMetrics
+from sumampa_odoo_agent.services.observability import (
+    CompositeObservabilityProvider,
+    NoOpObservabilityProvider,
+    ObservabilityProvider,
+)
 
 
 @dataclass(slots=True)
@@ -31,16 +37,29 @@ class AppServices:
             await closer()
 
 
-async def build_app_services(settings: AppSettings) -> AppServices:
+async def build_app_services(
+    settings: AppSettings,
+    *,
+    telemetry_observability: ObservabilityProvider | None = None,
+    metrics: AppMetrics | None = None,
+) -> AppServices:
     """Build the explicit service graph from runtime integrations."""
 
-    observability = build_observability_provider(settings)
+    semantic_observability = build_observability_provider(settings)
+    observability = CompositeObservabilityProvider(
+        [
+            semantic_observability,
+            telemetry_observability or NoOpObservabilityProvider(),
+        ]
+    )
+    app_metrics = metrics or AppMetrics.disabled(settings)
     session_store = await build_session_store(settings)
     attachment_store = await build_attachment_store(settings)
     odoo_gateway = ObservedOdooGateway(
         wrapped=build_odoo_gateway(settings),
         observability=observability,
         mode=settings.odoo.mode,
+        metrics=app_metrics,
     )
     agent_runtime = build_agent_runtime(
         settings,
@@ -57,6 +76,7 @@ async def build_app_services(settings: AppSettings) -> AppServices:
         agent_runtime,
         attachment_ingestion=attachment_ingestion,
         observability=observability,
+        metrics=app_metrics,
         trace_metadata={
             "service.name": settings.service.name,
             "service.version": settings.service.version,
