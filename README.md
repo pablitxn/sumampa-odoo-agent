@@ -38,6 +38,7 @@ uv run mypy src tests
 - Odoo: `dry-run` and `jsonrpc`
 - Session store: `memory` and `hybrid`
 - Agent runtime: `openai` and `disabled`
+- Attachment store: `memory` and S3-compatible MinIO
 
 ## Local Odoo 19 Integration
 
@@ -45,3 +46,13 @@ uv run mypy src tests
 docker compose -f docker-compose.odoo19.yml up -d
 PYTHONPATH=src uv run python scripts/bootstrap_odoo_integration.py
 ```
+
+## Local Attachment Storage
+
+```bash
+docker compose up -d minio minio-init
+```
+
+Attachments are stored as originals in MinIO, then normalized before they are sent to the
+Agent Framework runtime. PDF and audio normalization expect `pdftotext`, `pdftoppm`, and
+`ffmpeg` to be available on the app host.

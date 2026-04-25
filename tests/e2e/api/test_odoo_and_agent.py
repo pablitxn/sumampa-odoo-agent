@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from sumampa_odoo_agent.api.main import create_app
+from sumampa_odoo_agent.config import AppSettings
 from sumampa_odoo_agent.integrations.agent import (
     MicrosoftAgentFrameworkOpenAIService,
 )
@@ -20,6 +21,25 @@ def _image_attachment(filename: str = "attachment.jpg") -> dict[str, str]:
         "mime_type": "image/jpeg",
         "content_base64": base64.b64encode(b"fake-image").decode("ascii"),
     }
+
+
+def _video_attachment(filename: str = "clip.mp4") -> dict[str, str]:
+    return {
+        "filename": filename,
+        "mime_type": "video/mp4",
+        "content_base64": base64.b64encode(b"fake-video").decode("ascii"),
+    }
+
+
+def _test_settings() -> AppSettings:
+    return AppSettings.model_validate(
+        {
+            "service": {"name": "sumampa-test", "version": "0.1.0"},
+            "agent": {"mode": "openai"},
+            "session_store": {"mode": "memory"},
+            "attachments": {"store_mode": "memory"},
+        }
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -44,7 +64,7 @@ def test_messages_endpoint_delegates_to_agent() -> None:
             text="I found 2 pending products to review.",
         )
 
-    app = create_app()
+    app = create_app(settings=_test_settings())
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(MicrosoftAgentFrameworkOpenAIService, "run", fake_run)
         with TestClient(app) as client:
@@ -81,7 +101,7 @@ def test_messages_endpoint_serializes_attachments_for_agent() -> None:
             text="Send me the next confirmation.",
         )
 
-    app = create_app()
+    app = create_app(settings=_test_settings())
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(MicrosoftAgentFrameworkOpenAIService, "run", fake_run)
         with TestClient(app) as client:
@@ -99,3 +119,30 @@ def test_messages_endpoint_serializes_attachments_for_agent() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["messages"][0]["text"] == "Send me the next confirmation."
+
+
+def test_messages_endpoint_fails_before_agent_for_unsupported_video(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_run(
+        self: MicrosoftAgentFrameworkOpenAIService,
+        request: AgentRunInput,
+    ) -> AgentRunResult:
+        del self, request
+        raise AssertionError("agent runtime should not be called")
+
+    app = create_app(settings=_test_settings())
+    monkeypatch.setattr(MicrosoftAgentFrameworkOpenAIService, "run", fake_run)
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/messages",
+            json={
+                "conversation_id": "video-session",
+                "channel": "whatsapp",
+                "user_id": "5491112345678",
+                "attachments": [_video_attachment()],
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "unsupported_attachment_type"

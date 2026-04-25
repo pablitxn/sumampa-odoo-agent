@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import base64
+
 import pytest
 
+from sumampa_odoo_agent.config import AttachmentSettings
+from sumampa_odoo_agent.integrations.storage import InMemoryAttachmentObjectStore
+from sumampa_odoo_agent.services.attachments import AttachmentIngestionService
 from sumampa_odoo_agent.services.conversation import ConversationService, ConversationTurnInput
-from sumampa_odoo_agent.services.models.odoo import InvoiceAttachment
+from sumampa_odoo_agent.services.models.attachments import AttachmentSource
 from sumampa_odoo_agent.services.models.runtime import AgentRunInput, AgentRunResult
 
 
@@ -17,6 +22,7 @@ class _FakeRuntime:
         self.last_call = {
             "prompt": request.prompt,
             "context": request.context.to_agent_context(),
+            "attachments": request.attachments,
             "session_id": request.session_id,
         }
         return AgentRunResult(
@@ -29,7 +35,14 @@ class _FakeRuntime:
 @pytest.mark.asyncio
 async def test_conversation_service_passes_empty_text_and_runtime_context() -> None:
     runtime = _FakeRuntime()
-    service = ConversationService(runtime)
+    attachment_store = InMemoryAttachmentObjectStore()
+    service = ConversationService(
+        runtime,
+        attachment_ingestion=AttachmentIngestionService(
+            object_store=attachment_store,
+            settings=AttachmentSettings(store_mode="memory"),
+        ),
+    )
 
     result = await service.run_turn(
         ConversationTurnInput(
@@ -38,10 +51,10 @@ async def test_conversation_service_passes_empty_text_and_runtime_context() -> N
             user_id="5491112345678",
             text="",
             attachments=[
-                InvoiceAttachment(
+                AttachmentSource(
                     filename="attachment.jpg",
                     content_type="image/jpeg",
-                    content_bytes=b"fake-image",
+                    content_base64=base64.b64encode(b"fake-image").decode("ascii"),
                 )
             ],
             context={"customer_name": "Sumampa SRL"},
@@ -57,3 +70,8 @@ async def test_conversation_service_passes_empty_text_and_runtime_context() -> N
     assert runtime_context["transport"]["channel"] == "whatsapp"
     assert runtime_context["context"]["customer_name"] == "Sumampa SRL"
     assert len(runtime_context["attachments"]) == 1
+    assert runtime_context["attachments"][0]["storage_uri"].startswith("memory://")
+    runtime_attachments = runtime.last_call["attachments"]
+    assert isinstance(runtime_attachments, list)
+    assert len(runtime_attachments) == 1
+    assert runtime_attachments[0].kind == "image"

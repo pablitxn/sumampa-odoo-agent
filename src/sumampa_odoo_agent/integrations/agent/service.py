@@ -97,6 +97,7 @@ class MicrosoftAgentFrameworkOpenAIService:
         message = _build_agent_message(
             prompt=request.prompt,
             context=request.context.to_agent_context(),
+            attachments=request.attachments,
         )
         try:
             response = await agent.run(message, session=session)

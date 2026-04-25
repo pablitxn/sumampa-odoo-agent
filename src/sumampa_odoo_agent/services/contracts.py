@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from sumampa_odoo_agent.services.models.attachments import StoredObjectReference
 from sumampa_odoo_agent.services.models.odoo import (
     ArgentinaInvoiceValidationInput,
     DeliveryInput,
@@ -29,6 +30,21 @@ class SessionStore(Protocol):
 
     async def delete(self, *, namespace: str, session_id: str) -> None:
         """Delete one persisted session payload."""
+
+    async def aclose(self) -> None:
+        """Release store resources."""
+
+
+class AttachmentObjectStore(Protocol):
+    async def put_object(
+        self,
+        *,
+        key: str,
+        content_bytes: bytes,
+        content_type: str,
+        metadata: dict[str, str],
+    ) -> StoredObjectReference:
+        """Persist one attachment object and return its storage reference."""
 
     async def aclose(self) -> None:
         """Release store resources."""

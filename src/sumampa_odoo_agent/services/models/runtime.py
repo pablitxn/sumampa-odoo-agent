@@ -6,6 +6,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from sumampa_odoo_agent.services.models.attachments import (
+    AttachmentRuntimeManifest,
+    PreparedAttachmentArtifact,
+)
+
 
 class SerializedInvoiceAttachment(BaseModel):
     filename: str = Field(min_length=1)
@@ -22,7 +27,7 @@ class TransportContext(BaseModel):
 class ConversationRuntimeContext(BaseModel):
     transport: TransportContext
     context: dict[str, Any] = Field(default_factory=dict)
-    attachments: list[SerializedInvoiceAttachment] = Field(default_factory=list)
+    attachments: list[AttachmentRuntimeManifest] = Field(default_factory=list)
 
     def to_agent_context(self) -> dict[str, Any]:
         return self.model_dump(exclude_defaults=True)
@@ -31,6 +36,7 @@ class ConversationRuntimeContext(BaseModel):
 class AgentRunInput(BaseModel):
     prompt: str
     context: ConversationRuntimeContext
+    attachments: list[PreparedAttachmentArtifact] = Field(default_factory=list)
     session_id: str | None = None
 
 

@@ -6,8 +6,8 @@ from fastapi import APIRouter
 
 from sumampa_odoo_agent.api.dependencies import ServicesDep
 from sumampa_odoo_agent.api.schemas import ConversationMessageRequest, ConversationMessageResponse
-from sumampa_odoo_agent.services.attachments import resolve_invoice_attachment
 from sumampa_odoo_agent.services.conversation import ConversationTurnInput
+from sumampa_odoo_agent.services.models.attachments import AttachmentSource
 
 router = APIRouter(prefix="/api/v1", tags=["messages"])
 
@@ -18,9 +18,9 @@ async def post_message(
     services: ServicesDep,
 ) -> ConversationMessageResponse:
     attachments = [
-        await resolve_invoice_attachment(
+        AttachmentSource(
             filename=attachment.filename,
-            mime_type=attachment.mime_type,
+            content_type=attachment.mime_type,
             content_base64=attachment.content_base64,
             download_url=attachment.download_url,
         )

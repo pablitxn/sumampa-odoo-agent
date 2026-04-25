@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from sumampa_odoo_agent.services.attachments import serialize_invoice_attachments
+from sumampa_odoo_agent.services.attachments import AttachmentIngestionService
 from sumampa_odoo_agent.services.contracts import AgentRuntime
-from sumampa_odoo_agent.services.models.odoo import InvoiceAttachment
+from sumampa_odoo_agent.services.models.attachments import AttachmentSource
 from sumampa_odoo_agent.services.models.runtime import (
     AgentRunInput,
     ConversationRuntimeContext,
@@ -21,7 +21,7 @@ class ConversationTurnInput:
     channel: str
     user_id: str
     text: str
-    attachments: list[InvoiceAttachment]
+    attachments: list[AttachmentSource]
     context: dict[str, Any]
 
 
@@ -34,10 +34,22 @@ class ConversationTurnResult:
 class ConversationService:
     """Service that normalizes transport events before delegating to the agent runtime."""
 
-    def __init__(self, runtime: AgentRuntime) -> None:
+    def __init__(
+        self,
+        runtime: AgentRuntime,
+        *,
+        attachment_ingestion: AttachmentIngestionService,
+    ) -> None:
         self._runtime = runtime
+        self._attachment_ingestion = attachment_ingestion
 
     async def run_turn(self, request: ConversationTurnInput) -> ConversationTurnResult:
+        prepared_attachments = await self._attachment_ingestion.prepare_attachments(
+            request.attachments,
+            conversation_id=request.conversation_id,
+            channel=request.channel,
+            user_id=request.user_id,
+        )
         context = ConversationRuntimeContext(
             transport=TransportContext(
                 channel=request.channel,
@@ -45,13 +57,21 @@ class ConversationService:
                 conversation_id=request.conversation_id,
             ),
             context=request.context,
-            attachments=serialize_invoice_attachments(request.attachments),
+            attachments=[
+                prepared_attachment.to_runtime_manifest()
+                for prepared_attachment in prepared_attachments
+            ],
         )
 
         result = await self._runtime.run(
             AgentRunInput(
                 prompt=request.text.strip(),
                 context=context,
+                attachments=[
+                    artifact
+                    for prepared_attachment in prepared_attachments
+                    for artifact in prepared_attachment.artifacts
+                ],
                 session_id=request.conversation_id,
             )
         )
