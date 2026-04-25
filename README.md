@@ -43,8 +43,14 @@ uv run mypy src tests
 ## Local Odoo 19 Integration
 
 ```bash
-docker compose -f docker-compose.odoo19.yml up -d
+docker compose --profile odoo up -d odoo19
 PYTHONPATH=src uv run python scripts/bootstrap_odoo_integration.py
+```
+
+To reset and reseed the Odoo integration database:
+
+```bash
+PYTHONPATH=src uv run python scripts/reset_odoo_integration.py
 ```
 
 ## Local Attachment Storage
@@ -62,13 +68,19 @@ Agent Framework runtime. PDF and audio normalization expect `pdftotext`, `pdftop
 Run the local OTel stack alongside Postgres, Redis, and MinIO:
 
 ```bash
-docker compose --profile observability up -d \
-  postgres redis minio minio-init otel-collector prometheus loki tempo grafana
+docker compose --profile odoo --profile observability up -d \
+  postgres redis minio minio-init odoo19 otel-collector prometheus loki tempo grafana
 ```
 
 Then run the app with OTLP export enabled:
 
 ```bash
+ORCHID_SESSION_STORE_MODE=hybrid \
+ORCHID_ODOO_MODE=jsonrpc \
+ORCHID_ODOO_BASE_URL=http://127.0.0.1:8069 \
+ORCHID_ODOO_DATABASE=sumampa_integration \
+ORCHID_ODOO_USERNAME=admin \
+ORCHID_ODOO_PASSWORD="${ODOO_PASSWORD:?Set private credentials}" \
 ORCHID_TELEMETRY_ENABLED=true \
 ORCHID_OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317 \
 uv run sumampa_odoo_agent --reload

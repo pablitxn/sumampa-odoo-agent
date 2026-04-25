@@ -10,7 +10,7 @@ Code lives under `src/sumampa_odoo_agent`. Keep the structure simple: `api` for 
 - `uv run pytest tests/unit` or `uv run pytest -m integration`: run a focused test slice.
 - `uv run ruff check .`: run linting and import-order checks.
 - `uv run mypy src tests`: run strict type checks.
-- `docker compose -f docker-compose.odoo19.yml up -d`: start the local Odoo 19 integration stack.
+- `docker compose --profile odoo up -d odoo19`: start the local Odoo 19 integration stack.
 
 ## Coding Style & Naming Conventions
 Use Python 3.11+, 4-space indentation, and explicit type hints. Ruff enforces a 100-character line length; mypy runs in strict mode. Prefer `snake_case` for modules/functions and `PascalCase` for classes. Do not put Odoo logic in FastAPI routers; keep orchestration in `services` and provider-specific behavior in `integrations`. Keep real Odoo writes explicit and auditable; defaults must remain `dry-run` for Odoo. If enabling the Microsoft Agent Framework provider, keep imports lazy so startup still works without credentials.
