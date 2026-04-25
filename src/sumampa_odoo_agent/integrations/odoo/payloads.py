@@ -20,7 +20,7 @@ def delivery_move_payload(
     payload: dict[str, Any] = {
         "product_id": metadata.get("product_variant_id") or move.product_id,
         "product_uom_qty": move.quantity,
-        "name": move.name or f"Move {move.product_id}",
+        "name": move.name,
     }
     if metadata.get("uom_id") is not None:
         payload["product_uom"] = metadata["uom_id"]

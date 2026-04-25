@@ -35,7 +35,7 @@ class DryRunOdooClient:
     """Safe default client that returns the payload it would send to Odoo."""
 
     _seed_partners: ClassVar[list[dict[str, Any]]] = [
-        {"id": 101, "display_name": "Consumidor Final", "vat": None, "email": None},
+        {"id": 101, "display_name": "Final Consumer", "vat": None, "email": None},
         {
             "id": 102,
             "display_name": "Sumampa SRL",
@@ -44,7 +44,7 @@ class DryRunOdooClient:
         },
         {
             "id": 103,
-            "display_name": "Juan Perez",
+            "display_name": "John Perez",
             "vat": "20-33444555-6",
             "email": "juan@example.com",
         },
@@ -52,41 +52,41 @@ class DryRunOdooClient:
     _seed_products: ClassVar[list[dict[str, Any]]] = [
         {
             "id": 201,
-            "display_name": "Bombilla inox",
+            "display_name": "Stainless steel straw",
             "default_code": "BOMB-INOX",
             "list_price": 12.5,
             "standard_price": 7.8,
         },
         {
             "id": 202,
-            "display_name": "Mate camionero",
+            "display_name": "Large mate cup",
             "default_code": "MATE-CAM",
             "list_price": 22.0,
             "standard_price": 14.2,
         },
         {
             "id": 203,
-            "display_name": "Yerba seleccion",
+            "display_name": "Selected yerba mate",
             "default_code": "YERBA-SEL",
             "list_price": 8.75,
             "standard_price": 5.6,
         },
     ]
     _journals: ClassVar[list[dict[str, Any]]] = [
-        {"id": 301, "display_name": "Ventas AR", "code": "VTA", "type": "sale"},
-        {"id": 302, "display_name": "Facturas Exportacion", "code": "EXP", "type": "sale"},
+        {"id": 301, "display_name": "AR Sales", "code": "VTA", "type": "sale"},
+        {"id": 302, "display_name": "Export Invoices", "code": "EXP", "type": "sale"},
     ]
     _taxes: ClassVar[list[dict[str, Any]]] = [
         {"id": 401, "display_name": "IVA 21%", "amount": 21.0, "type_tax_use": "sale"},
         {"id": 402, "display_name": "IVA 10.5%", "amount": 10.5, "type_tax_use": "sale"},
     ]
     _picking_types: ClassVar[list[dict[str, Any]]] = [
-        {"id": 501, "display_name": "Entregas", "code": "outgoing", "warehouse": "WH"},
-        {"id": 502, "display_name": "Recepciones", "code": "incoming", "warehouse": "WH"},
+        {"id": 501, "display_name": "Deliveries", "code": "outgoing", "warehouse": "WH"},
+        {"id": 502, "display_name": "Receipts", "code": "incoming", "warehouse": "WH"},
     ]
     _locations: ClassVar[list[dict[str, Any]]] = [
         {"id": 601, "display_name": "WH/Stock", "usage": "internal"},
-        {"id": 602, "display_name": "Clientes", "usage": "customer"},
+        {"id": 602, "display_name": "Customers", "usage": "customer"},
         {"id": 603, "display_name": "WH/Output", "usage": "internal"},
     ]
 

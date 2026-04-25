@@ -274,7 +274,7 @@ def _create_delivery_tool(odoo: OdooGateway) -> ToolCallable:
         location_dest_id: Annotated[int, "Destination stock location ID"],
         moves: Annotated[
             list[dict[str, Any]],
-            "Stock moves with product_id, quantity, and optional name",
+            "Stock moves with product_id, quantity, and name",
         ],
         origin: Annotated[str | None, "Commercial origin for the delivery order"] = None,
         scheduled_date: Annotated[str | None, "Scheduled date in ISO format"] = None,

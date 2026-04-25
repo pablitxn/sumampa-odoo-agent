@@ -20,7 +20,7 @@ SESSION_STORE_REDIS_URL = "redis://127.0.0.1:6379/0"
 @pytest.fixture(scope="session")
 def odoo19_env() -> dict[str, str]:
     if os.environ.get("RUN_ODOO19_INTEGRATION") != "1":
-        pytest.skip("Seteá RUN_ODOO19_INTEGRATION=1 para correr contra Odoo 19 local.")
+        pytest.skip("Set RUN_ODOO19_INTEGRATION=1 to run against local Odoo 19.")
 
     env = os.environ.copy()
     env.setdefault("ORCHID_ODOO_BASE_URL", "http://127.0.0.1:8069")
@@ -50,14 +50,14 @@ def _wait_for_tcp(host: str, port: int, *, timeout_seconds: float = 30.0) -> Non
             last_error = exc
             time.sleep(0.5)
     raise RuntimeError(
-        f"No se pudo conectar a {host}:{port} dentro de {timeout_seconds}s"
+        f"Could not connect to {host}:{port} within {timeout_seconds}s"
     ) from last_error
 
 
 @pytest.fixture(scope="session")
 def session_store_env() -> dict[str, str]:
     if os.environ.get("RUN_SESSION_STORE_INTEGRATION") != "1":
-        pytest.skip("Seteá RUN_SESSION_STORE_INTEGRATION=1 para correr integración Postgres+Redis.")
+        pytest.skip("Set RUN_SESSION_STORE_INTEGRATION=1 to run Postgres+Redis integration tests.")
 
     docker_info = subprocess.run(
         ["docker", "info"],
@@ -66,7 +66,7 @@ def session_store_env() -> dict[str, str]:
         text=True,
     )
     if docker_info.returncode != 0:
-        pytest.skip("Docker no está disponible para los tests de integración del session store.")
+        pytest.skip("Docker is not available for session store integration tests.")
 
     subprocess.run(
         ["docker", "compose", "up", "-d", "postgres", "redis"],

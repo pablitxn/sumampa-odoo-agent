@@ -1,23 +1,23 @@
 # sumampa-odoo-agent
 
-Backend FastAPI orientado a un bot de WhatsApp que orquesta flujos operativos sobre Odoo.
+FastAPI backend for a WhatsApp bot that orchestrates operational workflows on Odoo.
 
-## Arquitectura
+## Architecture
 
 - `src/sumampa_odoo_agent/api`: surface HTTP.
-- `src/sumampa_odoo_agent/services`: orquestación y reglas de negocio.
-- `src/sumampa_odoo_agent/integrations`: armado de backends concretos.
-- `src/sumampa_odoo_agent/tools`: tools concretas que el agente puede invocar.
+- `src/sumampa_odoo_agent/services`: orchestration and business rules.
+- `src/sumampa_odoo_agent/integrations`: concrete backend assembly.
+- `src/sumampa_odoo_agent/tools`: concrete tools the agent can invoke.
 
-La app ya no usa `MCP`, buses internos ni registro dinámico de módulos.
-Odoo se opera desde tools internas del agente; no hay una API HTTP directa para mutaciones o lookups.
+The app no longer uses `MCP`, internal buses, or dynamic module registration.
+Odoo is operated through internal agent tools; there is no direct HTTP API for mutations or lookups.
 
 ## Endpoints
 
 - `GET /health`
 - `POST /api/v1/messages`
 
-## Desarrollo
+## Development
 
 ```bash
 cd ~/repos/sumampa-odoo-agent
@@ -25,7 +25,7 @@ uv sync --extra dev
 uv run sumampa_odoo_agent --reload
 ```
 
-## Tests y checks
+## Tests And Checks
 
 ```bash
 uv run pytest -q
@@ -33,13 +33,13 @@ uv run ruff check .
 uv run mypy src tests
 ```
 
-## Modos soportados
+## Supported Modes
 
-- Odoo: `dry-run` y `jsonrpc`
-- Session store: `memory` y `hybrid`
-- Agent runtime: `openai` y `disabled`
+- Odoo: `dry-run` and `jsonrpc`
+- Session store: `memory` and `hybrid`
+- Agent runtime: `openai` and `disabled`
 
-## Integración local con Odoo 19
+## Local Odoo 19 Integration
 
 ```bash
 docker compose -f docker-compose.odoo19.yml up -d

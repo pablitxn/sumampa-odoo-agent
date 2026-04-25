@@ -7,17 +7,9 @@ from sumampa_odoo_agent.services.models.odoo import (
     DeliveryValidationInput,
     InvoiceValidationInput,
     OdooIntegrationMode,
+    OdooValidationIssue,
     OdooValidationResult,
 )
-
-_ODOO_VALIDATION_MESSAGES = {
-    "move_type_actual": "move_type actual: {move_type}",
-    "wsfe_service_actual": "wsfe_service actual: {wsfe_service}",
-    "document_letter_mismatch": "Letra esperada {expected_letter}, pero vino {document_letter}.",
-    "document_letter_missing": "Falta definir letra de comprobante; sugerida: {expected_letter}.",
-    "partner_tax_id_or_doc_type_missing": "Falta CUIT o tipo de documento del receptor.",
-    "email_to_missing": "No hay email destino para el envio posterior de la factura.",
-}
 
 
 def validate_invoice_draft(
@@ -33,9 +25,15 @@ def validate_invoice_draft(
     if draft.line_count <= 0:
         missing.append("lines")
 
-    warnings: list[str] = []
+    warnings: list[OdooValidationIssue] = []
     if draft.move_type != "out_invoice":
-        warnings.append(_odoo_validation_message("move_type_actual", move_type=draft.move_type))
+        warnings.append(
+            _validation_issue(
+                "unexpected_move_type",
+                expected_move_type="out_invoice",
+                actual_move_type=draft.move_type,
+            )
+        )
 
     return OdooValidationResult(
         mode=mode,
@@ -43,7 +41,6 @@ def validate_invoice_draft(
         ok=not missing,
         missing_fields=missing,
         warnings=warnings,
-        suggested_actions=_invoice_actions(missing),
     )
 
 
@@ -64,12 +61,13 @@ def validate_argentina_invoice_draft(
     if draft.line_count <= 0:
         missing.append("lines")
 
-    warnings: list[str] = []
+    warnings: list[OdooValidationIssue] = []
     if draft.wsfe_service and draft.wsfe_service.casefold() != "wsfev1":
         warnings.append(
-            _odoo_validation_message(
-                "wsfe_service_actual",
-                wsfe_service=draft.wsfe_service,
+            _validation_issue(
+                "unexpected_wsfe_service",
+                expected_wsfe_service="wsfev1",
+                actual_wsfe_service=draft.wsfe_service,
             )
         )
 
@@ -79,23 +77,28 @@ def validate_argentina_invoice_draft(
     )
     if expected_letter and draft.document_letter and draft.document_letter.upper() != expected_letter:
         warnings.append(
-            _odoo_validation_message(
+            _validation_issue(
                 "document_letter_mismatch",
                 expected_letter=expected_letter,
-                document_letter=draft.document_letter.upper(),
+                actual_document_letter=draft.document_letter.upper(),
             )
         )
     if expected_letter and not draft.document_letter:
         warnings.append(
-            _odoo_validation_message(
+            _validation_issue(
                 "document_letter_missing",
                 expected_letter=expected_letter,
             )
         )
     if not draft.partner_vat and not draft.partner_doc_type:
-        warnings.append(_odoo_validation_message("partner_tax_id_or_doc_type_missing"))
+        warnings.append(
+            _validation_issue(
+                "partner_tax_id_or_doc_type_missing",
+                required_any=["partner_vat", "partner_doc_type"],
+            )
+        )
     if not draft.email_to:
-        warnings.append(_odoo_validation_message("email_to_missing"))
+        warnings.append(_validation_issue("email_to_missing", field="email_to"))
 
     return OdooValidationResult(
         mode=mode,
@@ -103,7 +106,6 @@ def validate_argentina_invoice_draft(
         ok=not missing,
         missing_fields=missing,
         warnings=warnings,
-        suggested_actions=_argentina_invoice_actions(missing, expected_letter),
     )
 
 
@@ -130,54 +132,11 @@ def validate_delivery_draft(
         ok=not missing,
         missing_fields=missing,
         warnings=[],
-        suggested_actions=_delivery_actions(missing),
     )
 
 
-def _odoo_validation_message(key: str, **context: object) -> str:
-    return _ODOO_VALIDATION_MESSAGES[key].format(**context)
-
-
-def _invoice_actions(missing: list[str]) -> list[str]:
-    actions = []
-    if "partner_id" in missing:
-        actions.append("Buscar el partner con search_partners antes de facturar.")
-    if "journal_id" in missing:
-        actions.append("Resolver el diario con search_journals antes de facturar.")
-    if "lines" in missing:
-        actions.append("Agregar al menos una linea de factura valida.")
-    return actions
-
-
-def _delivery_actions(missing: list[str]) -> list[str]:
-    actions = []
-    if "partner_id" in missing:
-        actions.append("Buscar el cliente con search_partners.")
-    if "picking_type_id" in missing:
-        actions.append("Resolver el tipo de picking con search_picking_types.")
-    if "location_id" in missing or "location_dest_id" in missing:
-        actions.append("Resolver ubicaciones con search_locations antes de crear el remito.")
-    if "moves" in missing:
-        actions.append("Agregar al menos un movimiento de stock.")
-    return actions
-
-
-def _argentina_invoice_actions(missing: list[str], expected_letter: str | None) -> list[str]:
-    actions = []
-    if "emitter_vat" in missing:
-        actions.append("Completar el CUIT del emisor en la company.")
-    if "emitter_taxpayer_type" in missing:
-        actions.append("Definir la responsabilidad fiscal ARCA/AFIP del emisor.")
-    if "point_of_sale" in missing:
-        actions.append("Definir un punto de venta exclusivo para WSFE.")
-    if "partner_name" in missing:
-        actions.append("Completar nombre o razon social del receptor.")
-    if "lines" in missing:
-        actions.append("Agregar al menos una linea de factura.")
-    if expected_letter:
-        actions.append(f"Usar letra de comprobante {expected_letter} salvo excepcion fiscal real.")
-    actions.append("Verificar que el web service habilitado sea wsfev1.")
-    return actions
+def _validation_issue(code: str, **details: object) -> OdooValidationIssue:
+    return OdooValidationIssue(code=code, details=dict(details))
 
 
 def _expected_ar_document_letter(
@@ -189,10 +148,10 @@ def _expected_ar_document_letter(
     partner = (partner_taxpayer_type or "").strip().replace("_", " ").replace("-", " ").casefold()
     if not emitter:
         return None
-    if "monotrib" in emitter:
+    if "simplified regime" in emitter or "monotax" in emitter:
         return "C"
-    if "responsable inscripto" in emitter or emitter == "ri":
-        if "responsable inscripto" in partner or partner == "ri":
+    if "registered taxpayer" in emitter or emitter == "registered":
+        if "registered taxpayer" in partner or partner == "registered":
             return "A"
         if partner:
             return "B"

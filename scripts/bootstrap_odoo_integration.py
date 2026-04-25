@@ -26,12 +26,12 @@ PARTNERS = (
     {
         "name": "JAMBO SA",
         "vat": "30644193078",
-        "email": "compras@jambo.test",
+        "email": "purchases@jambo.test",
     },
     {
         "name": "MOLINOS MARIMBO SAIC",
         "vat": "30537582916",
-        "email": "ventas@marimbo.test",
+        "email": "sales@marimbo.test",
     },
     {
         "name": "SUMAMPA SRL",
@@ -42,31 +42,31 @@ PARTNERS = (
 
 BASE_PRODUCTS = (
     {
-        "name": "PURE DE TOMATE ARCOR X 520 GR",
+        "name": "ARCOR TOMATO PUREE 520 G",
         "default_code": "ARCOR-520",
         "list_price": 900.0,
         "standard_price": 620.0,
     },
     {
-        "name": "MENTA CRISTAL X 810 GR",
+        "name": "CRISTAL MINT 810 G",
         "default_code": "CRISTAL-810",
         "list_price": 10400.0,
         "standard_price": 7600.0,
     },
     {
-        "name": "MERENGADAS FRUT x 88 gr",
+        "name": "FRUIT MERINGUE COOKIES 88 G",
         "default_code": "MER-88",
         "list_price": 1100.0,
         "standard_price": 780.0,
     },
     {
-        "name": "HOGAREÑAS 7 SEMILLAS x 189 gr",
+        "name": "7 SEED CRACKERS 189 G",
         "default_code": "HOG-189",
         "list_price": 1150.0,
         "standard_price": 850.0,
     },
     {
-        "name": "GRASA VEGETAL PASTEL 20 KG",
+        "name": "PASTRY VEGETABLE SHORTENING 20 KG",
         "default_code": "PASTELGRAS-20",
         "list_price": 129000.0,
         "standard_price": 102400.0,
@@ -90,7 +90,7 @@ BASE_PRODUCTS = (
         "standard_price": 55800.05,
     },
     {
-        "name": "HARINA 000 PANIFICABLE 25 KG",
+        "name": "000 BREAD FLOUR 25 KG",
         "default_code": "HAR-0008",
         "list_price": 15000.0,
         "standard_price": 12750.0,
@@ -101,17 +101,17 @@ SUPPLIERINFO = (
     {
         "partner_name": "JULIO M PALACIOS",
         "product_code": "ARCOR-520",
-        "supplier_product_name": "PURE DE TOMATE ARCOR X 520 GR.",
+        "supplier_product_name": "ARCOR TOMATO PUREE 520 G",
     },
     {
         "partner_name": "JULIO M PALACIOS",
         "product_code": "CRISTAL-810",
-        "supplier_product_name": "MENTA CRISTAL X 810 GR.",
+        "supplier_product_name": "CRISTAL MINT 810 G",
     },
     {
         "partner_name": "JAMBO SA",
         "product_code": "PASTELGRAS-20",
-        "supplier_product_name": "Grasa Pastelgras x 20 kg",
+        "supplier_product_name": "Pastelgras shortening 20 KG",
         "supplier_product_code": "54353",
     },
     {
@@ -129,7 +129,7 @@ SUPPLIERINFO = (
     {
         "partner_name": "MOLINOS MARIMBO SAIC",
         "product_code": "HAR-0008",
-        "supplier_product_name": "HARINA 000 COMUN X 25 KGS. - 0008",
+        "supplier_product_name": "000 COMMON FLOUR 25 KG - 0008",
     },
 )
 
@@ -177,7 +177,7 @@ def main() -> int:
         uid=uid,
         password=admin_password,
     )
-    print(f"Odoo integration bootstrap listo en {base_url} db={database}")
+    print(f"Odoo integration bootstrap is ready at {base_url} db={database}")
     return 0
 
 
@@ -192,7 +192,7 @@ def wait_for_odoo(*, base_url: str, timeout_seconds: float) -> None:
         except Exception as exc:  # pragma: no cover - network bootstrap
             last_error = exc
         time.sleep(2)
-    raise RuntimeError(f"Odoo no respondió en {base_url!r}: {last_error}")
+    raise RuntimeError(f"Odoo did not respond at {base_url!r}: {last_error}")
 
 
 def ensure_database(
@@ -214,7 +214,7 @@ def ensure_database(
             "name": database,
             "login": admin_login,
             "password": admin_password,
-            "lang": "es_AR",
+            "lang": "en_US",
             "country_code": "AR",
             "phone": "",
             "demo": False,
@@ -225,7 +225,7 @@ def ensure_database(
     response.raise_for_status()
 
     if database not in list_databases(base_url):
-        raise RuntimeError(f"No se pudo crear la base {database!r} en Odoo.")
+        raise RuntimeError(f"Could not create database {database!r} in Odoo.")
 
 
 def list_databases(base_url: str) -> list[str]:
@@ -247,7 +247,7 @@ def authenticate(
     common_proxy = xmlrpc.client.ServerProxy(f"{base_url}/xmlrpc/2/common", allow_none=True)
     uid = common_proxy.authenticate(database, admin_login, admin_password, {})
     if not isinstance(uid, int) or uid <= 0:
-        raise RuntimeError("No se pudo autenticar contra Odoo para bootstrap.")
+        raise RuntimeError("Could not authenticate against Odoo for bootstrap.")
     return uid
 
 

@@ -32,9 +32,9 @@ from sumampa_odoo_agent.services.models.odoo import (
     SearchInput,
 )
 
-ODOO_AUTHENTICATION_FAILED_MESSAGE = "No se pudo autenticar contra Odoo."
-ODOO_UPSTREAM_FAILURE_MESSAGE = "Odoo no pudo completar la solicitud."
-ODOO_INVALID_RESPONSE_MESSAGE = "Odoo devolvio una respuesta invalida."
+ODOO_AUTHENTICATION_FAILED_MESSAGE = "Could not authenticate against Odoo."
+ODOO_UPSTREAM_FAILURE_MESSAGE = "Odoo could not complete the request."
+ODOO_INVALID_RESPONSE_MESSAGE = "Odoo returned an invalid response."
 
 
 class OdooJsonRpcClient:

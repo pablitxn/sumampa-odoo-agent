@@ -10,7 +10,7 @@ from sumampa_odoo_agent.services.errors import UpstreamServiceError, ValidationE
 from sumampa_odoo_agent.services.models.odoo import InvoiceAttachment
 from sumampa_odoo_agent.services.models.runtime import SerializedInvoiceAttachment
 
-ATTACHMENT_DOWNLOAD_FAILED_MESSAGE = "No se pudo descargar el adjunto."
+ATTACHMENT_DOWNLOAD_FAILED_MESSAGE = "Could not download the attachment."
 
 
 async def resolve_invoice_attachment(

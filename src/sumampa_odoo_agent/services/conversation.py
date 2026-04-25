@@ -50,10 +50,7 @@ class ConversationService:
 
         result = await self._runtime.run(
             AgentRunInput(
-                prompt=_conversation_prompt(
-                    text=request.text,
-                    has_attachments=bool(request.attachments),
-                ),
+                prompt=request.text.strip(),
                 context=context,
                 session_id=request.conversation_id,
             )
@@ -63,12 +60,3 @@ class ConversationService:
             conversation_id=result.session_id,
             assistant_text=result.text,
         )
-
-
-def _conversation_prompt(*, text: str, has_attachments: bool) -> str:
-    normalized = text.strip()
-    if normalized:
-        return normalized
-    if has_attachments:
-        return "Hay un adjunto del usuario. Decime qué necesitás para seguir."
-    return "Seguimos con el contexto actual y pedí sólo la información mínima necesaria."

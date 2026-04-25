@@ -23,7 +23,7 @@ from bootstrap_odoo_integration import (
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--json", action="store_true", help="Emitir el resumen en JSON.")
+    parser.add_argument("--json", action="store_true", help="Emit the summary as JSON.")
     args = parser.parse_args()
 
     summary = build_summary()
@@ -31,12 +31,12 @@ def main() -> int:
         print(json.dumps(summary, indent=2, ensure_ascii=False))
         return 0
 
-    print("Odoo 19 local listo para pruebas")
+    print("Local Odoo 19 is ready for tests")
     print(f"- URL: {summary['base_url']}")
     print(f"- DB: {summary['database']}")
 
     defaults = summary["purchase_defaults"]
-    print("- Contexto de compras sugerido:")
+    print("- Suggested purchase context:")
     print(
         "  "
         f"journal_id={defaults['journal_id']} ({defaults['journal_name']}), "
@@ -44,15 +44,15 @@ def main() -> int:
         f"location_id={defaults['location_id']} ({defaults['location_name']}), "
         f"location_dest_id={defaults['location_dest_id']} ({defaults['location_dest_name']})"
     )
-    print("- Queries útiles para la demo/API:")
+    print("- Useful demo/API queries:")
     print("  journals= purchase | picking-types= incoming | locations= Vendors / Stock")
-    print(f"- Partners seedados: {summary['seed_counts']['partners']}")
+    print(f"- Seeded partners: {summary['seed_counts']['partners']}")
     for partner in summary["partners"]:
-        print(f"  {partner['id']}: {partner['name']} [{partner['vat'] or 'sin CUIT'}]")
-    print(f"- Productos seedados: {summary['seed_counts']['products']}")
+        print(f"  {partner['id']}: {partner['name']} [{partner['vat'] or 'no tax ID'}]")
+    print(f"- Seeded products: {summary['seed_counts']['products']}")
     for product in summary["products"]:
         print(f"  {product['id']}: {product['default_code']} -> {product['display_name']}")
-    print(f"- Supplierinfo seedado: {summary['seed_counts']['supplierinfo']}")
+    print(f"- Seeded supplierinfo rows: {summary['seed_counts']['supplierinfo']}")
     for alias in summary["supplierinfo"]:
         print(
             "  "

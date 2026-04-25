@@ -9,8 +9,8 @@ from openai import RateLimitError
 
 from sumampa_odoo_agent.services.errors import TooManyRequestsError, UpstreamServiceError
 
-AGENT_RATE_LIMITED_MESSAGE = "El modelo esta temporalmente saturado. Reintenta en unos segundos."
-AGENT_UPSTREAM_FAILURE_MESSAGE = "El servicio del agente no pudo completar la solicitud."
+AGENT_RATE_LIMITED_MESSAGE = "The model is temporarily overloaded. Retry in a few seconds."
+AGENT_UPSTREAM_FAILURE_MESSAGE = "The agent service could not complete the request."
 _RATE_LIMIT_RETRY_AFTER_PATTERN = re.compile(
     r"Please try again in (?P<seconds>\d+(?:\.\d+)?)s",
     re.IGNORECASE,

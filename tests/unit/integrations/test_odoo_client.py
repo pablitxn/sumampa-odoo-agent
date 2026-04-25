@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from sumampa_odoo_agent.integrations.odoo import DryRunOdooClient, OdooJsonRpcClient
 from sumampa_odoo_agent.integrations.odoo.payloads import delivery_payload, invoice_payload
@@ -26,12 +27,12 @@ async def test_dry_run_client_searches_and_mutates_in_memory() -> None:
 
     created = await client.create_product(
         ProductInput(
-            name="Termo acero",
-            default_code="TERMO-ACERO",
+            name="Steel thermos",
+            default_code="STEEL-THERMOS",
             list_price=45.0,
         )
     )
-    search = await client.search_products(SearchInput(query="termo", limit=5))
+    search = await client.search_products(SearchInput(query="thermos", limit=5))
 
     assert created.mode == "dry-run"
     assert created.model == "product.template"
@@ -69,19 +70,30 @@ async def test_argentina_invoice_validation_reports_fiscal_warnings() -> None:
     result = await client.validate_argentina_invoice_draft(
         ArgentinaInvoiceValidationInput(
             emitter_vat="30123456789",
-            emitter_taxpayer_type="responsable_inscripto",
+            emitter_taxpayer_type="registered_taxpayer",
             point_of_sale=1,
             document_letter="C",
-            partner_name="Cliente demo",
-            partner_taxpayer_type="responsable_inscripto",
+            partner_name="Demo customer",
+            partner_taxpayer_type="registered_taxpayer",
             line_count=1,
         )
     )
 
     assert result.ok is True
     assert result.missing_fields == []
-    assert "Letra esperada A, pero vino C." in result.warnings
-    assert "Falta CUIT o tipo de documento del receptor." in result.warnings
+    warnings = {warning.code: warning.details for warning in result.warnings}
+    assert warnings["document_letter_mismatch"] == {
+        "expected_letter": "A",
+        "actual_document_letter": "C",
+    }
+    assert warnings["partner_tax_id_or_doc_type_missing"] == {
+        "required_any": ["partner_vat", "partner_doc_type"]
+    }
+
+
+def test_delivery_move_requires_agent_provided_name() -> None:
+    with pytest.raises(ValidationError):
+        DeliveryMoveInput.model_validate({"product_id": 201, "quantity": 2})
 
 
 @pytest.mark.asyncio
@@ -89,16 +101,16 @@ async def test_dry_run_invoice_and_delivery_use_shared_payload_builders() -> Non
     client = DryRunOdooClient()
     invoice = InvoiceInput(
         partner_id=101,
-        lines=[InvoiceLineInput(product_id=201, quantity=2, price_unit=12.5, name="Bombilla")],
-        narration="Pedido WhatsApp",
+        lines=[InvoiceLineInput(product_id=201, quantity=2, price_unit=12.5, name="Straw")],
+        narration="WhatsApp order",
     )
     delivery = DeliveryInput(
         partner_id=101,
         picking_type_id=501,
         location_id=601,
         location_dest_id=602,
-        moves=[DeliveryMoveInput(product_id=201, quantity=2, name="Bombilla")],
-        origin="Pedido WhatsApp",
+        moves=[DeliveryMoveInput(product_id=201, quantity=2, name="Straw")],
+        origin="WhatsApp order",
     )
 
     invoice_result = await client.create_invoice(invoice)

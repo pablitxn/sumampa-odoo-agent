@@ -27,8 +27,12 @@ async def test_registry_tool_delegates_to_odoo_gateway() -> None:
     tools = {tool.__name__: tool for tool in build_agent_tools(odoo=DryRunOdooClient())}
     create_product = cast(AgentTool, tools["create_product"])
 
-    result = await create_product(name="Termo acero", default_code="TERMO-ACERO", list_price=45.0)
+    result = await create_product(
+        name="Steel thermos",
+        default_code="STEEL-THERMOS",
+        list_price=45.0,
+    )
 
     assert result["mode"] == "dry-run"
     assert result["model"] == "product.template"
-    assert result["payload"]["name"] == "Termo acero"
+    assert result["payload"]["name"] == "Steel thermos"

@@ -27,4 +27,4 @@ def test_canonical_package_exports_are_available() -> None:
 
 
 def test_default_agent_prompt_is_available_without_asset_loader() -> None:
-    assert "Sos el asistente operativo de Sumampa para Odoo." in DEFAULT_AGENT_SYSTEM_PROMPT
+    assert "You are Sumampa's operational assistant for Odoo." in DEFAULT_AGENT_SYSTEM_PROMPT

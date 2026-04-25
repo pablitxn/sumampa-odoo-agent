@@ -13,8 +13,13 @@ def _build_agent_message(
 ) -> str:
     if not context:
         return prompt
+    context_message = (
+        "JSON context:\n"
+        f"{json.dumps(context, ensure_ascii=False, indent=2, default=str)}"
+    )
+    if not prompt:
+        return context_message
     return (
         f"{prompt}\n\n"
-        "Contexto JSON:\n"
-        f"{json.dumps(context, ensure_ascii=False, indent=2, default=str)}"
+        f"{context_message}"
     )

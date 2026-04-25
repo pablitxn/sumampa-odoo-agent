@@ -22,12 +22,12 @@ class _FakeRuntime:
         return AgentRunResult(
             mode="test",
             session_id=request.session_id or "generated-session",
-            text="Seguimos con el pedido.",
+            text="We are continuing with the request.",
         )
 
 
 @pytest.mark.asyncio
-async def test_conversation_service_builds_prompt_and_runtime_context() -> None:
+async def test_conversation_service_passes_empty_text_and_runtime_context() -> None:
     runtime = _FakeRuntime()
     service = ConversationService(runtime)
 
@@ -39,7 +39,7 @@ async def test_conversation_service_builds_prompt_and_runtime_context() -> None:
             text="",
             attachments=[
                 InvoiceAttachment(
-                    filename="adjunto.jpg",
+                    filename="attachment.jpg",
                     content_type="image/jpeg",
                     content_bytes=b"fake-image",
                 )
@@ -49,9 +49,9 @@ async def test_conversation_service_builds_prompt_and_runtime_context() -> None:
     )
 
     assert result.conversation_id == "conv-1"
-    assert result.assistant_text == "Seguimos con el pedido."
+    assert result.assistant_text == "We are continuing with the request."
     assert runtime.last_call is not None
-    assert runtime.last_call["prompt"] == "Hay un adjunto del usuario. Decime qué necesitás para seguir."
+    assert runtime.last_call["prompt"] == ""
     runtime_context = runtime.last_call["context"]
     assert isinstance(runtime_context, dict)
     assert runtime_context["transport"]["channel"] == "whatsapp"

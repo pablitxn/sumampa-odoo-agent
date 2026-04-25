@@ -54,7 +54,7 @@ class InvoiceInput(BaseModel):
 class DeliveryMoveInput(BaseModel):
     product_id: int
     quantity: float = Field(gt=0)
-    name: str | None = None
+    name: str = Field(min_length=1)
 
 
 class DeliveryInput(BaseModel):
@@ -119,13 +119,17 @@ class InvoiceAttachment(BaseModel):
     content_bytes: bytes = Field(min_length=1)
 
 
+class OdooValidationIssue(BaseModel):
+    code: str = Field(min_length=1)
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
 class OdooValidationResult(BaseModel):
     mode: OdooIntegrationMode
     operation: OdooValidationOperation
     ok: bool
     missing_fields: list[str] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
-    suggested_actions: list[str] = Field(default_factory=list)
+    warnings: list[OdooValidationIssue] = Field(default_factory=list)
 
 
 class OdooOperationResult(BaseModel):

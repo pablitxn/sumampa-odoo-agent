@@ -18,12 +18,12 @@ def main() -> int:
     parser.add_argument(
         "--soft",
         action="store_true",
-        help="No bajar volúmenes; sólo rebootstrapear el stack actual.",
+        help="Do not remove volumes; only bootstrap the current stack again.",
     )
     parser.add_argument(
         "--skip-describe",
         action="store_true",
-        help="No imprimir el resumen final del entorno seedado.",
+        help="Do not print the final seeded environment summary.",
     )
     args = parser.parse_args()
 
