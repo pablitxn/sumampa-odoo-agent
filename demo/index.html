@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sumampa WhatsApp Demo</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="icon-attachment" viewBox="0 0 24 24">
+        <path d="M21.4 11.6 12 21a6 6 0 0 1-8.5-8.5l9.8-9.8a4.2 4.2 0 0 1 6 6L9.7 18.3a2.4 2.4 0 0 1-3.4-3.4l8.7-8.7"></path>
+      </symbol>
+      <symbol id="icon-send" viewBox="0 0 24 24">
+        <path d="m22 2-7 20-4-9-9-4 20-7Z"></path>
+        <path d="M22 2 11 13"></path>
+      </symbol>
+      <symbol id="icon-trash" viewBox="0 0 24 24">
+        <path d="M3 6h18"></path>
+        <path d="M8 6V4h8v2"></path>
+        <path d="m19 6-1 14H6L5 6"></path>
+      </symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24">
+        <path d="m20 6-11 11-5-5"></path>
+      </symbol>
+    </svg>
+
+    <div class="app-shell">
+      <main class="phone-stage" aria-label="Vista de WhatsApp">
+        <section class="phone" aria-label="Telefono con chat">
+          <div class="phone-speaker" aria-hidden="true"></div>
+          <div class="phone-glass">
+            <div class="phone-status">
+              <span>9:41</span>
+              <div class="status-icons" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </div>
+
+            <header class="chat-header">
+              <button class="back-button" type="button" aria-label="Volver" title="Volver">
+                <span aria-hidden="true"></span>
+              </button>
+              <div class="agent-avatar" aria-hidden="true">SO</div>
+              <div class="chat-title">
+                <strong>Sumampa Odoo Agent</strong>
+                <small id="phoneStatus">backend local</small>
+              </div>
+            </header>
+
+            <section id="messageList" class="message-list" aria-live="polite"></section>
+
+            <div id="pendingAttachment" class="pending-attachment is-hidden" aria-live="polite">
+              <div class="pending-preview" id="pendingPreview"></div>
+              <div class="pending-copy">
+                <strong id="pendingName"></strong>
+                <span id="pendingMeta"></span>
+              </div>
+              <button
+                id="removeAttachmentButton"
+                class="icon-button danger"
+                type="button"
+                aria-label="Quitar adjunto"
+                title="Quitar adjunto"
+              >
+                <svg><use href="#icon-trash"></use></svg>
+              </button>
+            </div>
+
+            <form id="composerForm" class="composer">
+              <button
+                id="attachmentButton"
+                class="icon-button"
+                type="button"
+                aria-label="Adjuntar factura"
+                title="Adjuntar factura"
+              >
+                <svg><use href="#icon-attachment"></use></svg>
+              </button>
+              <input id="fileInput" type="file" accept="image/*,application/pdf,text/plain" hidden>
+              <textarea
+                id="messageInput"
+                aria-label="Mensaje"
+                placeholder="Mensaje"
+                rows="1"
+              ></textarea>
+              <button
+                id="sendButton"
+                class="icon-button send"
+                type="submit"
+                aria-label="Enviar"
+                title="Enviar"
+              >
+                <svg><use href="#icon-send"></use></svg>
+              </button>
+            </form>
+          </div>
+        </section>
+      </main>
+
+      <aside class="control-panel" aria-label="Controles del demo">
+        <section class="panel-section">
+          <div class="section-title">
+            <span>Backend local</span>
+            <strong id="connectionPill" data-status="checking">checando</strong>
+          </div>
+          <label class="field">
+            <span>Endpoint</span>
+            <input id="endpointInput" type="url" value="http://127.0.0.1:8000/api/v1/messages">
+          </label>
+        </section>
+
+        <section class="panel-section compact-grid">
+          <label class="field">
+            <span>Conversation ID</span>
+            <input id="conversationInput" type="text">
+          </label>
+          <label class="field">
+            <span>WhatsApp user</span>
+            <input id="userInput" type="text" value="5491123456789">
+          </label>
+        </section>
+
+        <section class="panel-section">
+          <div class="section-title">
+            <span>Mensajes rapidos</span>
+          </div>
+          <div class="quick-groups">
+            <div class="quick-group">
+              <div class="quick-group-title align-end">
+                <strong>Facturas</strong>
+              </div>
+              <div class="invoice-preview" aria-label="Preview de factura mock">
+                <div class="invoice-paper">
+                  <div class="invoice-bar"></div>
+                  <div class="invoice-row strong"></div>
+                  <div class="invoice-row short"></div>
+                  <div class="invoice-table">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                  <div class="invoice-total"></div>
+                </div>
+              </div>
+              <div class="quick-actions">
+                <button
+                  type="button"
+                  data-mock-attachment="invoice"
+                  data-message="Necesito cargar esta factura en Odoo."
+                >
+                  Cargar factura adjunta
+                </button>
+                <button
+                  type="button"
+                  data-mock-attachment="invoice"
+                  data-message="Lee esta factura y decime que datos faltan antes de cargarla."
+                >
+                  Revisar factura
+                </button>
+              </div>
+            </div>
+            <div class="quick-group">
+              <div class="quick-group-title align-end">
+                <strong>Mas ejemplos</strong>
+              </div>
+              <div class="quick-actions">
+                <button type="button" data-message="Confirmo, cargala como borrador.">
+                  Confirmar borrador
+                </button>
+                <button type="button" data-message="Que datos faltan para avanzar?">
+                  Datos faltantes
+                </button>
+                <button type="button" data-message="Buscala por proveedor y fecha.">
+                  Buscar en Odoo
+                </button>
+                <button type="button" data-message="Mostrame el estado de esta conversacion.">
+                  Estado del caso
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
