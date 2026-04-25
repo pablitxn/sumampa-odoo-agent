@@ -47,6 +47,9 @@ def test_load_settings_applies_declarative_environment_overrides(
     monkeypatch.setenv("ORCHID_ODOO_TIMEOUT_SECONDS", "7.5")
     monkeypatch.setenv("ORCHID_SESSION_STORE_MODE", "hybrid")
     monkeypatch.setenv("ORCHID_SESSION_STORE_REDIS_TTL_SECONDS", "120")
+    monkeypatch.setenv("ORCHID_OBSERVABILITY_MODE", "langfuse")
+    monkeypatch.setenv("ORCHID_OBSERVABILITY_SAMPLE_RATE", "0.5")
+    monkeypatch.setenv("ORCHID_OBSERVABILITY_FLUSH_ON_SHUTDOWN", "false")
 
     settings = load_settings(config_dir=config_dir, env="test")
 
@@ -54,3 +57,6 @@ def test_load_settings_applies_declarative_environment_overrides(
     assert settings.odoo.timeout_seconds == 7.5
     assert settings.session_store.mode == "hybrid"
     assert settings.session_store.redis_ttl_seconds == 120
+    assert settings.observability.mode == "langfuse"
+    assert settings.observability.sample_rate == 0.5
+    assert settings.observability.flush_on_shutdown is False

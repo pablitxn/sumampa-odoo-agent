@@ -7,6 +7,10 @@ from dataclasses import dataclass
 
 from sumampa_odoo_agent.config import AppSettings
 from sumampa_odoo_agent.integrations.agent import build_agent_runtime
+from sumampa_odoo_agent.integrations.observability import (
+    ObservedOdooGateway,
+    build_observability_provider,
+)
 from sumampa_odoo_agent.integrations.odoo import build_odoo_gateway
 from sumampa_odoo_agent.integrations.sessions import build_session_store
 from sumampa_odoo_agent.integrations.storage import build_attachment_store
@@ -30,10 +34,20 @@ class AppServices:
 async def build_app_services(settings: AppSettings) -> AppServices:
     """Build the explicit service graph from runtime integrations."""
 
+    observability = build_observability_provider(settings)
     session_store = await build_session_store(settings)
     attachment_store = await build_attachment_store(settings)
-    odoo_gateway = build_odoo_gateway(settings)
-    agent_runtime = build_agent_runtime(settings, odoo_gateway, session_store)
+    odoo_gateway = ObservedOdooGateway(
+        wrapped=build_odoo_gateway(settings),
+        observability=observability,
+        mode=settings.odoo.mode,
+    )
+    agent_runtime = build_agent_runtime(
+        settings,
+        odoo_gateway,
+        session_store,
+        observability,
+    )
     attachment_ingestion = AttachmentIngestionService(
         object_store=attachment_store,
         settings=settings.attachments,
@@ -42,9 +56,22 @@ async def build_app_services(settings: AppSettings) -> AppServices:
     conversation = ConversationService(
         agent_runtime,
         attachment_ingestion=attachment_ingestion,
+        observability=observability,
+        trace_metadata={
+            "service.name": settings.service.name,
+            "service.version": settings.service.version,
+            "agent.mode": settings.agent.mode,
+            "agent.model": settings.agent.model,
+            "odoo.mode": settings.odoo.mode,
+        },
     )
     return AppServices(
         settings=settings,
         conversation=conversation,
-        closers=(session_store.aclose, attachment_store.aclose, odoo_gateway.aclose),
+        closers=(
+            observability.aclose,
+            session_store.aclose,
+            attachment_store.aclose,
+            odoo_gateway.aclose,
+        ),
     )

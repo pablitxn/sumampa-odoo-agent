@@ -56,3 +56,50 @@ docker compose up -d minio minio-init
 Attachments are stored as originals in MinIO, then normalized before they are sent to the
 Agent Framework runtime. PDF and audio normalization expect `pdftotext`, `pdftoppm`, and
 `ffmpeg` to be available on the app host.
+
+## Local Langfuse Observability
+
+Run Langfuse locally with the upstream v3 Docker Compose setup:
+
+```bash
+git clone https://github.com/langfuse/langfuse.git ~/repos/langfuse
+cd ~/repos/langfuse
+docker compose up
+```
+
+Open `http://localhost:3000`, create a project, then add the project keys to this repo's
+`.env`:
+
+```bash
+ORCHID_OBSERVABILITY_MODE=langfuse
+ORCHID_LANGFUSE_BASE_URL=http://localhost:3000
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+```
+
+The app records one `conversation.turn` trace per `/api/v1/messages` request, grouped by
+Langfuse session using `conversation_id`. Agent, attachment, session-store, and Odoo calls
+are child observations. Text, tool inputs/results, and attachment manifests are captured;
+raw binary attachment bytes are replaced with size and SHA-256 metadata.
+
+Bootstrap eval assets:
+
+```bash
+PYTHONPATH=src uv run python scripts/bootstrap_langfuse_evals.py
+```
+
+Promote reviewed traces into datasets:
+
+```bash
+PYTHONPATH=src uv run python scripts/curate_langfuse_datasets.py \
+  sumampa/dev/regression-failures --tag eval:candidate
+```
+
+Run evals against a Langfuse dataset with dry-run Odoo and isolated in-memory sessions:
+
+```bash
+PYTHONPATH=src uv run python scripts/run_evals.py sumampa/dev/odoo-ops
+```
+
+Set `OPENAI_EVAL_MODEL` or pass `--llm-judge-model` to add the optional LLM rubric judge
+on top of deterministic checks.

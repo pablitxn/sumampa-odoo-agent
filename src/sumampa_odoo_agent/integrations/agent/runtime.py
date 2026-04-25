@@ -9,12 +9,14 @@ from sumampa_odoo_agent.integrations.agent.service import (
 )
 from sumampa_odoo_agent.services.contracts import AgentRuntime, OdooGateway, SessionStore
 from sumampa_odoo_agent.services.errors import ConfigurationError
+from sumampa_odoo_agent.services.observability import ObservabilityProvider
 
 
 def build_agent_runtime(
     settings: AppSettings,
     odoo_gateway: OdooGateway,
     session_store: SessionStore,
+    observability: ObservabilityProvider,
 ) -> AgentRuntime:
     """Build the configured agent runtime."""
 
@@ -26,6 +28,7 @@ def build_agent_runtime(
             odoo=odoo_gateway,
             base_url=settings.agent.base_url,
             session_store=session_store,
+            observability=observability,
         )
     if settings.agent.mode == "disabled":
         return DisabledAgentService()

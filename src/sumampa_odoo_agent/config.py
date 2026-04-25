@@ -19,6 +19,8 @@ AgentMode = Literal["disabled", "openai"]
 SessionStoreMode = Literal["memory", "hybrid"]
 AttachmentStoreMode = Literal["memory", "s3"]
 LoggingFormat = Literal["json", "text"]
+ObservabilityMode = Literal["disabled", "langfuse"]
+ObservabilityCaptureMode = Literal["full"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +83,17 @@ class AttachmentSettings(BaseModel):
     max_pdf_pages: int = Field(default=5, ge=1, le=50)
 
 
+class ObservabilitySettings(BaseModel):
+    mode: ObservabilityMode = "disabled"
+    environment: str = DEFAULT_ENV
+    capture_mode: ObservabilityCaptureMode = "full"
+    sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    public_key_env_var: str = "LANGFUSE_PUBLIC_KEY"
+    secret_key_env_var: str = "LANGFUSE_SECRET_KEY"
+    base_url: str = "http://localhost:3000"
+    flush_on_shutdown: bool = True
+
+
 class AppSettings(BaseModel):
     service: ServiceSettings
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
@@ -88,6 +101,11 @@ class AppSettings(BaseModel):
     agent: AgentSettings = Field(default_factory=AgentSettings)
     session_store: SessionStoreSettings = Field(default_factory=SessionStoreSettings)
     attachments: AttachmentSettings = Field(default_factory=AttachmentSettings)
+    observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
+
+
+def _coerce_bool(value: str) -> bool:
+    return value.strip().casefold() in {"1", "true", "yes", "y", "on"}
 
 
 _ENV_OVERRIDES: tuple[EnvOverride, ...] = (
@@ -117,6 +135,18 @@ _ENV_OVERRIDES: tuple[EnvOverride, ...] = (
     EnvOverride("ORCHID_ATTACHMENT_MAX_BYTES", ("attachments", "max_attachment_bytes"), int),
     EnvOverride("ORCHID_ATTACHMENT_MAX_TEXT_CHARS", ("attachments", "max_text_chars"), int),
     EnvOverride("ORCHID_ATTACHMENT_MAX_PDF_PAGES", ("attachments", "max_pdf_pages"), int),
+    EnvOverride("ORCHID_OBSERVABILITY_MODE", ("observability", "mode")),
+    EnvOverride("ORCHID_OBSERVABILITY_ENVIRONMENT", ("observability", "environment")),
+    EnvOverride("ORCHID_OBSERVABILITY_CAPTURE_MODE", ("observability", "capture_mode")),
+    EnvOverride("ORCHID_OBSERVABILITY_SAMPLE_RATE", ("observability", "sample_rate"), float),
+    EnvOverride("ORCHID_LANGFUSE_PUBLIC_KEY_ENV_VAR", ("observability", "public_key_env_var")),
+    EnvOverride("ORCHID_LANGFUSE_SECRET_KEY_ENV_VAR", ("observability", "secret_key_env_var")),
+    EnvOverride("ORCHID_LANGFUSE_BASE_URL", ("observability", "base_url")),
+    EnvOverride(
+        "ORCHID_OBSERVABILITY_FLUSH_ON_SHUTDOWN",
+        ("observability", "flush_on_shutdown"),
+        _coerce_bool,
+    ),
 )
 
 

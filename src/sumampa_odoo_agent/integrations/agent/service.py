@@ -24,6 +24,11 @@ from sumampa_odoo_agent.services.errors import (
     UpstreamServiceError,
 )
 from sumampa_odoo_agent.services.models.runtime import AgentRunInput, AgentRunResult
+from sumampa_odoo_agent.services.observability import (
+    NoOpObservabilityProvider,
+    ObservabilityProvider,
+    to_observability_payload,
+)
 from sumampa_odoo_agent.tools import build_agent_tools
 
 AGENT_SESSION_NAMESPACE = "agent"
@@ -55,6 +60,7 @@ class MicrosoftAgentFrameworkOpenAIService:
         odoo: OdooGateway | None = None,
         base_url: str | None = None,
         session_store: SessionStore,
+        observability: ObservabilityProvider | None = None,
     ) -> None:
         self._model = model
         self._system_prompt = system_prompt or DEFAULT_AGENT_SYSTEM_PROMPT
@@ -62,6 +68,7 @@ class MicrosoftAgentFrameworkOpenAIService:
         self._base_url = base_url
         self._odoo = odoo
         self._session_store = session_store
+        self._observability = observability or NoOpObservabilityProvider()
 
     async def run(self, request: AgentRunInput) -> AgentRunResult:
         OpenAIChatClient = _load_openai_chat_client()
@@ -99,23 +106,65 @@ class MicrosoftAgentFrameworkOpenAIService:
             context=request.context.to_agent_context(),
             attachments=request.attachments,
         )
-        try:
-            response = await agent.run(message, session=session)
-        except Exception as exc:
-            translated_error = _translate_agent_run_error(exc, model=self._model)
-            if translated_error is not None:
-                raise translated_error from exc
-            raise
+        with self._observability.start_observation(
+            name="agent.run",
+            as_type="agent",
+            input={
+                "prompt": request.prompt,
+                "context": request.context.to_agent_context(),
+                "attachments": [_artifact_trace_payload(artifact) for artifact in request.attachments],
+                "session_id": resolved_session_id,
+            },
+            metadata={
+                "provider": "openai",
+                "agent.provider": "microsoft-agent-framework-openai",
+                "agent.model": self._model,
+            },
+            model=self._model,
+        ) as observation:
+            try:
+                response = await agent.run(message, session=session)
+            except Exception as exc:
+                observation.update(
+                    level="ERROR",
+                    status_message=f"{exc.__class__.__name__}: {exc}",
+                )
+                translated_error = _translate_agent_run_error(exc, model=self._model)
+                if translated_error is not None:
+                    raise translated_error from exc
+                raise
 
-        await self._session_store.save(
-            namespace=AGENT_SESSION_NAMESPACE,
-            session_id=session.session_id,
-            payload=session.to_dict(),
-        )
+            response_text = str(getattr(response, "text", str(response)))
+            observation.update(output={"text": response_text}, model=self._model)
+
+        session_payload = session.to_dict()
+        with self._observability.start_observation(
+            name="agent.session.save",
+            as_type="span",
+            input={
+                "namespace": AGENT_SESSION_NAMESPACE,
+                "session_id": session.session_id,
+                "payload": to_observability_payload(session_payload),
+            },
+            metadata={"store.namespace": AGENT_SESSION_NAMESPACE},
+        ) as observation:
+            try:
+                await self._session_store.save(
+                    namespace=AGENT_SESSION_NAMESPACE,
+                    session_id=session.session_id,
+                    payload=session_payload,
+                )
+            except Exception as exc:
+                observation.update(
+                    level="ERROR",
+                    status_message=f"{exc.__class__.__name__}: {exc}",
+                )
+                raise
+            observation.update(output={"saved": True})
         return AgentRunResult(
             mode="microsoft-agent-framework-openai",
             session_id=resolved_session_id,
-            text=str(getattr(response, "text", str(response))),
+            text=response_text,
         )
 
     async def _load_or_create_session(
@@ -125,10 +174,37 @@ class MicrosoftAgentFrameworkOpenAIService:
         session_id: str,
     ) -> Any:
         AgentSession = _load_agent_session_type()
-        payload = await self._session_store.load(
-            namespace=AGENT_SESSION_NAMESPACE,
-            session_id=session_id,
-        )
+        with self._observability.start_observation(
+            name="agent.session.load",
+            as_type="span",
+            input={"namespace": AGENT_SESSION_NAMESPACE, "session_id": session_id},
+            metadata={"store.namespace": AGENT_SESSION_NAMESPACE},
+        ) as observation:
+            try:
+                payload = await self._session_store.load(
+                    namespace=AGENT_SESSION_NAMESPACE,
+                    session_id=session_id,
+                )
+            except Exception as exc:
+                observation.update(
+                    level="ERROR",
+                    status_message=f"{exc.__class__.__name__}: {exc}",
+                )
+                raise
+            observation.update(
+                output={
+                    "found": payload is not None,
+                    "payload": to_observability_payload(payload),
+                }
+            )
         if payload is not None:
             return AgentSession.from_dict(payload)
         return agent.create_session(session_id=session_id)
+
+
+def _artifact_trace_payload(artifact: Any) -> dict[str, Any]:
+    payload = artifact.model_dump(exclude={"content_bytes"}) if hasattr(artifact, "model_dump") else {}
+    content_bytes = getattr(artifact, "content_bytes", None)
+    if content_bytes is not None:
+        payload["content_bytes"] = to_observability_payload(content_bytes)
+    return dict(payload)
