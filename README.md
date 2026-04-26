@@ -118,7 +118,7 @@ Phoenix instance does not require `PHOENIX_API_KEY`; leave it empty unless your
 Phoenix deployment has auth enabled.
 
 ```bash
-PYTHON_ENV=development
+PYTHON_ENV=local
 OPENAI_API_KEY=replace-with-real-key
 AGENT_MODE=openai
 
@@ -311,6 +311,13 @@ Before local tests:
 Expected local gaps:
 
 - `PHOENIX_API_KEY` may be empty for unauthenticated local Phoenix.
+- `PYTHON_ENV=local` is the default local profile and uses human-readable `text`
+  logs in PyCharm/stdout.
+- `PYTHON_ENV=local_with_production_logs` keeps local Phoenix/Odoo defaults but
+  switches stdout back to JSON and enables OTEL logs/metrics toward the local
+  collector for Loki/Grafana checks.
+- `LOGGING_FORMAT` and `LOGGING_LEVEL` can override either profile when needed;
+  leave them unset for normal profile-driven behavior.
 - Odoo JSON-RPC tests need the Odoo profile and seeded `sumampa_integration` DB.
 - Harbor tests need the Harbor CLI and a real `OPENAI_API_KEY`.
 
@@ -318,7 +325,10 @@ Expected local gaps:
 
 Shared PyCharm configurations live under `.run/`. They use the project `uv`
 interpreter, load `$PROJECT_DIR$/.env`, and set non-secret local defaults for
-Phoenix, Odoo, session storage, and attachments.
+Phoenix, Odoo, session storage, and attachments. The shared local configs use
+`PYTHON_ENV=local`, which keeps traces production-like through Phoenix while
+making console logs readable. To test the local Loki/Grafana log path, change
+only `PYTHON_ENV` to `local_with_production_logs`.
 
 Available configs:
 

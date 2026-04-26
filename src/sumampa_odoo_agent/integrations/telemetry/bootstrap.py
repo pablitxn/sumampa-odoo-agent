@@ -40,9 +40,10 @@ from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
+from opentelemetry.trace import Span, SpanKind
 
 from sumampa_odoo_agent.config import AppSettings
 from sumampa_odoo_agent.integrations.agent.framework import _ensure_agent_framework_version
@@ -60,13 +61,39 @@ logger = logging.getLogger(__name__)
 _GLOBAL_INSTRUMENTATION_ENABLED = False
 _GLOBAL_TELEMETRY_CONFIGURED = False
 _MANAGED_OTEL_LOG_HANDLER_ATTR = "_sumampa_managed_otel_log_handler"
+_OPENINFERENCE_SPAN_KIND_ATTR = "openinference.span.kind"
+_OPENINFERENCE_AUTO_KIND_PROCESSOR_ATTR = "_sumampa_openinference_auto_kind_processor"
 _OTLP_EXPORT_TIMEOUT_SECONDS = 5.0
 _FASTAPI_EXCLUDED_URLS = r"/health(?:\?.*)?$"
+_HTTP_METHODS = frozenset({"CONNECT", "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT", "TRACE"})
+_CHAIN_SCOPE_PREFIXES = (
+    "opentelemetry.instrumentation.asgi",
+    "opentelemetry.instrumentation.fastapi",
+)
+_TOOL_SCOPE_PREFIXES = (
+    "httpcore",
+    "httpx",
+    "opentelemetry.instrumentation.botocore",
+    "opentelemetry.instrumentation.httpx",
+    "opentelemetry.instrumentation.redis",
+    "opentelemetry.instrumentation.sqlalchemy",
+)
 
 
 class _DropOpenTelemetryInternalLogs(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         return not record.name.startswith("opentelemetry.")
+
+
+class _OpenInferenceAutoKindSpanProcessor(SpanProcessor):
+    """Tag auto-instrumented OTEL spans with Phoenix/OpenInference span kinds."""
+
+    def on_start(self, span: Span, parent_context: Any | None = None) -> None:
+        del parent_context
+        _set_auto_openinference_span_kind(span)
+
+    def on_end(self, span: ReadableSpan) -> None:
+        del span
 
 
 @dataclass(slots=True)
@@ -157,9 +184,12 @@ def _configure_traces(settings: AppSettings, resource: Resource) -> Any | None:
     if not _traces_enabled(settings):
         return None
     if _GLOBAL_TELEMETRY_CONFIGURED:
-        return trace.get_tracer_provider()
+        provider = trace.get_tracer_provider()
+        _install_openinference_auto_kind_processor(provider)
+        return provider
     if _phoenix_enabled(settings):
         provider = _configure_phoenix_traces(settings, resource)
+        _install_openinference_auto_kind_processor(provider)
         _GLOBAL_TELEMETRY_CONFIGURED = True
         return provider
     provider = TracerProvider(
@@ -167,6 +197,7 @@ def _configure_traces(settings: AppSettings, resource: Resource) -> Any | None:
         sampler=TraceIdRatioBased(settings.telemetry.sample_rate),
         shutdown_on_exit=False,
     )
+    _install_openinference_auto_kind_processor(provider)
     exporter = _span_exporter(settings)
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
@@ -261,6 +292,93 @@ def _enable_agent_framework_observability(*, enable_sensitive_data: bool) -> Non
         enable_instrumentation(enable_sensitive_data=enable_sensitive_data)
     except Exception:
         logger.warning("Could not enable Agent Framework OpenTelemetry", exc_info=True)
+
+
+def _install_openinference_auto_kind_processor(provider: Any | None) -> None:
+    if provider is None or getattr(provider, _OPENINFERENCE_AUTO_KIND_PROCESSOR_ATTR, False):
+        return
+    add_span_processor = getattr(provider, "add_span_processor", None)
+    if not callable(add_span_processor):
+        return
+    add_span_processor(_OpenInferenceAutoKindSpanProcessor())
+    setattr(provider, _OPENINFERENCE_AUTO_KIND_PROCESSOR_ATTR, True)
+
+
+def _set_auto_openinference_span_kind(span: Any) -> None:
+    attributes = getattr(span, "attributes", None) or {}
+    current_kind = attributes.get(_OPENINFERENCE_SPAN_KIND_ATTR)
+    if isinstance(current_kind, str) and current_kind.upper() != "UNKNOWN":
+        return
+
+    inferred_kind = _infer_openinference_span_kind(span)
+    span.set_attribute(_OPENINFERENCE_SPAN_KIND_ATTR, inferred_kind)
+    span.set_attribute("sumampa.openinference.kind.source", "otel-auto")
+
+    otel_kind_name = _otel_span_kind_name(span)
+    if otel_kind_name is not None:
+        span.set_attribute("sumampa.otel.span_kind", otel_kind_name)
+
+
+def _infer_openinference_span_kind(span: Any) -> str:
+    span_kind = getattr(span, "kind", None)
+    if span_kind == SpanKind.SERVER:
+        return "CHAIN"
+    if span_kind in {SpanKind.CLIENT, SpanKind.PRODUCER, SpanKind.CONSUMER}:
+        return "TOOL"
+
+    scope_name = _instrumentation_scope_name(span)
+    if _matches_any_prefix(scope_name, _CHAIN_SCOPE_PREFIXES):
+        return "CHAIN"
+    if _matches_any_prefix(scope_name, _TOOL_SCOPE_PREFIXES):
+        return "TOOL"
+    if _looks_like_external_dependency_span(span):
+        return "TOOL"
+    return "CHAIN"
+
+
+def _looks_like_external_dependency_span(span: Any) -> bool:
+    span_name = str(getattr(span, "name", "") or "")
+    first_token = span_name.split(" ", 1)[0].upper()
+    if first_token in _HTTP_METHODS:
+        return True
+    if span_name.startswith("S3."):
+        return True
+    if span_name.lower() in {"connect", "dns", "tls"}:
+        return True
+
+    attributes = getattr(span, "attributes", None) or {}
+    return any(
+        key in attributes
+        for key in (
+            "aws.service",
+            "db.system",
+            "http.request.method",
+            "rpc.method",
+            "rpc.service",
+            "server.address",
+            "url.full",
+        )
+    )
+
+
+def _instrumentation_scope_name(span: Any) -> str:
+    scope = getattr(span, "instrumentation_scope", None) or getattr(
+        span,
+        "instrumentation_info",
+        None,
+    )
+    name = getattr(scope, "name", "")
+    return name if isinstance(name, str) else ""
+
+
+def _matches_any_prefix(value: str, prefixes: tuple[str, ...]) -> bool:
+    return any(value == prefix or value.startswith(f"{prefix}.") for prefix in prefixes)
+
+
+def _otel_span_kind_name(span: Any) -> str | None:
+    span_kind = getattr(span, "kind", None)
+    name = getattr(span_kind, "name", None)
+    return name if isinstance(name, str) else None
 
 
 def _phoenix_enabled(settings: AppSettings) -> bool:

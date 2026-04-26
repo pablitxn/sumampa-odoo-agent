@@ -6,7 +6,7 @@
     <option name="PARENT_ENVS" value="true" />
     <envs>
       <env name="PYTHONUNBUFFERED" value="1" />
-      <env name="PYTHON_ENV" value="development" />
+      <env name="PYTHON_ENV" value="local" />
       <env name="OBSERVABILITY_MODE" value="phoenix" />
       <env name="PHOENIX_BASE_URL" value="http://localhost:6006" />
       <env name="PHOENIX_PROJECT_NAME" value="sumampa-odoo-agent" />

@@ -42,6 +42,12 @@ def test_resolve_environment_uses_python_env(monkeypatch: pytest.MonkeyPatch) ->
     assert resolve_environment() == "integration"
 
 
+def test_resolve_environment_defaults_to_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PYTHON_ENV", raising=False)
+
+    assert resolve_environment() == "local"
+
+
 def test_load_settings_applies_declarative_environment_overrides(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -51,6 +57,8 @@ def test_load_settings_applies_declarative_environment_overrides(
 
     monkeypatch.setenv("ODOO_MODE", "jsonrpc")
     monkeypatch.setenv("ODOO_TIMEOUT_SECONDS", "7.5")
+    monkeypatch.setenv("LOGGING_LEVEL", "DEBUG")
+    monkeypatch.setenv("LOGGING_FORMAT", "text")
     monkeypatch.setenv("SESSION_STORE_MODE", "hybrid")
     monkeypatch.setenv("SESSION_STORE_REDIS_TTL_SECONDS", "120")
     monkeypatch.setenv("OBSERVABILITY_MODE", "phoenix")
@@ -70,6 +78,8 @@ def test_load_settings_applies_declarative_environment_overrides(
 
     assert settings.odoo.mode == "jsonrpc"
     assert settings.odoo.timeout_seconds == 7.5
+    assert settings.logging.level == "DEBUG"
+    assert settings.logging.format == "text"
     assert settings.session_store.mode == "hybrid"
     assert settings.session_store.redis_ttl_seconds == 120
     assert settings.observability.mode == "phoenix"

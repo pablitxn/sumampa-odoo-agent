@@ -44,6 +44,8 @@ data/
 !/config/.gitkeep
 !/config/appsettings.json
 !/config/appsettings.development.json
+!/config/appsettings.local.json
+!/config/appsettings.local_with_production_logs.json
 !/config/appsettings.production.json
 !/config/enabled_modules.json
 

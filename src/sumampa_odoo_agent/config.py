@@ -11,7 +11,7 @@ from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field
 
-DEFAULT_ENV = "development"
+DEFAULT_ENV = "local"
 DEFAULT_CONFIG_DIR = Path("config")
 
 OdooMode = Literal["dry-run", "jsonrpc"]
@@ -128,6 +128,8 @@ def _coerce_bool(value: str) -> bool:
 _ENV_OVERRIDES: tuple[EnvOverride, ...] = (
     EnvOverride("AGENT_MODE", ("agent", "mode")),
     EnvOverride("AGENT_SYSTEM_PROMPT_OVERRIDE", ("agent", "system_prompt_override")),
+    EnvOverride("LOGGING_LEVEL", ("logging", "level")),
+    EnvOverride("LOGGING_FORMAT", ("logging", "format")),
     EnvOverride("ODOO_MODE", ("odoo", "mode")),
     EnvOverride("ODOO_BASE_URL", ("odoo", "base_url")),
     EnvOverride("ODOO_DATABASE", ("odoo", "database")),

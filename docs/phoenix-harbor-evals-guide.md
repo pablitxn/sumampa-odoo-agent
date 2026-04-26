@@ -164,7 +164,7 @@ Spans principales:
 | `agent.session.save` | `CHAIN` | Agent service | Persistencia de session state |
 | `odoo.<operation>` | `TOOL` | `integrations/observability/odoo.py` | Operaciones Odoo dry-run/jsonrpc |
 | spans Agent Framework | `LLM`, `TOOL`, etc. | Instrumentacion del framework | LLM calls y tool calls automaticos |
-| spans FastAPI/HTTPX/etc. | OTEL | Instrumentacion global | Transporte, outbound HTTP, DB/cache |
+| spans FastAPI/HTTPX/etc. | `CHAIN` / `TOOL` | Instrumentacion global + normalizador OTEL | Transporte, outbound HTTP, DB/cache |
 | `conversation.tags` | `CHAIN` | `/api/v1/conversation-tags` | Retagging de conversaciones para curacion |
 
 ### Atributos clave
@@ -180,6 +180,8 @@ Los spans manuales usan atributos compatibles con OpenInference/Phoenix:
 | `user.id` / `enduser.id` | Usuario del canal |
 | `metadata` | Metadata JSON del span |
 | `sumampa.*` | Metadata simple expandida para filtrar/buscar |
+| `sumampa.openinference.kind.source` | `otel-auto` cuando el repo completo el tipo OpenInference de un span autoinstrumentado |
+| `sumampa.otel.span_kind` | `SERVER`, `CLIENT`, etc.; ayuda a auditar la traduccion OTEL -> OpenInference |
 | `sumampa.tags` | Tags como CSV |
 | `tag.tags` | Tags como JSON |
 | `gen_ai.request.model` / `llm.model_name` | Modelo asociado cuando aplica |

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Any, Literal, cast
 
 import pytest
+from opentelemetry.trace import SpanKind
 
 from sumampa_odoo_agent.integrations.agent.framework import _ensure_agent_framework_version
 from sumampa_odoo_agent.integrations.observability.odoo import ObservedOdooGateway
@@ -14,6 +15,8 @@ from sumampa_odoo_agent.integrations.telemetry import OpenTelemetryObservability
 from sumampa_odoo_agent.integrations.telemetry.bootstrap import (
     _FASTAPI_EXCLUDED_URLS,
     _enable_agent_framework_observability,
+    _install_openinference_auto_kind_processor,
+    _set_auto_openinference_span_kind,
     _set_fastapi_server_span_attributes,
 )
 from sumampa_odoo_agent.integrations.telemetry.otel_provider import (
@@ -176,8 +179,25 @@ class ForceFlushProvider:
         return True
 
 
-class FakeSpan:
+class SpanProcessorProvider:
     def __init__(self) -> None:
+        self.span_processors: list[Any] = []
+
+    def add_span_processor(self, span_processor: Any) -> None:
+        self.span_processors.append(span_processor)
+
+
+class FakeSpan:
+    def __init__(
+        self,
+        *,
+        name: str = "span",
+        kind: SpanKind = SpanKind.INTERNAL,
+        instrumentation_scope_name: str = "",
+    ) -> None:
+        self.name = name
+        self.kind = kind
+        self.instrumentation_scope = SimpleNamespace(name=instrumentation_scope_name)
         self.attributes: dict[str, Any] = {}
         self.events: list[dict[str, Any]] = []
 
@@ -219,6 +239,72 @@ def test_fastapi_server_span_hook_sets_openinference_kind() -> None:
     assert span.attributes["openinference.span.kind"] == "CHAIN"
     assert span.attributes["sumampa.instrumentation"] == "fastapi"
     assert span.attributes["sumampa.http.route"] == "/api/v1/messages"
+
+
+def test_auto_kind_processor_maps_server_spans_to_chain() -> None:
+    span = FakeSpan(
+        name="POST /api/v1/messages",
+        kind=SpanKind.SERVER,
+        instrumentation_scope_name="opentelemetry.instrumentation.fastapi",
+    )
+
+    _set_auto_openinference_span_kind(cast(Any, span))
+
+    assert span.attributes["openinference.span.kind"] == "CHAIN"
+    assert span.attributes["sumampa.openinference.kind.source"] == "otel-auto"
+    assert span.attributes["sumampa.otel.span_kind"] == "SERVER"
+
+
+def test_auto_kind_processor_maps_external_client_spans_to_tool() -> None:
+    span = FakeSpan(
+        name="S3.PutBucketLifecycleConfiguration",
+        kind=SpanKind.CLIENT,
+        instrumentation_scope_name="opentelemetry.instrumentation.botocore",
+    )
+
+    _set_auto_openinference_span_kind(cast(Any, span))
+
+    assert span.attributes["openinference.span.kind"] == "TOOL"
+    assert span.attributes["sumampa.otel.span_kind"] == "CLIENT"
+
+
+def test_auto_kind_processor_maps_httpcore_connect_spans_to_tool() -> None:
+    span = FakeSpan(
+        name="connect",
+        kind=SpanKind.INTERNAL,
+        instrumentation_scope_name="httpcore",
+    )
+
+    _set_auto_openinference_span_kind(cast(Any, span))
+
+    assert span.attributes["openinference.span.kind"] == "TOOL"
+
+
+def test_auto_kind_processor_preserves_specific_openinference_kind() -> None:
+    span = FakeSpan(name="agent.llm", kind=SpanKind.INTERNAL)
+    span.attributes["openinference.span.kind"] = "LLM"
+
+    _set_auto_openinference_span_kind(cast(Any, span))
+
+    assert span.attributes == {"openinference.span.kind": "LLM"}
+
+
+def test_auto_kind_processor_retags_unknown_openinference_kind() -> None:
+    span = FakeSpan(name="GET https://odoo.example", kind=SpanKind.CLIENT)
+    span.attributes["openinference.span.kind"] = "UNKNOWN"
+
+    _set_auto_openinference_span_kind(cast(Any, span))
+
+    assert span.attributes["openinference.span.kind"] == "TOOL"
+
+
+def test_openinference_auto_kind_processor_installs_once() -> None:
+    provider = SpanProcessorProvider()
+
+    _install_openinference_auto_kind_processor(provider)
+    _install_openinference_auto_kind_processor(provider)
+
+    assert len(provider.span_processors) == 1
 
 
 def test_composite_observability_fans_out_to_all_healthy_providers() -> None:
