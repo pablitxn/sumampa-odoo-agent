@@ -238,11 +238,59 @@ def _messages_for_export(
     postgres_messages = _messages_from_session_payload(payload)
     if postgres_messages:
         return postgres_messages
+    trace_context_messages = _messages_from_trace_context_transcript(conversation_traces)
+    if trace_context_messages:
+        return trace_context_messages
     return [
         message
         for trace in conversation_traces
         for message in _messages_from_trace(trace)
     ]
+
+
+def _messages_from_trace_context_transcript(
+    conversation_traces: list[Any],
+) -> list[dict[str, Any]]:
+    for trace in reversed(conversation_traces):
+        trace_input = _jsonish(_get_attr(trace, "input", None))
+        if not isinstance(trace_input, dict):
+            continue
+        context = _jsonish(trace_input.get("context"))
+        if not isinstance(context, dict):
+            continue
+        messages = _messages_from_context_transcript(context)
+        if messages:
+            return messages
+    return []
+
+
+def _messages_from_context_transcript(context: dict[str, Any]) -> list[dict[str, Any]]:
+    transcript = context.get("transcript")
+    if not isinstance(transcript, list):
+        return []
+    messages: list[dict[str, Any]] = []
+    for raw_message in transcript:
+        if not isinstance(raw_message, dict):
+            continue
+        text = str(raw_message.get("text") or "").strip()
+        attachments = [
+            _safe_attachment_payload(attachment)
+            for attachment in _as_list(raw_message.get("attachments", []))
+            if isinstance(attachment, dict)
+        ]
+        if not text and not attachments:
+            continue
+        message: dict[str, Any] = {
+            "role": str(raw_message.get("role") or "unknown"),
+            "text": text,
+            "attachments": attachments,
+            "source": "trace_context_transcript",
+        }
+        timestamp = raw_message.get("timestamp")
+        if timestamp:
+            message["timestamp"] = str(timestamp)
+        messages.append(message)
+    return messages
 
 
 def _messages_from_session_payload(payload: dict[str, Any] | None) -> list[dict[str, Any]]:

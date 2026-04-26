@@ -51,6 +51,7 @@ const state = {
   healthTimer: null,
   resizeTimer: null,
   evalTags: [],
+  transcript: [],
 };
 
 function init() {
@@ -238,6 +239,7 @@ function normalizeEvalTag(tag) {
 
 function startConversation() {
   state.pendingAttachment = null;
+  state.transcript = [];
   clearPendingAttachment();
   els.messageList.textContent = "";
 }
@@ -461,6 +463,8 @@ function buildTagsPayload() {
       demo: true,
       source: "demo/static-whatsapp",
       timestamp: new Date().toISOString(),
+      transcript: buildTranscriptSnapshot(),
+      transcript_message_count: state.transcript.length,
     },
   };
 }
@@ -532,6 +536,9 @@ function buildTagsUrl() {
 }
 
 function appendMessage(message) {
+  const timestamp = new Date();
+  recordTranscriptMessage(message, timestamp);
+
   const row = document.createElement("article");
   row.className = `message ${message.role}`;
 
@@ -551,7 +558,7 @@ function appendMessage(message) {
 
   const time = document.createElement("div");
   time.className = "message-time";
-  time.append(document.createTextNode(formatTime(new Date())));
+  time.append(document.createTextNode(formatTime(timestamp)));
   if (message.role === "user") {
     const check = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
@@ -564,6 +571,41 @@ function appendMessage(message) {
   row.append(bubble);
   els.messageList.append(row);
   scrollMessagesToBottom();
+}
+
+function recordTranscriptMessage(message, timestamp) {
+  const text = String(message.text || "").trim();
+  const attachments = message.attachment ? [attachmentMetadata(message.attachment)] : [];
+  if (!text && !attachments.length) {
+    return;
+  }
+  const role = ["user", "assistant", "system"].includes(message.role) ? message.role : "system";
+  state.transcript.push({
+    role,
+    text,
+    attachments,
+    timestamp: timestamp.toISOString(),
+  });
+  state.transcript = state.transcript.slice(-80);
+}
+
+function buildTranscriptSnapshot() {
+  return state.transcript.map((message) => ({
+    role: message.role,
+    text: message.text,
+    attachments: message.attachments.map((attachment) => ({ ...attachment })),
+    timestamp: message.timestamp,
+  }));
+}
+
+function attachmentMetadata(attachment) {
+  return {
+    filename: attachment.filename,
+    mime_type: attachment.mimeType,
+    size_bytes: attachment.size,
+    has_content_base64: Boolean(attachment.contentBase64),
+    source: "demo/static-whatsapp",
+  };
 }
 
 function buildAttachmentNode(attachment) {

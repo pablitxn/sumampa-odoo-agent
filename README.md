@@ -92,26 +92,128 @@ datasources provisioned. The app emits stable operational metrics under
 
 ## Local Phoenix Observability
 
+Phoenix is the local source of truth for traces, datasets, experiments, and
+annotations. Harbor is the benchmark harness for full-stack runs. The longer
+operational guide lives in
+[`docs/phoenix-harbor-evals-guide.md`](docs/phoenix-harbor-evals-guide.md).
+
+### Local Prerequisites
+
+```bash
+uv sync --extra dev
+docker info
+```
+
+Harbor is only needed for the full-stack benchmark harness:
+
+```bash
+uv tool install harbor
+harbor --help
+```
+
+### Local Environment
+
+For local Phoenix smoke tests, make sure `.env` contains these values. A local
+Phoenix instance does not require `PHOENIX_API_KEY`; leave it empty unless your
+Phoenix deployment has auth enabled.
+
+```bash
+PYTHON_ENV=development
+OPENAI_API_KEY=replace-with-real-key
+AGENT_MODE=openai
+
+OBSERVABILITY_MODE=phoenix
+PHOENIX_BASE_URL=http://localhost:6006
+PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces
+PHOENIX_PROJECT_NAME=sumampa-odoo-agent
+PHOENIX_API_KEY_ENV_VAR=PHOENIX_API_KEY
+PHOENIX_API_KEY=
+
+SESSION_STORE_MODE=memory
+ATTACHMENT_STORE_MODE=memory
+ODOO_MODE=dry-run
+ODOO_BASE_URL=http://127.0.0.1:8069
+ODOO_DATABASE=sumampa_integration
+ODOO_USERNAME=admin
+ODOO_PASSWORD="${ODOO_PASSWORD:?Set private credentials}"
+ODOO_MASTER_PASSWORD="${ODOO_MASTER_PASSWORD:?Set private credentials}"
+```
+
+To check a local `.env` without printing secrets:
+
+```bash
+awk -F= '
+BEGIN {
+  split("PYTHON_ENV OPENAI_API_KEY OBSERVABILITY_MODE PHOENIX_BASE_URL PHOENIX_COLLECTOR_ENDPOINT PHOENIX_PROJECT_NAME PHOENIX_API_KEY_ENV_VAR ODOO_MODE ODOO_BASE_URL ODOO_DATABASE ODOO_USERNAME ODOO_PASSWORD", req, " ")
+}
+/^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ {
+  key=$1; gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
+  val=$0; sub(/^[^=]*=/, "", val); gsub(/^[[:space:]"'"'"' ]+|[[:space:]"'"'"' ]+$/, "", val)
+  vars[key]=val
+}
+END {
+  for (i in req) {
+    key=req[i]
+    if (!(key in vars)) status="MISSING"
+    else if (vars[key] == "" || vars[key] == "replace-me" || vars[key] == "replace-with-real-key") status="EMPTY_OR_PLACEHOLDER"
+    else status="SET"
+    print key "=" status
+  }
+  if ((!("PHOENIX_API_KEY" in vars)) || vars["PHOENIX_API_KEY"] == "") print "PHOENIX_API_KEY=EMPTY_OK_FOR_LOCAL"
+  else print "PHOENIX_API_KEY=SET"
+}' .env
+```
+
+### Phoenix Trace Smoke Test
+
 Run Phoenix locally with the observability compose profile:
 
 ```bash
 docker compose --profile observability up -d phoenix
 ```
 
-Open `http://localhost:6006`, then configure this repo's `.env`:
+Open `http://localhost:6006`, then run the app:
 
 ```bash
-OBSERVABILITY_MODE=phoenix
-PHOENIX_BASE_URL=http://localhost:6006
-PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces
-PHOENIX_PROJECT_NAME=sumampa-odoo-agent
-PHOENIX_API_KEY_ENV_VAR=PHOENIX_API_KEY
+uv run sumampa_odoo_agent --reload
+```
+
+Send a smoke message:
+
+```bash
+curl -sS http://127.0.0.1:8000/api/v1/messages \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "conversation_id": "phoenix-smoke-1",
+    "channel": "whatsapp",
+    "user_id": "local-user",
+    "text": "Hola, necesito buscar un proveedor en Odoo.",
+    "attachments": [],
+    "context": {},
+    "eval_tags": ["eval:candidate"]
+  }' | jq
 ```
 
 The app records one `conversation.turn` trace per `/api/v1/messages` request, grouped by
 Phoenix session using `conversation_id`. Agent, attachment, session-store, and Odoo calls
 are child observations. Text, tool inputs/results, and attachment manifests are captured;
 raw binary attachment bytes are replaced with size and SHA-256 metadata.
+
+In Phoenix, select project `sumampa-odoo-agent` and look for:
+
+- `conversation.turn`
+- `agent.run`
+- `attachments.prepare`
+- `agent.session.load`
+- `agent.session.save`
+- `odoo.*` spans when the request reaches Odoo tools
+
+The static demo's `Eval tags` panel sends tag changes to
+`/api/v1/conversation-tags`. Those tag-update traces include a safe
+`context.transcript` snapshot, so conversations marked after the fact can still
+be exported from Phoenix even when the local app uses `SESSION_STORE_MODE=memory`.
+
+### Phoenix Datasets And Evals
 
 Bootstrap eval assets:
 
@@ -142,6 +244,33 @@ PYTHONPATH=src uv run python scripts/run_phoenix_evals.py sumampa/dev/odoo-ops
 Set `OPENAI_EVAL_MODEL` or pass `--llm-judge-model` to add the optional LLM rubric judge
 on top of deterministic checks.
 
+### Local Odoo JSON-RPC Smoke Test
+
+Use this when you want the app to talk to the local Odoo 19 sidecar instead of
+the dry-run gateway:
+
+```bash
+docker compose --profile odoo --profile observability up -d phoenix odoo19
+PYTHONPATH=src uv run python scripts/bootstrap_odoo_integration.py
+```
+
+Then run the app with JSON-RPC Odoo settings:
+
+```bash
+ODOO_MODE=jsonrpc \
+ODOO_BASE_URL=http://127.0.0.1:8069 \
+ODOO_DATABASE=sumampa_integration \
+ODOO_USERNAME=admin \
+ODOO_PASSWORD="${ODOO_PASSWORD:?Set private credentials}" \
+OBSERVABILITY_MODE=phoenix \
+PHOENIX_BASE_URL=http://localhost:6006 \
+PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces \
+PHOENIX_PROJECT_NAME=sumampa-odoo-agent \
+uv run sumampa_odoo_agent --reload
+```
+
+### Harbor Full-Stack Benchmark
+
 Run the local Harbor full-stack benchmark harness:
 
 ```bash
@@ -152,3 +281,35 @@ The Harbor task under `benchmarks/harbor/sumampa-odoo-fullstack` starts the app,
 and Odoo Postgres as Docker sidecars, calls `/api/v1/messages`, writes
 `/logs/verifier/reward.json`, and imports numeric rewards into Phoenix when the matching
 conversation span is present.
+
+Useful variants:
+
+```bash
+# Run Harbor but do not upload reward annotations to Phoenix.
+PYTHONPATH=src uv run python scripts/run_harbor_benchmarks.py --no-upload-phoenix
+
+# Reuse an already-built image and already-running Phoenix.
+PYTHONPATH=src uv run python scripts/run_harbor_benchmarks.py --skip-build --skip-phoenix
+```
+
+Artifacts are written under `benchmark_runs/harbor/<git-sha>`. The runner also
+writes `reward-index.json` when it finds one or more Harbor `reward.json` files.
+
+### Readiness Checklist
+
+Before local tests:
+
+- Docker is running.
+- `uv sync --extra dev` has completed.
+- `.env` has a real `OPENAI_API_KEY`.
+- `.env` has `OBSERVABILITY_MODE=phoenix` and the `PHOENIX_*` values above.
+- `docker compose --profile observability config --quiet` passes.
+- `docker compose --profile observability up -d phoenix` starts Phoenix at
+  `http://localhost:6006`.
+- `harbor --help` works if running the full-stack benchmark.
+
+Expected local gaps:
+
+- `PHOENIX_API_KEY` may be empty for unauthenticated local Phoenix.
+- Odoo JSON-RPC tests need the Odoo profile and seeded `sumampa_integration` DB.
+- Harbor tests need the Harbor CLI and a real `OPENAI_API_KEY`.

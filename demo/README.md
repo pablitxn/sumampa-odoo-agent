@@ -55,3 +55,8 @@ El panel permite seleccionar varios `Eval tags` de un catalogo fijo. Cada toggle
 un evento liviano al backend para dejar rastro en Phoenix sin invocar al agente, y
 cada turno envia el array `eval_tags`. Usar `eval:discarded` para marcar conversaciones
 que no deberian entrar en datasets.
+
+Cuando se cambia un tag, el demo tambien envia un snapshot del transcript visible dentro
+del `context.transcript` de `/api/v1/conversation-tags`. Ese snapshot no incluye binarios:
+solo rol, texto, timestamp y metadata de adjuntos. Esto permite exportar una conversacion
+retaggeada desde Phoenix aunque la app este corriendo con `SESSION_STORE_MODE=memory`.

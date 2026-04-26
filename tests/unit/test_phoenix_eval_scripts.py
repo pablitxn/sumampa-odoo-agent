@@ -221,3 +221,55 @@ def test_tagged_conversation_export_uses_postgres_transcript_for_retagged_sessio
         "Respuesta previa.",
         "Segundo turno.",
     ]
+
+
+def test_tagged_conversation_export_uses_demo_transcript_snapshot_without_postgres() -> None:
+    traces = [
+        {
+            "id": "tag-trace",
+            "session_id": "conversation-1",
+            "timestamp": "2026-04-26T10:03:00+00:00",
+            "input": {
+                "conversation_id": "conversation-1",
+                "eval_tags": ["eval:dataset-ready"],
+                "context": {
+                    "source": "demo/static-whatsapp",
+                    "transcript": [
+                        {
+                            "role": "user",
+                            "text": "Carga esta factura.",
+                            "attachments": [
+                                {
+                                    "filename": "factura.jpg",
+                                    "mime_type": "image/jpeg",
+                                    "content_base64": "redacted",
+                                }
+                            ],
+                            "timestamp": "2026-04-26T10:00:00+00:00",
+                        },
+                        {
+                            "role": "assistant",
+                            "text": "Necesito el CUIT para avanzar.",
+                            "timestamp": "2026-04-26T10:01:00+00:00",
+                        },
+                    ],
+                },
+            },
+            "output": {"eval_tags": ["eval:dataset-ready"]},
+            "tags": ["conversation", "eval-tags", "eval:dataset-ready"],
+        }
+    ]
+
+    exports = _conversation_exports_from_traces(
+        traces,
+        requested_tags=["eval:dataset-ready"],
+    )
+
+    assert [message["text"] for message in exports[0]["messages"]] == [
+        "Carga esta factura.",
+        "Necesito el CUIT para avanzar.",
+    ]
+    assert exports[0]["messages"][0]["source"] == "trace_context_transcript"
+    assert exports[0]["messages"][0]["attachments"] == [
+        {"filename": "factura.jpg", "mime_type": "image/jpeg"}
+    ]
