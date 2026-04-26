@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+EvalTag = Annotated[str, Field(min_length=1, max_length=200)]
 
 
 class AttachmentInput(BaseModel):
@@ -27,6 +29,31 @@ class ConversationMessageRequest(BaseModel):
     text: str = ""
     attachments: list[AttachmentInput] = Field(default_factory=list)
     context: dict[str, Any] = Field(default_factory=dict)
+    eval_tags: list[EvalTag] = Field(default_factory=list)
+
+    @field_validator("eval_tags", mode="before")
+    @classmethod
+    def normalize_eval_tags(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            raw_tags = [value]
+        elif isinstance(value, list):
+            raw_tags = value
+        else:
+            raise ValueError("eval_tags must be a list of strings")
+
+        tags: list[str] = []
+        seen: set[str] = set()
+        for raw_tag in raw_tags:
+            if not isinstance(raw_tag, str):
+                raise ValueError("eval_tags must be a list of strings")
+            tag = raw_tag.strip()
+            if not tag or tag in seen:
+                continue
+            tags.append(tag)
+            seen.add(tag)
+        return tags
 
 
 class ConversationMessage(BaseModel):

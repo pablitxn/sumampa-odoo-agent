@@ -35,6 +35,7 @@ async def post_message(
             text=request.text,
             attachments=attachments,
             context=request.context,
+            eval_tags=request.eval_tags,
         )
     )
     return ConversationMessageResponse(

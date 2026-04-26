@@ -15,6 +15,7 @@ const els = {
   endpointInput: document.querySelector("#endpointInput"),
   conversationInput: document.querySelector("#conversationInput"),
   userInput: document.querySelector("#userInput"),
+  evalTagInput: document.querySelector("#evalTagInput"),
   connectionPill: document.querySelector("#connectionPill"),
   phoneStatus: document.querySelector("#phoneStatus"),
 };
@@ -23,6 +24,7 @@ const storageKeys = {
   endpoint: "sumampa-demo-endpoint",
   conversationId: "sumampa-demo-conversation-id",
   userId: "sumampa-demo-user-id",
+  evalTag: "sumampa-demo-eval-tag",
 };
 
 const state = {
@@ -38,6 +40,7 @@ function init() {
   els.conversationInput.value =
     localStorage.getItem(storageKeys.conversationId) || buildConversationId();
   els.userInput.value = localStorage.getItem(storageKeys.userId) || els.userInput.value;
+  els.evalTagInput.value = localStorage.getItem(storageKeys.evalTag) || els.evalTagInput.value;
 
   bindEvents();
   startConversation();
@@ -51,7 +54,7 @@ function bindEvents() {
   els.fileInput.addEventListener("change", handleFileInput);
   els.removeAttachmentButton.addEventListener("click", clearPendingAttachment);
 
-  [els.endpointInput, els.conversationInput, els.userInput].forEach((input) => {
+  [els.endpointInput, els.conversationInput, els.userInput, els.evalTagInput].forEach((input) => {
     input.addEventListener("input", () => {
       persistControls();
       if (input === els.endpointInput) {
@@ -109,6 +112,7 @@ function persistControls() {
   localStorage.setItem(storageKeys.endpoint, els.endpointInput.value.trim());
   localStorage.setItem(storageKeys.conversationId, els.conversationInput.value.trim());
   localStorage.setItem(storageKeys.userId, els.userInput.value.trim());
+  localStorage.setItem(storageKeys.evalTag, els.evalTagInput.value.trim());
 }
 
 function startConversation() {
@@ -242,8 +246,10 @@ function buildPayload({ text, attachment }) {
   const now = new Date();
   const conversationId = els.conversationInput.value.trim() || buildConversationId();
   const userId = els.userInput.value.trim() || "5491123456789";
+  const evalTag = els.evalTagInput.value.trim();
   els.conversationInput.value = conversationId;
   els.userInput.value = userId;
+  els.evalTagInput.value = evalTag;
   persistControls();
 
   return {
@@ -251,6 +257,7 @@ function buildPayload({ text, attachment }) {
     channel: "whatsapp",
     user_id: userId,
     text,
+    eval_tags: evalTag ? [evalTag] : [],
     attachments: attachment
       ? [
           {

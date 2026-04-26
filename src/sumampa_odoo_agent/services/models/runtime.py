@@ -38,6 +38,7 @@ class AgentRunInput(BaseModel):
     context: ConversationRuntimeContext
     attachments: list[PreparedAttachmentArtifact] = Field(default_factory=list)
     session_id: str | None = None
+    eval_tags: list[str] = Field(default_factory=list)
 
 
 class AgentRunResult(BaseModel):

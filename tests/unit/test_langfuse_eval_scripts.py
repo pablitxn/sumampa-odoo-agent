@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from langfuse import Evaluation
 from scripts.curate_langfuse_datasets import _dataset_item_from_trace
+from scripts.export_tagged_conversations import _conversation_exports_from_traces
 from scripts.run_evals import _eval_context, conversation_quality_eval, deterministic_eval
 
 
@@ -75,3 +76,81 @@ def test_eval_context_includes_curated_attachment_manifests() -> None:
 
     assert context["customer_name"] == "Sumampa SRL"
     assert context["attachment_manifests"] == [{"manifest": {"storage_uri": "s3://file"}}]
+
+
+def test_tagged_conversation_export_reconstructs_messages_and_postgres_summary() -> None:
+    traces = [
+        {
+            "id": "trace-1",
+            "session_id": "conversation-1",
+            "timestamp": "2026-04-26T10:00:00+00:00",
+            "input": {
+                "text": "Carga esta factura.",
+                "eval_tags": ["eval:candidate"],
+                "attachments": [{"filename": "factura.jpg", "has_content_base64": True}],
+            },
+            "output": {"assistant_text": "Necesito el CUIT para avanzar."},
+            "metadata": {"eval.tags": ["eval:candidate"]},
+            "tags": ["conversation", "eval:candidate"],
+        },
+        {
+            "id": "trace-2",
+            "session_id": "conversation-1",
+            "timestamp": "2026-04-26T10:01:00+00:00",
+            "input": {"text": "CUIT 30-71122334-9", "eval_tags": ["eval:candidate"]},
+            "output": {"assistant_text": "Listo, valide el borrador."},
+            "metadata": {"evalTags": "eval:candidate"},
+            "tags": ["conversation", "eval:candidate"],
+        },
+    ]
+    postgres_payload = {
+        "state": {
+            "sumampa": {"eval_tags": ["eval:candidate", "eval:postgres"]},
+            "in_memory": {
+                "messages": [
+                    {"role": "user", "contents": [{"type": "text", "text": "Carga esta factura."}]},
+                    {
+                        "role": "assistant",
+                        "contents": [{"type": "text", "text": "Necesito el CUIT para avanzar."}],
+                    },
+                ]
+            },
+        }
+    }
+
+    exports = _conversation_exports_from_traces(
+        traces,
+        postgres_payloads={"conversation-1": postgres_payload},
+    )
+
+    assert len(exports) == 1
+    export = exports[0]
+    assert export["conversation_id"] == "conversation-1"
+    assert export["eval_tags"] == ["eval:candidate", "eval:postgres"]
+    assert [message["role"] for message in export["messages"]] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
+    assert export["messages"][0]["attachments"][0]["filename"] == "factura.jpg"
+    assert export["postgres"]["found"] is True
+    assert export["postgres"]["message_count"] == 2
+    assert "session_payload" not in export["postgres"]
+
+
+def test_tagged_conversation_export_tolerates_missing_postgres_payload() -> None:
+    exports = _conversation_exports_from_traces(
+        [
+            {
+                "id": "trace-1",
+                "session_id": "conversation-1",
+                "input": {"text": "hola", "eval_tags": ["eval:candidate"]},
+                "output": {"assistant_text": "Listo."},
+            }
+        ],
+        postgres_errors={"conversation-1": "connection failed"},
+    )
+
+    assert exports[0]["postgres"] == {"found": False, "error": "connection failed"}
+    assert exports[0]["messages"][0]["text"] == "hola"

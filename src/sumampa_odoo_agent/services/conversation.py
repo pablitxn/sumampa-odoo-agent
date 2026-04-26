@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from sumampa_odoo_agent.services.attachments import AttachmentIngestionService
@@ -30,6 +30,7 @@ class ConversationTurnInput:
     text: str
     attachments: list[AttachmentSource]
     context: dict[str, Any]
+    eval_tags: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -58,18 +59,23 @@ class ConversationService:
 
     async def run_turn(self, request: ConversationTurnInput) -> ConversationTurnResult:
         started_at = time.perf_counter()
+        eval_tags = _normalize_eval_tags(request.eval_tags)
         trace_metadata = {
             **self._trace_metadata,
             "transport.channel": request.channel,
             "transport.user_id": request.user_id,
             "transport.conversation_id": request.conversation_id,
+            "eval.tags": eval_tags,
         }
+        if eval_tags:
+            trace_metadata["evalTags"] = ",".join(eval_tags)
         with self._observability.start_observation(
             name="conversation.turn",
             as_type="agent",
             input={
                 "text": request.text,
                 "context": request.context,
+                "eval_tags": eval_tags,
                 "attachments": [
                     _attachment_source_trace_payload(attachment)
                     for attachment in request.attachments
@@ -83,6 +89,7 @@ class ConversationService:
                 f"channel:{request.channel}",
                 f"agent:{self._trace_metadata.get('agent.mode', 'unknown')}",
                 f"odoo:{self._trace_metadata.get('odoo.mode', 'unknown')}",
+                *eval_tags,
             ],
             version=str(self._trace_metadata.get("service.version", "")) or None,
             model=_optional_string(self._trace_metadata.get("agent.model")),
@@ -138,6 +145,7 @@ class ConversationService:
                             for artifact in prepared_attachment.artifacts
                         ],
                         session_id=request.conversation_id,
+                        eval_tags=eval_tags,
                     )
                 )
             except Exception as exc:
@@ -234,3 +242,15 @@ def _optional_string(value: Any) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _normalize_eval_tags(tags: list[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw_tag in tags:
+        tag = str(raw_tag).strip()
+        if not tag or tag in seen:
+            continue
+        normalized.append(tag[:200])
+        seen.add(tag)
+    return normalized

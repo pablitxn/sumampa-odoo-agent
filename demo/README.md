@@ -31,6 +31,7 @@ El demo envia el contrato actual de la API:
   "channel": "whatsapp",
   "user_id": "5491123456789",
   "text": "Necesito cargar esta factura en Odoo.",
+  "eval_tags": ["eval:candidate"],
   "attachments": [
     {
       "filename": "factura.jpg",
@@ -49,3 +50,6 @@ El demo envia el contrato actual de la API:
 
 Los shortcuts de facturas cargan una imagen mock en el composer para simular el caso
 `mensaje + imagen` de WhatsApp.
+
+El campo `Eval tag` del panel se persiste en el browser y viaja como `eval_tags` en
+cada turno para recuperar despues traces y transcripts desde Langfuse/Postgres.

@@ -84,6 +84,7 @@ class MicrosoftAgentFrameworkOpenAIService:
 
         chat_client = OpenAIChatClient(model=self._model, api_key=api_key, base_url=self._base_url)
         resolved_session_id = request.session_id or str(uuid4())
+        eval_tags = _merge_eval_tags(request.eval_tags)
 
         agent: Any = _create_compatible_agent(
             chat_client=chat_client,
@@ -114,11 +115,14 @@ class MicrosoftAgentFrameworkOpenAIService:
                 "context": request.context.to_agent_context(),
                 "attachments": [_artifact_trace_payload(artifact) for artifact in request.attachments],
                 "session_id": resolved_session_id,
+                "eval_tags": eval_tags,
             },
             metadata={
                 "provider": "openai",
                 "agent.provider": "microsoft-agent-framework-openai",
                 "agent.model": self._model,
+                "eval.tags": eval_tags,
+                "evalTags": ",".join(eval_tags) if eval_tags else None,
             },
             model=self._model,
         ) as observation:
@@ -137,7 +141,7 @@ class MicrosoftAgentFrameworkOpenAIService:
             response_text = str(getattr(response, "text", str(response)))
             observation.update(output={"text": response_text}, model=self._model)
 
-        session_payload = session.to_dict()
+        session_payload = _with_merged_eval_tags(session.to_dict(), eval_tags)
         with self._observability.start_observation(
             name="agent.session.save",
             as_type="span",
@@ -208,3 +212,43 @@ def _artifact_trace_payload(artifact: Any) -> dict[str, Any]:
     if content_bytes is not None:
         payload["content_bytes"] = to_observability_payload(content_bytes)
     return dict(payload)
+
+
+def _with_merged_eval_tags(payload: dict[str, Any], eval_tags: list[str]) -> dict[str, Any]:
+    state = payload.get("state")
+    if not isinstance(state, dict):
+        state = {}
+        payload["state"] = state
+
+    sumampa_state = state.get("sumampa")
+    if not isinstance(sumampa_state, dict):
+        sumampa_state = {}
+        state["sumampa"] = sumampa_state
+
+    sumampa_state["eval_tags"] = _merge_eval_tags(
+        sumampa_state.get("eval_tags", []),
+        eval_tags,
+    )
+    return payload
+
+
+def _merge_eval_tags(*tag_groups: Any) -> list[str]:
+    tags: list[str] = []
+    seen: set[str] = set()
+    for tag_group in tag_groups:
+        if isinstance(tag_group, str):
+            candidates: list[Any] = [tag_group]
+        elif isinstance(tag_group, list | tuple | set):
+            candidates = list(tag_group)
+        else:
+            continue
+        for candidate in candidates:
+            tag = str(candidate).strip()
+            if not tag:
+                continue
+            tag = tag[:200]
+            if tag in seen:
+                continue
+            tags.append(tag)
+            seen.add(tag)
+    return tags

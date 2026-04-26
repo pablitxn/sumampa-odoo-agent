@@ -128,6 +128,13 @@ PYTHONPATH=src uv run python scripts/curate_langfuse_datasets.py \
   sumampa/dev/regression-failures --tag eval:candidate
 ```
 
+Export tagged conversation transcripts with optional Postgres session enrichment:
+
+```bash
+PYTHONPATH=src uv run python scripts/export_tagged_conversations.py \
+  --tag eval:candidate --json-array
+```
+
 Run evals against a Langfuse dataset with dry-run Odoo and isolated in-memory sessions:
 
 ```bash

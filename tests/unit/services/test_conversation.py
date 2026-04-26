@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+from contextlib import AbstractContextManager
+from typing import Any, Literal
 
 import pytest
 
@@ -12,6 +14,7 @@ from sumampa_odoo_agent.services.attachments import AttachmentIngestionService
 from sumampa_odoo_agent.services.conversation import ConversationService, ConversationTurnInput
 from sumampa_odoo_agent.services.models.attachments import AttachmentSource
 from sumampa_odoo_agent.services.models.runtime import AgentRunInput, AgentRunResult
+from sumampa_odoo_agent.services.observability import Observation
 
 
 class _FakeRuntime:
@@ -24,6 +27,7 @@ class _FakeRuntime:
             "context": request.context.to_agent_context(),
             "attachments": request.attachments,
             "session_id": request.session_id,
+            "eval_tags": request.eval_tags,
         }
         return AgentRunResult(
             mode="test",
@@ -75,3 +79,87 @@ async def test_conversation_service_passes_empty_text_and_runtime_context() -> N
     assert isinstance(runtime_attachments, list)
     assert len(runtime_attachments) == 1
     assert runtime_attachments[0].kind == "image"
+
+
+@pytest.mark.asyncio
+async def test_conversation_service_records_eval_tags_without_agent_context() -> None:
+    runtime = _FakeRuntime()
+    attachment_store = InMemoryAttachmentObjectStore()
+    observability = _RecordingObservability()
+    service = ConversationService(
+        runtime,
+        attachment_ingestion=AttachmentIngestionService(
+            object_store=attachment_store,
+            settings=AttachmentSettings(store_mode="memory"),
+        ),
+        observability=observability,
+    )
+
+    await service.run_turn(
+        ConversationTurnInput(
+            conversation_id="conv-1",
+            channel="whatsapp",
+            user_id="5491112345678",
+            text="hola",
+            attachments=[],
+            context={"customer_name": "Sumampa SRL"},
+            eval_tags=[" eval:candidate ", "eval:candidate"],
+        )
+    )
+
+    turn_record = next(record for record in observability.records if record["name"] == "conversation.turn")
+    assert turn_record["input"]["eval_tags"] == ["eval:candidate"]
+    assert turn_record["metadata"]["eval.tags"] == ["eval:candidate"]
+    assert turn_record["metadata"]["evalTags"] == "eval:candidate"
+    assert "eval:candidate" in turn_record["tags"]
+    assert runtime.last_call is not None
+    assert runtime.last_call["eval_tags"] == ["eval:candidate"]
+    runtime_context = runtime.last_call["context"]
+    assert isinstance(runtime_context, dict)
+    assert "eval_tags" not in runtime_context
+
+
+class _RecordingObservation:
+    def __init__(self, record: dict[str, Any]) -> None:
+        self._record = record
+
+    def update(self, **kwargs: Any) -> None:
+        self._record["updates"].append(dict(kwargs))
+
+    def score_trace(self, **kwargs: Any) -> None:
+        self._record["scores"].append(dict(kwargs))
+
+
+class _RecordingContext(AbstractContextManager[Observation]):
+    def __init__(self, record: dict[str, Any]) -> None:
+        self._record = record
+
+    def __enter__(self) -> Observation:
+        return _RecordingObservation(self._record)
+
+    def __exit__(self, *args: Any) -> Literal[False]:
+        del args
+        return False
+
+
+class _RecordingObservability:
+    def __init__(self) -> None:
+        self.records: list[dict[str, Any]] = []
+
+    def start_observation(self, **kwargs: Any) -> AbstractContextManager[Observation]:
+        record = {
+            **kwargs,
+            "updates": [],
+            "scores": [],
+        }
+        self.records.append(record)
+        return _RecordingContext(record)
+
+    def create_score(self, **kwargs: Any) -> None:
+        del kwargs
+
+    def flush(self) -> None:
+        return None
+
+    async def aclose(self) -> None:
+        return None
