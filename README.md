@@ -313,3 +313,72 @@ Expected local gaps:
 - `PHOENIX_API_KEY` may be empty for unauthenticated local Phoenix.
 - Odoo JSON-RPC tests need the Odoo profile and seeded `sumampa_integration` DB.
 - Harbor tests need the Harbor CLI and a real `OPENAI_API_KEY`.
+
+### PyCharm Run/Debug Configurations
+
+Shared PyCharm configurations live under `.run/`. They use the project `uv`
+interpreter, load `$PROJECT_DIR$/.env`, and set non-secret local defaults for
+Phoenix, Odoo, session storage, and attachments.
+
+Available configs:
+
+- `API local Phoenix dry-run`: run/debug the API with Phoenix traces and Odoo dry-run.
+- `API local Odoo JSON-RPC`: run/debug the API against local Odoo 19, with
+  in-memory sessions and attachments for fast integration testing.
+- `API local full stack`: run/debug the API against Phoenix, Odoo 19, Postgres,
+  Redis, and MinIO.
+- `Bootstrap Odoo integration`: seed the local `sumampa_integration` database.
+- `Reset Odoo integration`: recreate and reseed the local Odoo stack.
+- `Bootstrap Phoenix datasets`: create baseline Phoenix datasets.
+- `Export dataset-ready conversations`: export `eval:dataset-ready` conversations.
+- `Run Phoenix evals odoo ops dry-run`: dry-run the Phoenix experiment script.
+- `Run Harbor benchmarks no upload`: run Harbor locally without uploading annotations.
+
+Before using the API configs, start Phoenix:
+
+```bash
+docker compose --profile observability up -d phoenix
+```
+
+Before using the Odoo JSON-RPC or Odoo bootstrap/reset configs, start Odoo:
+
+```bash
+docker compose --profile odoo up -d odoo19
+```
+
+For the normal "everything local" workflow, start the full Docker stack first:
+
+```bash
+docker compose --profile odoo --profile observability up -d
+```
+
+Then run these PyCharm configs in order:
+
+1. `Bootstrap Odoo integration` on the first run, or `Reset Odoo integration`
+   only when you want to wipe and recreate the Odoo fixture database.
+2. `Bootstrap Phoenix datasets` once per Phoenix database.
+3. `API local full stack` while using `demo/index.html`.
+4. `Export dataset-ready conversations` whenever you want to back up reviewed
+   conversations from Phoenix.
+
+Do not run more than one API config at the same time; they all bind port `8000`.
+Harbor is different: `Run Harbor benchmarks no upload` builds/runs an isolated
+benchmark environment and should be treated as a later E2E check, not as the API
+process used by the demo.
+
+For debugging the API in PyCharm, keep `--reload` off. Uvicorn reload starts a
+child process, which makes breakpoints and shutdown behavior noisier. Use the
+terminal command with `--reload` only when you want the fast edit/run loop:
+
+```bash
+uv run sumampa_odoo_agent --reload
+```
+
+If you keep personal Run/Debug configurations instead of the shared `.run/`
+ones, make sure:
+
+- `Paths to ".env" files` includes `$PROJECT_DIR$/.env`.
+- Working directory is exactly `$PROJECT_DIR$` with no trailing space.
+- `Add content roots to PYTHONPATH` and `Add source roots to PYTHONPATH` are enabled.
+- `Run with uv run` is enabled.
+- `PYTHONUNBUFFERED=1` is set.

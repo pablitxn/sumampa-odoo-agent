@@ -1,0 +1,43 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="API local full stack" type="PythonConfigurationType" factoryName="Python">
+    <module name="sumampa-odoo-agent" />
+    <option name="ENV_FILES" value="$PROJECT_DIR$/.env" />
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="PARENT_ENVS" value="true" />
+    <envs>
+      <env name="PYTHONUNBUFFERED" value="1" />
+      <env name="PYTHON_ENV" value="development" />
+      <env name="OBSERVABILITY_MODE" value="phoenix" />
+      <env name="PHOENIX_BASE_URL" value="http://localhost:6006" />
+      <env name="PHOENIX_COLLECTOR_ENDPOINT" value="http://localhost:6006/v1/traces" />
+      <env name="PHOENIX_PROJECT_NAME" value="sumampa-odoo-agent" />
+      <env name="PHOENIX_API_KEY_ENV_VAR" value="PHOENIX_API_KEY" />
+      <env name="SESSION_STORE_MODE" value="hybrid" />
+      <env name="SESSION_STORE_REDIS_URL" value="redis://127.0.0.1:6379/0" />
+      <env name="ATTACHMENT_STORE_MODE" value="s3" />
+      <env name="ATTACHMENT_STORE_ENDPOINT_URL" value="http://127.0.0.1:9000" />
+      <env name="ATTACHMENT_STORE_BUCKET" value="sumampa-attachments" />
+      <env name="ODOO_MODE" value="jsonrpc" />
+      <env name="ODOO_BASE_URL" value="http://127.0.0.1:8069" />
+      <env name="ODOO_DATABASE" value="sumampa_integration" />
+      <env name="ODOO_USERNAME" value="admin" />
+    </envs>
+    <option name="SDK_HOME" value="" />
+    <option name="SDK_NAME" value="uv (sumampa-odoo-agent)" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <option name="IS_MODULE_SDK" value="false" />
+    <option name="ADD_CONTENT_ROOTS" value="true" />
+    <option name="ADD_SOURCE_ROOTS" value="true" />
+    <option name="DEBUG_JUST_MY_CODE" value="false" />
+    <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+    <option name="RUN_TOOL" value="true" />
+    <option name="SCRIPT_NAME" value="sumampa_odoo_agent.main" />
+    <option name="PARAMETERS" value="" />
+    <option name="SHOW_COMMAND_LINE" value="false" />
+    <option name="EMULATE_TERMINAL" value="false" />
+    <option name="MODULE_MODE" value="true" />
+    <option name="REDIRECT_INPUT" value="false" />
+    <option name="INPUT_FILE" value="" />
+    <method v="2" />
+  </configuration>
+</component>
