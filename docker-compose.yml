@@ -60,6 +60,15 @@ services:
     - :9001
     volumes:
     - minio_data:/data
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -f
+      - http://localhost:9000/minio/health/ready
+      interval: 5s
+      timeout: 5s
+      retries: 10
     entrypoint:
     - /bin/sh
     - -ec
@@ -71,7 +80,8 @@ services:
     image: minio/mc:latest
     container_name: sumampa-odoo-agent-minio-init
     depends_on:
-    - minio
+      minio:
+        condition: service_healthy
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-}
