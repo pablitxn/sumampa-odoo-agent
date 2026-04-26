@@ -130,10 +130,8 @@ def test_tagged_conversation_export_reconstructs_messages_and_postgres_summary()
     assert [message["role"] for message in export["messages"]] == [
         "user",
         "assistant",
-        "user",
-        "assistant",
     ]
-    assert export["messages"][0]["attachments"][0]["filename"] == "factura.jpg"
+    assert export["messages"][0]["text"] == "Carga esta factura."
     assert export["postgres"]["found"] is True
     assert export["postgres"]["message_count"] == 2
     assert "session_payload" not in export["postgres"]
@@ -154,3 +152,69 @@ def test_tagged_conversation_export_tolerates_missing_postgres_payload() -> None
 
     assert exports[0]["postgres"] == {"found": False, "error": "connection failed"}
     assert exports[0]["messages"][0]["text"] == "hola"
+
+
+def test_tagged_conversation_export_filters_stale_tags_from_postgres_state() -> None:
+    traces = [
+        {
+            "id": "trace-1",
+            "session_id": "conversation-1",
+            "input": {"text": "hola", "eval_tags": ["eval:candidate"]},
+            "output": {"assistant_text": "Listo."},
+            "tags": ["conversation", "eval:candidate"],
+        }
+    ]
+    postgres_payload: dict[str, object] = {
+        "state": {
+            "sumampa": {"eval_tags": []},
+            "in_memory": {"messages": []},
+        }
+    }
+
+    exports = _conversation_exports_from_traces(
+        traces,
+        postgres_payloads={"conversation-1": postgres_payload},
+        requested_tags=["eval:candidate"],
+    )
+
+    assert exports == []
+
+
+def test_tagged_conversation_export_uses_postgres_transcript_for_retagged_session() -> None:
+    traces = [
+        {
+            "id": "tag-trace",
+            "session_id": "conversation-1",
+            "timestamp": "2026-04-26T10:03:00+00:00",
+            "input": {
+                "conversation_id": "conversation-1",
+                "eval_tags": ["eval:dataset-ready"],
+            },
+            "output": {"eval_tags": ["eval:dataset-ready"]},
+            "tags": ["conversation", "eval-tags", "eval:dataset-ready"],
+        }
+    ]
+    postgres_payload = {
+        "state": {
+            "sumampa": {"eval_tags": ["eval:dataset-ready"]},
+            "in_memory": {
+                "messages": [
+                    {"role": "user", "contents": [{"type": "text", "text": "Primer turno."}]},
+                    {"role": "assistant", "contents": [{"type": "text", "text": "Respuesta previa."}]},
+                    {"role": "user", "contents": [{"type": "text", "text": "Segundo turno."}]},
+                ]
+            },
+        }
+    }
+
+    exports = _conversation_exports_from_traces(
+        traces,
+        postgres_payloads={"conversation-1": postgres_payload},
+        requested_tags=["eval:dataset-ready"],
+    )
+
+    assert [message["text"] for message in exports[0]["messages"]] == [
+        "Primer turno.",
+        "Respuesta previa.",
+        "Segundo turno.",
+    ]

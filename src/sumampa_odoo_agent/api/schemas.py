@@ -9,6 +9,29 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 EvalTag = Annotated[str, Field(min_length=1, max_length=200)]
 
 
+def _normalize_eval_tags(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        raw_tags = [value]
+    elif isinstance(value, list):
+        raw_tags = value
+    else:
+        raise ValueError("eval_tags must be a list of strings")
+
+    tags: list[str] = []
+    seen: set[str] = set()
+    for raw_tag in raw_tags:
+        if not isinstance(raw_tag, str):
+            raise ValueError("eval_tags must be a list of strings")
+        tag = raw_tag.strip()
+        if not tag or tag in seen:
+            continue
+        tags.append(tag)
+        seen.add(tag)
+    return tags
+
+
 class AttachmentInput(BaseModel):
     filename: str = Field(min_length=1)
     mime_type: str | None = None
@@ -34,26 +57,25 @@ class ConversationMessageRequest(BaseModel):
     @field_validator("eval_tags", mode="before")
     @classmethod
     def normalize_eval_tags(cls, value: object) -> list[str]:
-        if value is None:
-            return []
-        if isinstance(value, str):
-            raw_tags = [value]
-        elif isinstance(value, list):
-            raw_tags = value
-        else:
-            raise ValueError("eval_tags must be a list of strings")
+        return _normalize_eval_tags(value)
 
-        tags: list[str] = []
-        seen: set[str] = set()
-        for raw_tag in raw_tags:
-            if not isinstance(raw_tag, str):
-                raise ValueError("eval_tags must be a list of strings")
-            tag = raw_tag.strip()
-            if not tag or tag in seen:
-                continue
-            tags.append(tag)
-            seen.add(tag)
-        return tags
+
+class ConversationTagsRequest(BaseModel):
+    conversation_id: str = Field(min_length=1)
+    channel: str = Field(min_length=1)
+    user_id: str = Field(min_length=1)
+    eval_tags: list[EvalTag] = Field(default_factory=list)
+    context: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("eval_tags", mode="before")
+    @classmethod
+    def normalize_eval_tags(cls, value: object) -> list[str]:
+        return _normalize_eval_tags(value)
+
+
+class ConversationTagsResponse(BaseModel):
+    conversation_id: str
+    eval_tags: list[EvalTag] = Field(default_factory=list)
 
 
 class ConversationMessage(BaseModel):

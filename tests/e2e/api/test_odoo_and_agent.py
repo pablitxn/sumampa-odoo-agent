@@ -241,6 +241,36 @@ def test_messages_endpoint_records_operational_metrics_and_traces(
     assert metrics.conversation_turns[0]["result"] == "success"
 
 
+def test_conversation_tags_endpoint_records_tag_update(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observability = _RecordingObservability()
+    monkeypatch.setattr(
+        "sumampa_odoo_agent.services.app.build_observability_provider",
+        lambda settings: observability,
+    )
+    app = create_app(settings=_test_settings())
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/conversation-tags",
+            json={
+                "conversation_id": "tag-session",
+                "channel": "whatsapp",
+                "user_id": "5491112345678",
+                "eval_tags": ["eval:discarded"],
+                "context": {"demo": True},
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "conversation_id": "tag-session",
+        "eval_tags": ["eval:discarded"],
+    }
+    assert "conversation.tags" in observability.names
+
+
 class _RecordingObservation:
     def update(self, **kwargs: Any) -> None:
         del kwargs

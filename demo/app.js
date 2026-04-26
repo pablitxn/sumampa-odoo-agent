@@ -15,16 +15,34 @@ const els = {
   endpointInput: document.querySelector("#endpointInput"),
   conversationInput: document.querySelector("#conversationInput"),
   userInput: document.querySelector("#userInput"),
-  evalTagInput: document.querySelector("#evalTagInput"),
+  evalTagList: document.querySelector("#evalTagList"),
+  newConversationButton: document.querySelector("#newConversationButton"),
   connectionPill: document.querySelector("#connectionPill"),
   phoneStatus: document.querySelector("#phoneStatus"),
 };
+
+const evalTagOptions = [
+  { value: "eval:candidate", label: "Candidate" },
+  { value: "eval:dataset-ready", label: "Dataset ready" },
+  { value: "eval:regression", label: "Regression" },
+  { value: "eval:invoice-upload", label: "Invoice upload" },
+  { value: "eval:invoice-review", label: "Invoice review" },
+  { value: "eval:missing-data", label: "Missing data" },
+  { value: "eval:odoo-search", label: "Odoo search" },
+  { value: "eval:confirmation", label: "Confirmation" },
+  { value: "eval:attachment", label: "Attachment" },
+  { value: "eval:multi-turn", label: "Multi-turn" },
+  { value: "eval:error-recovery", label: "Error recovery" },
+  { value: "eval:discarded", label: "Discarded" },
+];
 
 const storageKeys = {
   endpoint: "sumampa-demo-endpoint",
   conversationId: "sumampa-demo-conversation-id",
   userId: "sumampa-demo-user-id",
   evalTag: "sumampa-demo-eval-tag",
+  evalTags: "sumampa-demo-eval-tags",
+  evalTagsByConversation: "sumampa-demo-eval-tags-by-conversation",
 };
 
 const state = {
@@ -32,6 +50,7 @@ const state = {
   sending: false,
   healthTimer: null,
   resizeTimer: null,
+  evalTags: [],
 };
 
 function init() {
@@ -40,7 +59,8 @@ function init() {
   els.conversationInput.value =
     localStorage.getItem(storageKeys.conversationId) || buildConversationId();
   els.userInput.value = localStorage.getItem(storageKeys.userId) || els.userInput.value;
-  els.evalTagInput.value = localStorage.getItem(storageKeys.evalTag) || els.evalTagInput.value;
+  state.evalTags = loadEvalTagsForConversation(els.conversationInput.value.trim());
+  renderEvalTags();
 
   bindEvents();
   startConversation();
@@ -53,14 +73,24 @@ function bindEvents() {
   els.attachmentButton.addEventListener("click", () => els.fileInput.click());
   els.fileInput.addEventListener("change", handleFileInput);
   els.removeAttachmentButton.addEventListener("click", clearPendingAttachment);
+  els.newConversationButton.addEventListener("click", startNewConversation);
 
-  [els.endpointInput, els.conversationInput, els.userInput, els.evalTagInput].forEach((input) => {
+  [els.endpointInput, els.userInput].forEach((input) => {
     input.addEventListener("input", () => {
       persistControls();
       if (input === els.endpointInput) {
         checkBackendHealth();
       }
     });
+  });
+
+  els.conversationInput.addEventListener("input", () => {
+    localStorage.setItem(storageKeys.conversationId, els.conversationInput.value.trim());
+  });
+  els.conversationInput.addEventListener("change", () => {
+    state.evalTags = loadEvalTagsForConversation(els.conversationInput.value.trim());
+    renderEvalTags();
+    persistControls();
   });
 
   document.querySelectorAll("[data-message]").forEach((button) => {
@@ -112,13 +142,115 @@ function persistControls() {
   localStorage.setItem(storageKeys.endpoint, els.endpointInput.value.trim());
   localStorage.setItem(storageKeys.conversationId, els.conversationInput.value.trim());
   localStorage.setItem(storageKeys.userId, els.userInput.value.trim());
-  localStorage.setItem(storageKeys.evalTag, els.evalTagInput.value.trim());
+  saveEvalTagsForConversation(els.conversationInput.value.trim());
+  localStorage.removeItem(storageKeys.evalTag);
+  localStorage.removeItem(storageKeys.evalTags);
+}
+
+function loadEvalTagsForConversation(conversationId) {
+  const tagsByConversation = readEvalTagsByConversation();
+  const storedConversationTags = tagsByConversation[conversationId];
+  if (Array.isArray(storedConversationTags)) {
+    return normalizeEvalTags(storedConversationTags);
+  }
+
+  const storedTags = localStorage.getItem(storageKeys.evalTags);
+  if (storedTags) {
+    try {
+      const parsed = JSON.parse(storedTags);
+      if (Array.isArray(parsed)) {
+        return normalizeEvalTags(parsed);
+      }
+    } catch {
+      localStorage.removeItem(storageKeys.evalTags);
+    }
+  }
+
+  const legacyTag = localStorage.getItem(storageKeys.evalTag);
+  return normalizeEvalTags([legacyTag || "eval:candidate"]);
+}
+
+function saveEvalTagsForConversation(conversationId) {
+  if (!conversationId) {
+    return;
+  }
+  const tagsByConversation = readEvalTagsByConversation();
+  tagsByConversation[conversationId] = normalizeEvalTags(state.evalTags);
+  localStorage.setItem(storageKeys.evalTagsByConversation, JSON.stringify(tagsByConversation));
+}
+
+function readEvalTagsByConversation() {
+  const stored = localStorage.getItem(storageKeys.evalTagsByConversation);
+  if (!stored) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(stored);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    localStorage.removeItem(storageKeys.evalTagsByConversation);
+    return {};
+  }
+}
+
+function toggleEvalTag(tag) {
+  if (state.evalTags.includes(tag)) {
+    state.evalTags = state.evalTags.filter((item) => item !== tag);
+  } else {
+    state.evalTags = [...state.evalTags, tag];
+  }
+  renderEvalTags();
+  persistControls();
+  syncEvalTags();
+}
+
+function renderEvalTags() {
+  els.evalTagList.textContent = "";
+  evalTagOptions.forEach((option) => {
+    const selected = state.evalTags.includes(option.value);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tag-pill";
+    button.dataset.selected = String(selected);
+    button.setAttribute("aria-pressed", String(selected));
+    button.title = option.value;
+    button.textContent = option.label;
+    button.addEventListener("click", () => toggleEvalTag(option.value));
+    els.evalTagList.append(button);
+  });
+}
+
+function normalizeEvalTags(tags) {
+  const normalized = [];
+  tags.forEach((tag) => {
+    const value = normalizeEvalTag(tag);
+    if (value && !normalized.includes(value)) {
+      normalized.push(value);
+    }
+  });
+  return normalized;
+}
+
+function normalizeEvalTag(tag) {
+  const value = String(tag || "").trim().slice(0, 200);
+  return evalTagOptions.some((option) => option.value === value) ? value : "";
 }
 
 function startConversation() {
   state.pendingAttachment = null;
   clearPendingAttachment();
   els.messageList.textContent = "";
+}
+
+function startNewConversation() {
+  els.conversationInput.value = buildConversationId();
+  state.evalTags = normalizeEvalTags(["eval:candidate"]);
+  els.messageInput.value = "";
+  autoSizeComposer();
+  startConversation();
+  renderEvalTags();
+  persistControls();
+  els.messageInput.focus();
 }
 
 async function handleFileInput(event) {
@@ -246,10 +378,8 @@ function buildPayload({ text, attachment }) {
   const now = new Date();
   const conversationId = els.conversationInput.value.trim() || buildConversationId();
   const userId = els.userInput.value.trim() || "5491123456789";
-  const evalTag = els.evalTagInput.value.trim();
   els.conversationInput.value = conversationId;
   els.userInput.value = userId;
-  els.evalTagInput.value = evalTag;
   persistControls();
 
   return {
@@ -257,7 +387,7 @@ function buildPayload({ text, attachment }) {
     channel: "whatsapp",
     user_id: userId,
     text,
-    eval_tags: evalTag ? [evalTag] : [],
+    eval_tags: state.evalTags.slice(),
     attachments: attachment
       ? [
           {
@@ -303,6 +433,53 @@ async function sendToBackend(payload) {
   return messages.map((message) => message.text || "").filter(Boolean);
 }
 
+function syncEvalTags() {
+  const tagsUrl = buildTagsUrl();
+  if (!tagsUrl) {
+    setConnectionLabel("endpoint invalido", "error");
+    return;
+  }
+
+  sendTagsToBackend(tagsUrl, buildTagsPayload()).catch(() => {
+    setConnectionLabel("offline", "error");
+  });
+}
+
+function buildTagsPayload() {
+  const conversationId = els.conversationInput.value.trim() || buildConversationId();
+  const userId = els.userInput.value.trim() || "5491123456789";
+  els.conversationInput.value = conversationId;
+  els.userInput.value = userId;
+  persistControls();
+
+  return {
+    conversation_id: conversationId,
+    channel: "whatsapp",
+    user_id: userId,
+    eval_tags: state.evalTags.slice(),
+    context: {
+      demo: true,
+      source: "demo/static-whatsapp",
+      timestamp: new Date().toISOString(),
+    },
+  };
+}
+
+async function sendTagsToBackend(tagsUrl, payload) {
+  const response = await fetch(tagsUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  const body = await readJsonBody(response);
+  if (!response.ok) {
+    throw new Error(body?.message || body?.detail || `HTTP ${response.status}`);
+  }
+  setConnectionLabel("online", "ok");
+}
+
 async function readJsonBody(response) {
   try {
     return await response.json();
@@ -334,6 +511,21 @@ function buildHealthUrl() {
   try {
     const endpoint = new URL(els.endpointInput.value.trim());
     return `${endpoint.origin}/health`;
+  } catch {
+    return null;
+  }
+}
+
+function buildTagsUrl() {
+  try {
+    const endpoint = new URL(els.endpointInput.value.trim());
+    const endpointPath = endpoint.pathname.replace(/\/+$/, "");
+    endpoint.pathname = endpointPath.endsWith("/messages")
+      ? `${endpointPath.slice(0, -"/messages".length)}/conversation-tags`
+      : `${endpointPath}/conversation-tags`;
+    endpoint.search = "";
+    endpoint.hash = "";
+    return endpoint.toString();
   } catch {
     return null;
   }

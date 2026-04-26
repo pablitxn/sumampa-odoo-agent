@@ -9,12 +9,18 @@ from typing import Any, Literal
 import pytest
 
 from sumampa_odoo_agent.config import AttachmentSettings
+from sumampa_odoo_agent.integrations.sessions import InMemorySessionStore
 from sumampa_odoo_agent.integrations.storage import InMemoryAttachmentObjectStore
 from sumampa_odoo_agent.services.attachments import AttachmentIngestionService
-from sumampa_odoo_agent.services.conversation import ConversationService, ConversationTurnInput
+from sumampa_odoo_agent.services.conversation import (
+    ConversationService,
+    ConversationTagsInput,
+    ConversationTurnInput,
+)
 from sumampa_odoo_agent.services.models.attachments import AttachmentSource
 from sumampa_odoo_agent.services.models.runtime import AgentRunInput, AgentRunResult
 from sumampa_odoo_agent.services.observability import Observation
+from sumampa_odoo_agent.services.session_state import AGENT_SESSION_NAMESPACE
 
 
 class _FakeRuntime:
@@ -117,6 +123,53 @@ async def test_conversation_service_records_eval_tags_without_agent_context() ->
     runtime_context = runtime.last_call["context"]
     assert isinstance(runtime_context, dict)
     assert "eval_tags" not in runtime_context
+
+
+@pytest.mark.asyncio
+async def test_conversation_service_records_tag_update_without_runtime_call() -> None:
+    runtime = _FakeRuntime()
+    attachment_store = InMemoryAttachmentObjectStore()
+    session_store = InMemorySessionStore()
+    await session_store.save(
+        namespace=AGENT_SESSION_NAMESPACE,
+        session_id="conv-1",
+        payload={
+            "type": "session",
+            "session_id": "conv-1",
+            "service_session_id": None,
+            "state": {"sumampa": {"eval_tags": ["eval:candidate"]}},
+        },
+    )
+    observability = _RecordingObservability()
+    service = ConversationService(
+        runtime,
+        attachment_ingestion=AttachmentIngestionService(
+            object_store=attachment_store,
+            settings=AttachmentSettings(store_mode="memory"),
+        ),
+        session_store=session_store,
+        observability=observability,
+    )
+
+    result = await service.update_eval_tags(
+        ConversationTagsInput(
+            conversation_id="conv-1",
+            channel="whatsapp",
+            user_id="5491112345678",
+            eval_tags=["eval:discarded"],
+            context={"demo": True},
+        )
+    )
+
+    tag_record = next(record for record in observability.records if record["name"] == "conversation.tags")
+    assert result.eval_tags == ["eval:discarded"]
+    assert tag_record["input"]["eval_tags"] == ["eval:discarded"]
+    assert tag_record["metadata"]["evalTags"] == "eval:discarded"
+    assert "eval:discarded" in tag_record["tags"]
+    assert runtime.last_call is None
+    payload = await session_store.load(namespace=AGENT_SESSION_NAMESPACE, session_id="conv-1")
+    assert payload is not None
+    assert payload["state"]["sumampa"]["eval_tags"] == ["eval:discarded"]
 
 
 class _RecordingObservation:

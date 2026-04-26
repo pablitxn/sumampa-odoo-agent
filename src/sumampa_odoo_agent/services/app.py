@@ -75,6 +75,7 @@ async def build_app_services(
     conversation = ConversationService(
         agent_runtime,
         attachment_ingestion=attachment_ingestion,
+        session_store=session_store,
         observability=observability,
         metrics=app_metrics,
         trace_metadata={

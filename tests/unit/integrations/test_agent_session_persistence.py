@@ -7,13 +7,13 @@ import pytest
 from sumampa_odoo_agent.integrations.agent import (
     MicrosoftAgentFrameworkOpenAIService,
 )
-from sumampa_odoo_agent.integrations.agent.service import AGENT_SESSION_NAMESPACE
 from sumampa_odoo_agent.integrations.sessions import InMemorySessionStore
 from sumampa_odoo_agent.services.models.runtime import (
     AgentRunInput,
     ConversationRuntimeContext,
     TransportContext,
 )
+from sumampa_odoo_agent.services.session_state import AGENT_SESSION_NAMESPACE
 
 
 class FakeSession:

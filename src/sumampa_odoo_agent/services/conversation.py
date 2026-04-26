@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sumampa_odoo_agent.services.attachments import AttachmentIngestionService
-from sumampa_odoo_agent.services.contracts import AgentRuntime
+from sumampa_odoo_agent.services.contracts import AgentRuntime, SessionStore
 from sumampa_odoo_agent.services.metrics import AppMetrics
 from sumampa_odoo_agent.services.models.attachments import AttachmentSource
 from sumampa_odoo_agent.services.models.runtime import (
@@ -19,6 +19,11 @@ from sumampa_odoo_agent.services.observability import (
     NoOpObservabilityProvider,
     ObservabilityProvider,
     to_observability_payload,
+)
+from sumampa_odoo_agent.services.session_state import (
+    AGENT_SESSION_NAMESPACE,
+    normalize_eval_tags,
+    with_current_eval_tags,
 )
 
 
@@ -39,6 +44,21 @@ class ConversationTurnResult:
     assistant_text: str
 
 
+@dataclass(slots=True)
+class ConversationTagsInput:
+    conversation_id: str
+    channel: str
+    user_id: str
+    eval_tags: list[str]
+    context: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class ConversationTagsResult:
+    conversation_id: str
+    eval_tags: list[str]
+
+
 class ConversationService:
     """Service that normalizes transport events before delegating to the agent runtime."""
 
@@ -47,19 +67,21 @@ class ConversationService:
         runtime: AgentRuntime,
         *,
         attachment_ingestion: AttachmentIngestionService,
+        session_store: SessionStore | None = None,
         observability: ObservabilityProvider | None = None,
         metrics: AppMetrics | None = None,
         trace_metadata: dict[str, Any] | None = None,
     ) -> None:
         self._runtime = runtime
         self._attachment_ingestion = attachment_ingestion
+        self._session_store = session_store
         self._observability = observability or NoOpObservabilityProvider()
         self._metrics = metrics
         self._trace_metadata = trace_metadata or {}
 
     async def run_turn(self, request: ConversationTurnInput) -> ConversationTurnResult:
         started_at = time.perf_counter()
-        eval_tags = _normalize_eval_tags(request.eval_tags)
+        eval_tags = normalize_eval_tags(request.eval_tags)
         trace_metadata = {
             **self._trace_metadata,
             "transport.channel": request.channel,
@@ -196,6 +218,70 @@ class ConversationService:
             assistant_text=result.text,
         )
 
+    async def update_eval_tags(self, request: ConversationTagsInput) -> ConversationTagsResult:
+        eval_tags = normalize_eval_tags(request.eval_tags)
+        trace_metadata = {
+            **self._trace_metadata,
+            "transport.channel": request.channel,
+            "transport.user_id": request.user_id,
+            "transport.conversation_id": request.conversation_id,
+            "eval.tags": eval_tags,
+        }
+        if eval_tags:
+            trace_metadata["evalTags"] = ",".join(eval_tags)
+
+        with self._observability.start_observation(
+            name="conversation.tags",
+            as_type="span",
+            input={
+                "conversation_id": request.conversation_id,
+                "context": request.context,
+                "eval_tags": eval_tags,
+            },
+            output={
+                "conversation_id": request.conversation_id,
+                "eval_tags": eval_tags,
+            },
+            metadata=trace_metadata,
+            user_id=request.user_id,
+            session_id=request.conversation_id,
+            tags=[
+                "conversation",
+                "eval-tags",
+                f"channel:{request.channel}",
+                *eval_tags,
+            ],
+            version=str(self._trace_metadata.get("service.version", "")) or None,
+            model=_optional_string(self._trace_metadata.get("agent.model")),
+        ) as observation:
+            if self._session_store is not None:
+                try:
+                    payload = await self._session_store.load(
+                        namespace=AGENT_SESSION_NAMESPACE,
+                        session_id=request.conversation_id,
+                    )
+                    session_payload = with_current_eval_tags(
+                        payload,
+                        session_id=request.conversation_id,
+                        eval_tags=eval_tags,
+                    )
+                    await self._session_store.save(
+                        namespace=AGENT_SESSION_NAMESPACE,
+                        session_id=request.conversation_id,
+                        payload=session_payload,
+                    )
+                except Exception as exc:
+                    observation.update(
+                        level="ERROR",
+                        status_message=f"{exc.__class__.__name__}: {exc}",
+                    )
+                    raise
+
+        return ConversationTagsResult(
+            conversation_id=request.conversation_id,
+            eval_tags=eval_tags,
+        )
+
     def _record_turn_metric(
         self,
         *,
@@ -242,15 +328,3 @@ def _optional_string(value: Any) -> str | None:
     if value is None:
         return None
     return str(value)
-
-
-def _normalize_eval_tags(tags: list[str]) -> list[str]:
-    normalized: list[str] = []
-    seen: set[str] = set()
-    for raw_tag in tags:
-        tag = str(raw_tag).strip()
-        if not tag or tag in seen:
-            continue
-        normalized.append(tag[:200])
-        seen.add(tag)
-    return normalized

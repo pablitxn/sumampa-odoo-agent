@@ -24,6 +24,12 @@
       <symbol id="icon-check" viewBox="0 0 24 24">
         <path d="m20 6-11 11-5-5"></path>
       </symbol>
+      <symbol id="icon-refresh" viewBox="0 0 24 24">
+        <path d="M21 12a9 9 0 0 1-15.2 6.5"></path>
+        <path d="M3 12A9 9 0 0 1 18.2 5.5"></path>
+        <path d="M18 2v4h4"></path>
+        <path d="M6 22v-4H2"></path>
+      </symbol>
     </svg>
 
     <div class="app-shell">
@@ -114,18 +120,24 @@
         </section>
 
         <section class="panel-section compact-grid">
-          <label class="field">
-            <span>Conversation ID</span>
-            <input id="conversationInput" type="text">
-          </label>
+          <div class="conversation-row">
+            <label class="field">
+              <span>Conversation ID</span>
+              <input id="conversationInput" type="text">
+            </label>
+            <button id="newConversationButton" class="tool-button" type="button">
+              <svg aria-hidden="true"><use href="#icon-refresh"></use></svg>
+              <span>Nueva conversacion</span>
+            </button>
+          </div>
           <label class="field">
             <span>WhatsApp user</span>
             <input id="userInput" type="text" value="5491123456789">
           </label>
-          <label class="field">
-            <span>Eval tag</span>
-            <input id="evalTagInput" type="text" value="eval:candidate">
-          </label>
+          <div class="tag-manager">
+            <span class="tag-manager-title">Eval tags</span>
+            <div id="evalTagList" class="tag-list" aria-live="polite"></div>
+          </div>
         </section>
 
         <section class="panel-section">

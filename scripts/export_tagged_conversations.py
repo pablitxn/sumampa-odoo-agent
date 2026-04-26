@@ -15,8 +15,13 @@ from typing import Any
 from langfuse import Langfuse
 
 from sumampa_odoo_agent.config import AppSettings, load_settings
-from sumampa_odoo_agent.integrations.agent.service import AGENT_SESSION_NAMESPACE
 from sumampa_odoo_agent.integrations.sessions.postgres import PostgresSessionStore
+from sumampa_odoo_agent.services.session_state import (
+    AGENT_SESSION_NAMESPACE,
+    current_eval_tags,
+    has_current_eval_tags,
+    normalize_eval_tags,
+)
 
 
 def main() -> None:
@@ -50,6 +55,7 @@ def main() -> None:
             postgres_dsn=args.postgres_dsn or settings.session_store.postgres_dsn,
             include_postgres=not args.no_postgres,
             include_session_payload=args.include_session_payload,
+            requested_tags=args.tags,
         )
     )
     _write_exports(exports, json_array=args.json_array)
@@ -89,6 +95,7 @@ async def _build_conversation_exports(
     postgres_dsn: str,
     include_postgres: bool,
     include_session_payload: bool,
+    requested_tags: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     conversation_ids = sorted({_trace_conversation_id(trace) for trace in traces})
     postgres_payloads: dict[str, dict[str, Any]] = {}
@@ -103,6 +110,7 @@ async def _build_conversation_exports(
         postgres_payloads=postgres_payloads,
         postgres_errors=postgres_errors,
         include_session_payload=include_session_payload,
+        requested_tags=requested_tags,
     )
 
 
@@ -112,24 +120,28 @@ def _conversation_exports_from_traces(
     postgres_payloads: Mapping[str, dict[str, Any]] | None = None,
     postgres_errors: Mapping[str, str] | None = None,
     include_session_payload: bool = False,
+    requested_tags: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     grouped: dict[str, list[Any]] = defaultdict(list)
     for trace in traces:
         grouped[_trace_conversation_id(trace)].append(trace)
 
+    requested_eval_tags = normalize_eval_tags(requested_tags or [])
     exports: list[dict[str, Any]] = []
     for conversation_id in sorted(grouped):
         conversation_traces = sorted(grouped[conversation_id], key=_trace_sort_key)
         payload = (postgres_payloads or {}).get(conversation_id)
-        eval_tags = _merge_tags(
-            *(_trace_eval_tags(trace) for trace in conversation_traces),
-            _postgres_eval_tags(payload),
-        )
-        messages = [
-            message
-            for trace in conversation_traces
-            for message in _messages_from_trace(trace)
-        ]
+        trace_eval_tags = _merge_tags(*(_trace_eval_tags(trace) for trace in conversation_traces))
+        postgres_eval_tags = _postgres_eval_tags(payload)
+        has_authoritative_tags = has_current_eval_tags(payload)
+        eval_tags = postgres_eval_tags if has_authoritative_tags else _merge_tags(trace_eval_tags)
+        if (
+            requested_eval_tags
+            and has_authoritative_tags
+            and not all(tag in eval_tags for tag in requested_eval_tags)
+        ):
+            continue
+        messages = _messages_for_export(payload, conversation_traces)
         exports.append(
             {
                 "conversation_id": conversation_id,
@@ -212,6 +224,20 @@ def _messages_from_trace(trace: Any) -> list[dict[str, Any]]:
         )
 
     return messages
+
+
+def _messages_for_export(
+    payload: dict[str, Any] | None,
+    conversation_traces: list[Any],
+) -> list[dict[str, Any]]:
+    postgres_messages = _messages_from_session_payload(payload)
+    if postgres_messages:
+        return postgres_messages
+    return [
+        message
+        for trace in conversation_traces
+        for message in _messages_from_trace(trace)
+    ]
 
 
 def _messages_from_session_payload(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -303,15 +329,7 @@ def _postgres_summary(
 
 
 def _postgres_eval_tags(payload: dict[str, Any] | None) -> list[str]:
-    if not isinstance(payload, dict):
-        return []
-    state = payload.get("state")
-    if not isinstance(state, dict):
-        return []
-    sumampa_state = state.get("sumampa")
-    if not isinstance(sumampa_state, dict):
-        return []
-    return _merge_tags(sumampa_state.get("eval_tags", []))
+    return current_eval_tags(payload)
 
 
 def _trace_summary(trace: Any) -> dict[str, Any]:

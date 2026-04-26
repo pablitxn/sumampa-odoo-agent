@@ -31,7 +31,7 @@ El demo envia el contrato actual de la API:
   "channel": "whatsapp",
   "user_id": "5491123456789",
   "text": "Necesito cargar esta factura en Odoo.",
-  "eval_tags": ["eval:candidate"],
+  "eval_tags": ["eval:candidate", "eval:invoice-upload"],
   "attachments": [
     {
       "filename": "factura.jpg",
@@ -51,5 +51,7 @@ El demo envia el contrato actual de la API:
 Los shortcuts de facturas cargan una imagen mock en el composer para simular el caso
 `mensaje + imagen` de WhatsApp.
 
-El campo `Eval tag` del panel se persiste en el browser y viaja como `eval_tags` en
-cada turno para recuperar despues traces y transcripts desde Langfuse/Postgres.
+El panel permite seleccionar varios `Eval tags` de un catalogo fijo. Cada toggle envia
+un evento liviano al backend para dejar rastro en Langfuse sin invocar al agente, y
+cada turno envia el array `eval_tags`. Usar `eval:discarded` para marcar conversaciones
+que no deberian entrar en datasets.

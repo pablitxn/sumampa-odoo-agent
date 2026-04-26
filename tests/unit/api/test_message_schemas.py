@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from sumampa_odoo_agent.api.schemas import ConversationMessageRequest
+from sumampa_odoo_agent.api.schemas import ConversationMessageRequest, ConversationTagsRequest
 
 
 def test_message_request_defaults_eval_tags_to_empty_list() -> None:
@@ -35,3 +35,14 @@ def test_message_request_rejects_non_string_eval_tags() -> None:
             user_id="user-1",
             eval_tags=[123],
         )
+
+
+def test_conversation_tags_request_normalizes_eval_tags() -> None:
+    request = ConversationTagsRequest(
+        conversation_id="conversation-1",
+        channel="whatsapp",
+        user_id="user-1",
+        eval_tags=[" eval:discarded ", "eval:discarded"],
+    )
+
+    assert request.eval_tags == ["eval:discarded"]

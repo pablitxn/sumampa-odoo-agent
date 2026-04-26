@@ -482,7 +482,8 @@ button {
 }
 
 .icon-button svg,
-.quick-actions svg {
+.quick-actions svg,
+.tool-button svg {
   width: 18px;
   height: 18px;
   fill: none;
@@ -518,7 +519,9 @@ button {
 .composer textarea:focus,
 .field input:focus,
 .quick-actions button:focus-visible,
-.icon-button:focus-visible {
+.icon-button:focus-visible,
+.tool-button:focus-visible,
+.tag-pill:focus-visible {
   outline: 3px solid rgba(30, 127, 142, 0.35);
   outline-offset: 2px;
 }
@@ -619,6 +622,80 @@ button {
 
 .compact-grid {
   grid-template-columns: 1fr;
+}
+
+.conversation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.tool-button {
+  display: inline-grid;
+  grid-template-columns: 18px auto;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: var(--control-height);
+  padding: 0 12px;
+  border: 1px solid #b9ddc9;
+  border-radius: var(--radius);
+  background: #e8f6ee;
+  color: #0c6d43;
+  font-size: 0.78rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.tool-button:hover {
+  border-color: #95cfad;
+  background: #dcf2e6;
+}
+
+.tag-manager {
+  display: grid;
+  gap: 8px;
+}
+
+.tag-manager-title {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-height: 28px;
+}
+
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  min-height: 30px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid #cddbd2;
+  border-radius: 999px;
+  background: #f7fbf8;
+  color: #184f3a;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.tag-pill:hover {
+  background: #e2f1e8;
+  color: #0c6d43;
+}
+
+.tag-pill[data-selected="true"] {
+  border-color: #95cfad;
+  background: #dff5e8;
+  color: #095c39;
 }
 
 .quick-groups {
@@ -797,6 +874,14 @@ button {
 
   .quick-actions {
     grid-template-columns: 1fr;
+  }
+
+  .conversation-row {
+    grid-template-columns: 1fr;
+  }
+
+  .tool-button {
+    justify-self: stretch;
   }
 
   .panel-section {
