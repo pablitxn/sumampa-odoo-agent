@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -60,6 +61,7 @@ _GLOBAL_INSTRUMENTATION_ENABLED = False
 _GLOBAL_TELEMETRY_CONFIGURED = False
 _MANAGED_OTEL_LOG_HANDLER_ATTR = "_sumampa_managed_otel_log_handler"
 _OTLP_EXPORT_TIMEOUT_SECONDS = 5.0
+_FASTAPI_EXCLUDED_URLS = r"/health(?:\?.*)?$"
 
 
 class _DropOpenTelemetryInternalLogs(logging.Filter):
@@ -125,8 +127,29 @@ def instrument_fastapi_app(app: FastAPI, settings: AppSettings) -> None:
         return
     FastAPIInstrumentor.instrument_app(
         app,
-        excluded_urls="^/health$",
+        excluded_urls=_FASTAPI_EXCLUDED_URLS,
+        server_request_hook=_set_fastapi_server_span_attributes,
+        exclude_spans=["receive", "send"],
     )
+
+
+def _set_fastapi_server_span_attributes(span: Any, scope: Mapping[str, Any]) -> None:
+    span.set_attribute("openinference.span.kind", "CHAIN")
+    span.set_attribute("sumampa.instrumentation", "fastapi")
+    route = _fastapi_route(scope)
+    if route is not None:
+        span.set_attribute("sumampa.http.route", route)
+
+
+def _fastapi_route(scope: Mapping[str, Any]) -> str | None:
+    route = scope.get("route")
+    route_path = getattr(route, "path", None)
+    if isinstance(route_path, str):
+        return route_path
+    path = scope.get("path")
+    if isinstance(path, str):
+        return path
+    return None
 
 
 def _configure_traces(settings: AppSettings, resource: Resource) -> Any | None:

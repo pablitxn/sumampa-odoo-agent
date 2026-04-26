@@ -15,6 +15,15 @@ from sumampa_odoo_agent.config import AppSettings
 _MANAGED_HANDLER_ATTR = "_sumampa_managed_handler"
 
 
+class HealthCheckLogFilter(logging.Filter):
+    """Drop noisy uvicorn access logs for the local readiness endpoint."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name != "uvicorn.access":
+            return True
+        return not _is_health_check_access_record(record)
+
+
 class JsonLogFormatter(logging.Formatter):
     """Format log records as one JSON object per line."""
 
@@ -65,6 +74,7 @@ def configure_logging(settings: AppSettings) -> None:
     handler = logging.StreamHandler(sys.stdout)
     setattr(handler, _MANAGED_HANDLER_ATTR, True)
     handler.setLevel(_logging_level(settings.logging.level))
+    handler.addFilter(HealthCheckLogFilter())
     if settings.logging.format == "json":
         handler.setFormatter(
             JsonLogFormatter(
@@ -90,6 +100,18 @@ def configure_logging(settings: AppSettings) -> None:
 
 def _logging_level(level: str) -> int:
     return logging._nameToLevel.get(level.upper(), logging.INFO)
+
+
+def _is_health_check_access_record(record: logging.LogRecord) -> bool:
+    if _contains_health_path(record.getMessage()):
+        return True
+    if not isinstance(record.args, tuple):
+        return False
+    return any(isinstance(arg, str) and _contains_health_path(arg) for arg in record.args)
+
+
+def _contains_health_path(value: str) -> bool:
+    return " /health " in value or " /health?" in value or value in {"/health", "/health/"}
 
 
 def _current_trace_ids() -> tuple[str | None, str | None]:

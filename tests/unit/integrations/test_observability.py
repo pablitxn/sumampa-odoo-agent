@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from contextlib import AbstractContextManager
+from types import SimpleNamespace
 from typing import Any, Literal, cast
 
 import pytest
@@ -10,7 +12,9 @@ from sumampa_odoo_agent.integrations.observability.odoo import ObservedOdooGatew
 from sumampa_odoo_agent.integrations.odoo.dry_run import DryRunOdooClient
 from sumampa_odoo_agent.integrations.telemetry import OpenTelemetryObservabilityProvider
 from sumampa_odoo_agent.integrations.telemetry.bootstrap import (
+    _FASTAPI_EXCLUDED_URLS,
     _enable_agent_framework_observability,
+    _set_fastapi_server_span_attributes,
 )
 from sumampa_odoo_agent.integrations.telemetry.otel_provider import (
     OpenTelemetryObservation,
@@ -196,6 +200,25 @@ def test_agent_framework_observability_handles_missing_version(
     _enable_agent_framework_observability(enable_sensitive_data=True)
     assert getattr(agent_framework, "__version__", None) is not None
     _ensure_agent_framework_version(agent_framework)
+
+
+def test_fastapi_health_exclusion_matches_full_url() -> None:
+    assert re.search(_FASTAPI_EXCLUDED_URLS, "http://testserver/health")
+    assert re.search(_FASTAPI_EXCLUDED_URLS, "http://testserver/health?ready=true")
+    assert not re.search(_FASTAPI_EXCLUDED_URLS, "http://testserver/api/v1/messages")
+
+
+def test_fastapi_server_span_hook_sets_openinference_kind() -> None:
+    span = FakeSpan()
+
+    _set_fastapi_server_span_attributes(
+        cast(Any, span),
+        {"method": "POST", "path": "/api/v1/messages", "route": SimpleNamespace(path="/api/v1/messages")},
+    )
+
+    assert span.attributes["openinference.span.kind"] == "CHAIN"
+    assert span.attributes["sumampa.instrumentation"] == "fastapi"
+    assert span.attributes["sumampa.http.route"] == "/api/v1/messages"
 
 
 def test_composite_observability_fans_out_to_all_healthy_providers() -> None:
