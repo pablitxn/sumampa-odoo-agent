@@ -12,7 +12,6 @@ from typing import Any, Literal
 from opentelemetry import trace
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.trace import Span, Status, StatusCode, Tracer
 
 from sumampa_odoo_agent.services.observability import (
@@ -24,6 +23,18 @@ from sumampa_odoo_agent.services.observability import (
 
 logger = logging.getLogger(__name__)
 _FORCE_FLUSH_TIMEOUT_MILLIS = 2_000
+_JSON_MIME_TYPE = "application/json"
+_OPENINFERENCE_KIND_BY_OBSERVATION_TYPE: dict[ObservationType, str] = {
+    "agent": "AGENT",
+    "chain": "CHAIN",
+    "tool": "TOOL",
+    "generation": "LLM",
+    "embedding": "EMBEDDING",
+    "retriever": "RETRIEVER",
+    "evaluator": "EVALUATOR",
+    "guardrail": "GUARDRAIL",
+    "span": "CHAIN",
+}
 
 
 class OpenTelemetryObservation:
@@ -48,6 +59,7 @@ class OpenTelemetryObservation:
         if metadata is not None:
             _set_metadata_attributes(self._span, metadata)
         if self._capture_payloads:
+            _set_input_output_attributes(self._span, input=input, output=output)
             _add_payload_event(self._span, "input", input)
             _add_payload_event(self._span, "output", output)
             _add_payload_event(self._span, "metadata", metadata)
@@ -128,6 +140,7 @@ class _OpenTelemetryObservationContext(AbstractContextManager[Observation]):
             capture_payloads=self._capture_payloads,
         )
         if self._capture_payloads:
+            _set_input_output_attributes(span, input=self._input, output=self._output)
             _add_payload_event(span, "input", self._input)
             _add_payload_event(span, "output", self._output)
             _add_payload_event(span, "metadata", self._metadata)
@@ -152,14 +165,14 @@ class _OpenTelemetryObservationContext(AbstractContextManager[Observation]):
 
 
 class OpenTelemetryObservabilityProvider:
-    """OpenTelemetry provider for operational traces in Tempo."""
+    """OpenTelemetry provider for Phoenix/OpenInference-compatible traces."""
 
     def __init__(
         self,
         *,
         tracer: Tracer,
         capture_payloads: bool,
-        tracer_provider: TracerProvider | None = None,
+        tracer_provider: Any | None = None,
         meter_provider: MeterProvider | None = None,
         logger_provider: LoggerProvider | None = None,
     ) -> None:
@@ -251,21 +264,29 @@ def _span_attributes(
     version: str | None,
     model: str | None,
 ) -> dict[str, str | int | float | bool]:
-    attributes: dict[str, str | int | float | bool] = {"sumampa.observation.type": as_type}
+    attributes: dict[str, str | int | float | bool] = {
+        "openinference.span.kind": _OPENINFERENCE_KIND_BY_OBSERVATION_TYPE.get(as_type, "CHAIN"),
+        "sumampa.observation.type": as_type,
+    }
     if level is not None:
         attributes["sumampa.level"] = level
     if status_message is not None:
         attributes["sumampa.status_message"] = status_message
     if user_id is not None:
+        attributes["user.id"] = user_id
         attributes["enduser.id"] = user_id
     if session_id is not None:
         attributes["session.id"] = session_id
     if tags:
         attributes["sumampa.tags"] = ",".join(tags)
+        attributes["tag.tags"] = _payload_json(tags)
     if version is not None:
         attributes["service.version"] = version
     if model is not None:
         attributes["gen_ai.request.model"] = model
+        attributes["llm.model_name"] = model
+    if isinstance(metadata, Mapping):
+        attributes["metadata"] = _payload_json(metadata)
     _set_metadata_attributes_dict(attributes, metadata)
     return attributes
 
@@ -295,6 +316,20 @@ def _add_payload_event(span: Span, name: str, value: Any | None) -> None:
         f"sumampa.{name}",
         attributes={"payload": _payload_json(value)},
     )
+
+
+def _set_input_output_attributes(
+    span: Span,
+    *,
+    input: Any | None,
+    output: Any | None,
+) -> None:
+    if input is not None:
+        span.set_attribute("input.mime_type", _JSON_MIME_TYPE)
+        span.set_attribute("input.value", _payload_json(input))
+    if output is not None:
+        span.set_attribute("output.mime_type", _JSON_MIME_TYPE)
+        span.set_attribute("output.value", _payload_json(output))
 
 
 def _payload_json(value: Any) -> str:

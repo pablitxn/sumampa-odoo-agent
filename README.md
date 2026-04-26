@@ -90,41 +90,39 @@ Grafana is available at `http://localhost:3001` with Prometheus, Loki, and Tempo
 datasources provisioned. The app emits stable operational metrics under
 `service_name="sumampa-odoo-agent"` and traces/logs through the local collector.
 
-## Local Langfuse Observability
+## Local Phoenix Observability
 
-Run Langfuse locally with the upstream v3 Docker Compose setup:
+Run Phoenix locally with the observability compose profile:
 
 ```bash
-git clone https://github.com/langfuse/langfuse.git ~/repos/langfuse
-cd ~/repos/langfuse
-docker compose up
+docker compose --profile observability up -d phoenix
 ```
 
-Open `http://localhost:3000`, create a project, then add the project keys to this repo's
-`.env`:
+Open `http://localhost:6006`, then configure this repo's `.env`:
 
 ```bash
-OBSERVABILITY_MODE=langfuse
-LANGFUSE_BASE_URL=http://localhost:3000
-LANGFUSE_PUBLIC_KEY=pk-lf-...
-LANGFUSE_SECRET_KEY=sk-lf-...
+OBSERVABILITY_MODE=phoenix
+PHOENIX_BASE_URL=http://localhost:6006
+PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces
+PHOENIX_PROJECT_NAME=sumampa-odoo-agent
+PHOENIX_API_KEY_ENV_VAR=PHOENIX_API_KEY
 ```
 
 The app records one `conversation.turn` trace per `/api/v1/messages` request, grouped by
-Langfuse session using `conversation_id`. Agent, attachment, session-store, and Odoo calls
+Phoenix session using `conversation_id`. Agent, attachment, session-store, and Odoo calls
 are child observations. Text, tool inputs/results, and attachment manifests are captured;
 raw binary attachment bytes are replaced with size and SHA-256 metadata.
 
 Bootstrap eval assets:
 
 ```bash
-PYTHONPATH=src uv run python scripts/bootstrap_langfuse_evals.py
+PYTHONPATH=src uv run python scripts/bootstrap_phoenix_evals.py
 ```
 
 Promote reviewed traces into datasets:
 
 ```bash
-PYTHONPATH=src uv run python scripts/curate_langfuse_datasets.py \
+PYTHONPATH=src uv run python scripts/curate_phoenix_datasets.py \
   sumampa/dev/regression-failures --tag eval:candidate
 ```
 
@@ -135,11 +133,22 @@ PYTHONPATH=src uv run python scripts/export_tagged_conversations.py \
   --tag eval:candidate --json-array
 ```
 
-Run evals against a Langfuse dataset with dry-run Odoo and isolated in-memory sessions:
+Run evals against a Phoenix dataset with dry-run Odoo and isolated in-memory sessions:
 
 ```bash
-PYTHONPATH=src uv run python scripts/run_evals.py sumampa/dev/odoo-ops
+PYTHONPATH=src uv run python scripts/run_phoenix_evals.py sumampa/dev/odoo-ops
 ```
 
 Set `OPENAI_EVAL_MODEL` or pass `--llm-judge-model` to add the optional LLM rubric judge
 on top of deterministic checks.
+
+Run the local Harbor full-stack benchmark harness:
+
+```bash
+PYTHONPATH=src uv run python scripts/run_harbor_benchmarks.py
+```
+
+The Harbor task under `benchmarks/harbor/sumampa-odoo-fullstack` starts the app, Odoo 19,
+and Odoo Postgres as Docker sidecars, calls `/api/v1/messages`, writes
+`/logs/verifier/reward.json`, and imports numeric rewards into Phoenix when the matching
+conversation span is present.

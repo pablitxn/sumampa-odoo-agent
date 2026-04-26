@@ -1,0 +1,6 @@
+{
+  "required_terms": ["JAMBO", "30644193078"],
+  "forbidden_terms": ["traceback", "exception"],
+  "missing_fields": [],
+  "max_latency_ms": 120000
+}

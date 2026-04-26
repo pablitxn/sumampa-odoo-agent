@@ -1,18 +1,25 @@
-"""Export tagged Langfuse conversations with optional Postgres session enrichment."""
+"""Export tagged Phoenix conversations with optional Postgres session enrichment."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
 import json
-import os
-import sys
 from collections import defaultdict
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from langfuse import Langfuse
+if TYPE_CHECKING:
+    from scripts.curate_phoenix_datasets import _span_row_to_trace
+    from scripts.phoenix_eval_utils import build_phoenix_client
+else:
+    try:
+        from scripts.curate_phoenix_datasets import _span_row_to_trace
+        from scripts.phoenix_eval_utils import build_phoenix_client
+    except ModuleNotFoundError:  # pragma: no cover - direct script execution
+        from curate_phoenix_datasets import _span_row_to_trace
+        from phoenix_eval_utils import build_phoenix_client
 
 from sumampa_odoo_agent.config import AppSettings, load_settings
 from sumampa_odoo_agent.integrations.sessions.postgres import PostgresSessionStore
@@ -39,7 +46,7 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = load_settings(env=args.env)
-    client = _build_langfuse_client(settings)
+    client = build_phoenix_client(settings)
     traces = _fetch_tagged_traces(
         client,
         settings=settings,
@@ -62,7 +69,7 @@ def main() -> None:
 
 
 def _fetch_tagged_traces(
-    client: Langfuse,
+    client: Any,
     *,
     settings: AppSettings,
     tags: list[str],
@@ -71,22 +78,20 @@ def _fetch_tagged_traces(
     from_timestamp: datetime | None,
     to_timestamp: datetime | None,
 ) -> list[Any]:
-    traces_response = client.api.trace.list(
+    spans_df = client.spans.get_spans_dataframe(
+        project_identifier=settings.observability.project_name,
         limit=limit,
-        session_id=session_id,
-        tags=tags,
-        environment=settings.observability.environment,
-        from_timestamp=from_timestamp,
-        to_timestamp=to_timestamp,
+        start_time=from_timestamp,
+        end_time=to_timestamp,
     )
-    traces = _as_list(_get_attr(traces_response, "data", []))
-    detailed_traces: list[Any] = []
-    for trace in traces:
-        trace_id = _trace_id(trace)
-        detailed_traces.append(
-            _load_trace_details(client, trace_id, fallback=trace) if trace_id else trace
-        )
-    return detailed_traces
+    spans = [_span_row_to_trace(row.to_dict()) for _, row in spans_df.iterrows()]
+    return [
+        span
+        for span in spans
+        if span.get("name") in {"conversation.turn", "conversation.tags"}
+        and (session_id is None or span.get("session_id") == session_id)
+        and _matches_tags(span, tags)
+    ]
 
 
 async def _build_conversation_exports(
@@ -346,8 +351,8 @@ def _trace_eval_tags(trace: Any) -> list[str]:
     input_tags = trace_input.get("eval_tags", []) if isinstance(trace_input, dict) else []
     metadata_tags = metadata.get("eval.tags", []) if isinstance(metadata, dict) else []
     metadata_tags_csv = metadata.get("evalTags") if isinstance(metadata, dict) else None
-    langfuse_eval_tags = [tag for tag in tags if isinstance(tag, str) and tag.startswith("eval:")]
-    return _merge_tags(input_tags, metadata_tags, _split_csv(metadata_tags_csv), langfuse_eval_tags)
+    span_eval_tags = [tag for tag in tags if isinstance(tag, str) and tag.startswith("eval:")]
+    return _merge_tags(input_tags, metadata_tags, _split_csv(metadata_tags_csv), span_eval_tags)
 
 
 def _trace_conversation_id(trace: Any) -> str:
@@ -395,23 +400,6 @@ def _safe_attachment_payload(attachment: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _build_langfuse_client(settings: AppSettings) -> Langfuse:
-    return Langfuse(
-        public_key=os.environ.get(settings.observability.public_key_env_var),
-        secret_key=os.environ.get(settings.observability.secret_key_env_var),
-        base_url=settings.observability.base_url,
-        environment=settings.observability.environment,
-    )
-
-
-def _load_trace_details(client: Langfuse, trace_id: str, *, fallback: Any) -> Any:
-    try:
-        return client.api.trace.get(trace_id)
-    except Exception as exc:
-        print(f"trace {trace_id} detail fetch failed, using list payload: {exc}", file=sys.stderr)
-        return fallback
-
-
 def _write_exports(exports: list[dict[str, Any]], *, json_array: bool) -> None:
     if json_array:
         print(json.dumps(exports, ensure_ascii=False, indent=2, default=str))
@@ -446,6 +434,13 @@ def _split_csv(value: Any) -> list[str]:
     if not isinstance(value, str):
         return []
     return [tag.strip() for tag in value.split(",") if tag.strip()]
+
+
+def _matches_tags(trace: dict[str, Any], tags: list[str]) -> bool:
+    if not tags:
+        return True
+    trace_tags = _as_list(trace.get("tags"))
+    return all(tag in trace_tags for tag in tags)
 
 
 def _jsonish(value: Any) -> Any:

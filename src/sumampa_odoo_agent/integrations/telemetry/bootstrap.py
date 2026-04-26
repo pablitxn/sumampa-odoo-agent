@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -43,6 +44,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
 
 from sumampa_odoo_agent.config import AppSettings
+from sumampa_odoo_agent.integrations.agent.framework import _ensure_agent_framework_version
 from sumampa_odoo_agent.integrations.telemetry.otel_provider import (
     OpenTelemetryObservabilityProvider,
 )
@@ -80,7 +82,11 @@ class TelemetryRuntime:
 def bootstrap_telemetry(settings: AppSettings) -> TelemetryRuntime:
     """Initialize OpenTelemetry exporters and global instrumentation."""
 
-    if not settings.telemetry.enabled:
+    traces_enabled = _traces_enabled(settings)
+    metrics_enabled = settings.telemetry.enabled and settings.telemetry.metrics_enabled
+    logs_enabled = settings.telemetry.enabled and settings.telemetry.logs_enabled
+
+    if not traces_enabled and not metrics_enabled and not logs_enabled:
         return TelemetryRuntime(
             observability=NoOpObservabilityProvider(),
             metrics=AppMetrics.disabled(settings),
@@ -96,8 +102,8 @@ def bootstrap_telemetry(settings: AppSettings) -> TelemetryRuntime:
         }
     )
     tracer_provider = _configure_traces(settings, resource)
-    meter_provider = _configure_metrics(settings, resource)
-    logger_provider = _configure_logs(settings, resource)
+    meter_provider = _configure_metrics(settings, resource) if metrics_enabled else None
+    logger_provider = _configure_logs(settings, resource) if logs_enabled else None
     _instrument_global_libraries(settings)
 
     tracer = trace.get_tracer("sumampa_odoo_agent.observability", settings.service.version)
@@ -109,15 +115,13 @@ def bootstrap_telemetry(settings: AppSettings) -> TelemetryRuntime:
             meter_provider=meter_provider,
             logger_provider=logger_provider,
         ),
-        metrics=AppMetrics.from_settings(settings)
-        if settings.telemetry.metrics_enabled
-        else AppMetrics.disabled(settings),
+        metrics=AppMetrics.from_settings(settings) if metrics_enabled else AppMetrics.disabled(settings),
         enabled=True,
     )
 
 
 def instrument_fastapi_app(app: FastAPI, settings: AppSettings) -> None:
-    if not settings.telemetry.enabled or not settings.telemetry.traces_enabled:
+    if not _traces_enabled(settings):
         return
     FastAPIInstrumentor.instrument_app(
         app,
@@ -125,13 +129,16 @@ def instrument_fastapi_app(app: FastAPI, settings: AppSettings) -> None:
     )
 
 
-def _configure_traces(settings: AppSettings, resource: Resource) -> TracerProvider | None:
+def _configure_traces(settings: AppSettings, resource: Resource) -> Any | None:
     global _GLOBAL_TELEMETRY_CONFIGURED
-    if not settings.telemetry.traces_enabled:
+    if not _traces_enabled(settings):
         return None
     if _GLOBAL_TELEMETRY_CONFIGURED:
-        provider = trace.get_tracer_provider()
-        return provider if isinstance(provider, TracerProvider) else None
+        return trace.get_tracer_provider()
+    if _phoenix_enabled(settings):
+        provider = _configure_phoenix_traces(settings, resource)
+        _GLOBAL_TELEMETRY_CONFIGURED = True
+        return provider
     provider = TracerProvider(
         resource=resource,
         sampler=TraceIdRatioBased(settings.telemetry.sample_rate),
@@ -145,8 +152,6 @@ def _configure_traces(settings: AppSettings, resource: Resource) -> TracerProvid
 
 
 def _configure_metrics(settings: AppSettings, resource: Resource) -> MeterProvider | None:
-    if not settings.telemetry.metrics_enabled:
-        return None
     exporter = _metric_exporter(settings)
     provider = MeterProvider(
         resource=resource,
@@ -163,8 +168,6 @@ def _configure_metrics(settings: AppSettings, resource: Resource) -> MeterProvid
 
 
 def _configure_logs(settings: AppSettings, resource: Resource) -> LoggerProvider | None:
-    if not settings.telemetry.logs_enabled:
-        return None
     provider = LoggerProvider(resource=resource, shutdown_on_exit=False)
     provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter(settings)))
     try:
@@ -187,8 +190,11 @@ def _configure_logs(settings: AppSettings, resource: Resource) -> LoggerProvider
 
 def _instrument_global_libraries(settings: AppSettings) -> None:
     global _GLOBAL_INSTRUMENTATION_ENABLED
-    if _GLOBAL_INSTRUMENTATION_ENABLED or not settings.telemetry.traces_enabled:
+    if _GLOBAL_INSTRUMENTATION_ENABLED or not _traces_enabled(settings):
         return
+    _enable_agent_framework_observability(
+        enable_sensitive_data=settings.observability.capture_mode == "full",
+    )
     for instrumentor in (
         HTTPXClientInstrumentor(),
         SQLAlchemyInstrumentor(),
@@ -204,6 +210,42 @@ def _instrument_global_libraries(settings: AppSettings) -> None:
                 exc_info=True,
             )
     _GLOBAL_INSTRUMENTATION_ENABLED = True
+
+
+def _configure_phoenix_traces(settings: AppSettings, resource: Resource) -> Any:
+    from phoenix.otel import register
+
+    api_key = os.environ.get(settings.observability.api_key_env_var)
+    return register(
+        endpoint=settings.observability.collector_endpoint,
+        project_name=settings.observability.project_name,
+        protocol="http/protobuf",
+        batch=True,
+        auto_instrument=False,
+        api_key=api_key,
+        resource=resource,
+        sampler=TraceIdRatioBased(settings.observability.sample_rate),
+    )
+
+
+def _enable_agent_framework_observability(*, enable_sensitive_data: bool) -> None:
+    try:
+        import agent_framework
+
+        _ensure_agent_framework_version(agent_framework)
+        from agent_framework.observability import enable_instrumentation
+
+        enable_instrumentation(enable_sensitive_data=enable_sensitive_data)
+    except Exception:
+        logger.warning("Could not enable Agent Framework OpenTelemetry", exc_info=True)
+
+
+def _phoenix_enabled(settings: AppSettings) -> bool:
+    return settings.observability.mode == "phoenix"
+
+
+def _traces_enabled(settings: AppSettings) -> bool:
+    return (_phoenix_enabled(settings) or settings.telemetry.enabled) and settings.telemetry.traces_enabled
 
 
 def _span_exporter(settings: AppSettings) -> Any:

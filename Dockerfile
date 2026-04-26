@@ -6,7 +6,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app
 
 COPY pyproject.toml uv.lock* ./
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-install-project
 
 FROM python:3.12-slim AS runtime
 
@@ -25,7 +25,7 @@ COPY --from=builder /app/.venv /app/.venv
 
 COPY --chown=appuser:appgroup src/ ./src/
 COPY --chown=appuser:appgroup config/ ./config/
-COPY --chown=appuser:appgroup template/ ./template/
+COPY --chown=appuser:appgroup scripts/ ./scripts/
 
 ENV PYTHONPATH=/app/src \
     PYTHONUNBUFFERED=1 \

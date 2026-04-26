@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from langfuse import Evaluation
-from scripts.curate_langfuse_datasets import _dataset_item_from_trace
+from scripts.curate_phoenix_datasets import _dataset_item_from_trace
 from scripts.export_tagged_conversations import _conversation_exports_from_traces
-from scripts.run_evals import _eval_context, conversation_quality_eval, deterministic_eval
+from scripts.phoenix_eval_utils import conversation_quality_eval, deterministic_eval
+from scripts.run_phoenix_evals import _eval_context
 
 
-def test_eval_functions_return_langfuse_evaluations() -> None:
+def test_eval_functions_return_phoenix_score_records() -> None:
     deterministic_scores = deterministic_eval(
         input={},
         output={"assistant_text": "Listo, la factura quedo validada.", "latency_ms": 12},
@@ -20,9 +20,10 @@ def test_eval_functions_return_langfuse_evaluations() -> None:
         metadata={},
     )
 
-    assert all(isinstance(score, Evaluation) for score in deterministic_scores)
-    assert all(isinstance(score, Evaluation) for score in conversation_scores)
-    assert {score.name for score in deterministic_scores} >= {"task_success", "error"}
+    assert all(isinstance(score, dict) for score in deterministic_scores)
+    assert all(isinstance(score, dict) for score in conversation_scores)
+    assert {score["name"] for score in deterministic_scores} >= {"task_success", "error"}
+    assert all(isinstance(score["score"], float) for score in deterministic_scores)
 
 
 def test_curated_trace_preserves_attachment_manifests() -> None:
@@ -37,6 +38,7 @@ def test_curated_trace_preserves_attachment_manifests() -> None:
     item = _dataset_item_from_trace(
         {
             "id": "trace-1",
+            "trace_id": "trace-1",
             "session_id": "conversation-1",
             "user_id": "user-1",
             "input": {
@@ -50,13 +52,14 @@ def test_curated_trace_preserves_attachment_manifests() -> None:
                 ],
             },
             "metadata": {"transport.channel": "whatsapp"},
-            "observations": [
-                {
-                    "name": "attachments.prepare",
-                    "output": {"attachments": [manifest]},
-                }
-            ],
         },
+        spans=[
+            {
+                "trace_id": "trace-1",
+                "name": "attachments.prepare",
+                "output": {"attachments": [manifest]},
+            }
+        ],
         use_output_as_expected=False,
     )
 

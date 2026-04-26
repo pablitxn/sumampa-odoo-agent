@@ -52,6 +52,6 @@ Los shortcuts de facturas cargan una imagen mock en el composer para simular el 
 `mensaje + imagen` de WhatsApp.
 
 El panel permite seleccionar varios `Eval tags` de un catalogo fijo. Cada toggle envia
-un evento liviano al backend para dejar rastro en Langfuse sin invocar al agente, y
+un evento liviano al backend para dejar rastro en Phoenix sin invocar al agente, y
 cada turno envia el array `eval_tags`. Usar `eval:discarded` para marcar conversaciones
 que no deberian entrar en datasets.

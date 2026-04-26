@@ -19,7 +19,7 @@ AgentMode = Literal["disabled", "openai"]
 SessionStoreMode = Literal["memory", "hybrid"]
 AttachmentStoreMode = Literal["memory", "s3"]
 LoggingFormat = Literal["json", "text"]
-ObservabilityMode = Literal["disabled", "langfuse"]
+ObservabilityMode = Literal["disabled", "phoenix"]
 ObservabilityCaptureMode = Literal["full"]
 TelemetryProtocol = Literal["grpc", "http/protobuf"]
 
@@ -89,9 +89,10 @@ class ObservabilitySettings(BaseModel):
     environment: str = DEFAULT_ENV
     capture_mode: ObservabilityCaptureMode = "full"
     sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
-    public_key_env_var: str = "LANGFUSE_PUBLIC_KEY"
-    secret_key_env_var: str = "LANGFUSE_SECRET_KEY"
-    base_url: str = "http://localhost:3000"
+    api_key_env_var: str = "PHOENIX_API_KEY"
+    base_url: str = "http://localhost:6006"
+    collector_endpoint: str = "http://localhost:6006/v1/traces"
+    project_name: str = "sumampa-odoo-agent"
     flush_on_shutdown: bool = True
 
 
@@ -155,9 +156,10 @@ _ENV_OVERRIDES: tuple[EnvOverride, ...] = (
     EnvOverride("OBSERVABILITY_ENVIRONMENT", ("observability", "environment")),
     EnvOverride("OBSERVABILITY_CAPTURE_MODE", ("observability", "capture_mode")),
     EnvOverride("OBSERVABILITY_SAMPLE_RATE", ("observability", "sample_rate"), float),
-    EnvOverride("LANGFUSE_PUBLIC_KEY_ENV_VAR", ("observability", "public_key_env_var")),
-    EnvOverride("LANGFUSE_SECRET_KEY_ENV_VAR", ("observability", "secret_key_env_var")),
-    EnvOverride("LANGFUSE_BASE_URL", ("observability", "base_url")),
+    EnvOverride("PHOENIX_API_KEY_ENV_VAR", ("observability", "api_key_env_var")),
+    EnvOverride("PHOENIX_BASE_URL", ("observability", "base_url")),
+    EnvOverride("PHOENIX_COLLECTOR_ENDPOINT", ("observability", "collector_endpoint")),
+    EnvOverride("PHOENIX_PROJECT_NAME", ("observability", "project_name")),
     EnvOverride(
         "OBSERVABILITY_FLUSH_ON_SHUTDOWN",
         ("observability", "flush_on_shutdown"),

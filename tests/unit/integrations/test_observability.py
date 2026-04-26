@@ -5,20 +5,19 @@ from typing import Any, Literal, cast
 
 import pytest
 
-from sumampa_odoo_agent.config import AppSettings, AttachmentSettings
 from sumampa_odoo_agent.integrations.agent.framework import _ensure_agent_framework_version
-from sumampa_odoo_agent.integrations.observability.langfuse import (
-    LangfuseObservabilityProvider,
-    _enable_agent_framework_observability,
-)
 from sumampa_odoo_agent.integrations.observability.odoo import ObservedOdooGateway
 from sumampa_odoo_agent.integrations.odoo.dry_run import DryRunOdooClient
 from sumampa_odoo_agent.integrations.telemetry import OpenTelemetryObservabilityProvider
-from sumampa_odoo_agent.services.attachments import AttachmentIngestionService
-from sumampa_odoo_agent.services.conversation import ConversationService, ConversationTurnInput
-from sumampa_odoo_agent.services.errors import ConfigurationError
+from sumampa_odoo_agent.integrations.telemetry.bootstrap import (
+    _enable_agent_framework_observability,
+)
+from sumampa_odoo_agent.integrations.telemetry.otel_provider import (
+    OpenTelemetryObservation,
+    _set_input_output_attributes,
+    _span_attributes,
+)
 from sumampa_odoo_agent.services.models.odoo import SearchInput
-from sumampa_odoo_agent.services.models.runtime import AgentRunInput, AgentRunResult
 from sumampa_odoo_agent.services.observability import (
     CompositeObservabilityProvider,
     Observation,
@@ -164,39 +163,6 @@ class BrokenObservabilityProvider:
         raise RuntimeError("provider unavailable")
 
 
-class FakeRuntime:
-    async def run(self, request: AgentRunInput) -> AgentRunResult:
-        return AgentRunResult(
-            mode="fake",
-            session_id=request.session_id or "generated",
-            text="Listo.",
-        )
-
-
-class BrokenLangfuseClient:
-    def start_as_current_observation(self, **kwargs: Any) -> Any:
-        del kwargs
-        raise RuntimeError("langfuse unavailable")
-
-    def flush(self) -> None:
-        raise RuntimeError("flush unavailable")
-
-    def shutdown(self) -> None:
-        raise RuntimeError("shutdown unavailable")
-
-
-class FlushClient:
-    def __init__(self) -> None:
-        self.flushed = False
-        self.shutdown_called = False
-
-    def flush(self) -> None:
-        self.flushed = True
-
-    def shutdown(self) -> None:
-        self.shutdown_called = True
-
-
 class ForceFlushProvider:
     def __init__(self) -> None:
         self.timeout_millis: int | None = None
@@ -206,20 +172,19 @@ class ForceFlushProvider:
         return True
 
 
-def test_langfuse_provider_requires_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
-    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
-    settings = AppSettings.model_validate(
-        {
-            "service": {"name": "sumampa-test", "version": "0.1.0"},
-            "observability": {"mode": "langfuse"},
-        }
-    )
+class FakeSpan:
+    def __init__(self) -> None:
+        self.attributes: dict[str, Any] = {}
+        self.events: list[dict[str, Any]] = []
 
-    with pytest.raises(ConfigurationError) as exc_info:
-        LangfuseObservabilityProvider.from_settings(settings)
+    def set_attribute(self, key: str, value: Any) -> None:
+        self.attributes[key] = value
 
-    assert exc_info.value.code == "langfuse_credentials_missing"
+    def add_event(self, name: str, attributes: dict[str, Any] | None = None) -> None:
+        self.events.append({"name": name, "attributes": attributes or {}})
+
+    def set_status(self, status: Any) -> None:
+        self.attributes["status"] = status
 
 
 def test_agent_framework_observability_handles_missing_version(
@@ -281,44 +246,56 @@ def test_otel_provider_flushes_traces_metrics_and_logs() -> None:
     assert logger_provider.timeout_millis == 2000
 
 
-@pytest.mark.asyncio
-async def test_langfuse_provider_flushes_on_shutdown() -> None:
-    client = FlushClient()
-    provider = LangfuseObservabilityProvider(client=client, flush_on_shutdown=True)
-
-    await provider.aclose()
-
-    assert client.flushed is True
-    assert client.shutdown_called is True
-
-
-@pytest.mark.asyncio
-async def test_observability_failure_does_not_fail_conversation_turn() -> None:
-    provider = LangfuseObservabilityProvider(
-        client=BrokenLangfuseClient(),
-        flush_on_shutdown=False,
-    )
-    service = ConversationService(
-        FakeRuntime(),
-        attachment_ingestion=AttachmentIngestionService(
-            object_store=_NeverUsedObjectStore(),
-            settings=AttachmentSettings(store_mode="memory"),
-        ),
-        observability=provider,
+def test_openinference_span_attributes_include_phoenix_fields() -> None:
+    attributes = _span_attributes(
+        as_type="tool",
+        metadata={"transport.channel": "whatsapp", "nested": {"ignored": True}},
+        level="WARNING",
+        status_message="missing field",
+        user_id="user-1",
+        session_id="conversation-1",
+        tags=["conversation", "eval:candidate"],
+        version="0.1.0",
+        model="gpt-test",
     )
 
-    result = await service.run_turn(
-        ConversationTurnInput(
-            conversation_id="conv-1",
-            channel="whatsapp",
-            user_id="user-1",
-            text="hola",
-            attachments=[],
-            context={},
-        )
+    assert attributes["openinference.span.kind"] == "TOOL"
+    assert attributes["session.id"] == "conversation-1"
+    assert attributes["user.id"] == "user-1"
+    assert attributes["tag.tags"] == '["conversation", "eval:candidate"]'
+    assert attributes["gen_ai.request.model"] == "gpt-test"
+    assert attributes["llm.model_name"] == "gpt-test"
+    assert attributes["metadata"] == (
+        '{"nested": {"ignored": true}, "transport.channel": "whatsapp"}'
+    )
+    assert attributes["sumampa.transport.channel"] == "whatsapp"
+
+
+def test_openinference_input_output_redacts_bytes() -> None:
+    span = FakeSpan()
+    _set_input_output_attributes(
+        cast(Any, span),
+        input={"content": b"abc"},
+        output={"ok": True},
     )
 
-    assert result.assistant_text == "Listo."
+    input_value = span.attributes["input.value"]
+    assert span.attributes["input.mime_type"] == "application/json"
+    assert span.attributes["output.mime_type"] == "application/json"
+    assert '"kind": "bytes"' in input_value
+    assert '"size_bytes": 3' in input_value
+    assert "abc" not in input_value
+
+
+def test_openinference_observation_update_sets_payload_attributes() -> None:
+    span = FakeSpan()
+    observation = OpenTelemetryObservation(span=cast(Any, span), capture_payloads=True)
+
+    observation.update(input={"text": "hola"}, output={"assistant_text": "Listo."})
+
+    assert span.attributes["input.value"] == '{"text": "hola"}'
+    assert span.attributes["output.value"] == '{"assistant_text": "Listo."}'
+    assert [event["name"] for event in span.events] == ["sumampa.input", "sumampa.output"]
 
 
 @pytest.mark.asyncio
@@ -336,11 +313,3 @@ async def test_odoo_wrapper_records_tool_span() -> None:
     assert observability.records[0]["name"] == "odoo.search_partners"
     assert observability.records[0]["as_type"] == "tool"
     assert observability.records[0]["updates"][0]["output"]["mode"] == "dry-run"
-
-
-class _NeverUsedObjectStore:
-    async def put_object(self, **kwargs: Any) -> Any:
-        raise AssertionError("object store should not be used")
-
-    async def aclose(self) -> None:
-        return None

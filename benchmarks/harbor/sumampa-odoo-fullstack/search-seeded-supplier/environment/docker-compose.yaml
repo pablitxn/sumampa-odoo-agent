@@ -1,0 +1,84 @@
+services:
+  main:
+    depends_on:
+      sumampa-app:
+        condition: service_healthy
+    environment:
+      SUMAMPA_API_BASE_URL: http://sumampa-app:8000
+      HARBOR_TASK_ID: sumampa/odoo-fullstack-search-seeded-supplier
+      PHOENIX_PROJECT_NAME: ${PHOENIX_PROJECT_NAME:-sumampa-odoo-agent}
+      GIT_SHA: ${GIT_SHA:-unknown}
+      AGENT_MODEL: ${AGENT_MODEL:-gpt-5.4-mini}
+
+  sumampa-app:
+    image: ${SUMAMPA_APP_IMAGE:-sumampa-odoo-agent:harbor}
+    depends_on:
+      odoo19:
+        condition: service_healthy
+    environment:
+      PYTHON_ENV: development
+      AGENT_MODE: ${AGENT_MODE:-openai}
+      ODOO_MODE: jsonrpc
+      ODOO_BASE_URL: http://odoo19:8069
+      ODOO_DATABASE: sumampa_integration
+      ODOO_USERNAME: admin
+      ODOO_PASSWORD: admin
+      ODOO_TIMEOUT_SECONDS: "60"
+      SESSION_STORE_MODE: memory
+      ATTACHMENT_STORE_MODE: memory
+      OBSERVABILITY_MODE: phoenix
+      PHOENIX_BASE_URL: ${PHOENIX_BASE_URL:-http://host.docker.internal:6006}
+      PHOENIX_COLLECTOR_ENDPOINT: ${PHOENIX_COLLECTOR_ENDPOINT:-http://host.docker.internal:6006/v1/traces}
+      PHOENIX_PROJECT_NAME: ${PHOENIX_PROJECT_NAME:-sumampa-odoo-agent}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    command:
+      - /bin/sh
+      - -c
+      - python scripts/bootstrap_odoo_integration.py && python -m sumampa_odoo_agent.main
+    expose:
+      - "8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 90s
+
+  odoo-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  odoo19:
+    image: odoo:19.0
+    depends_on:
+      odoo-postgres:
+        condition: service_healthy
+    environment:
+      HOST: odoo-postgres
+      PORT: 5432
+      USER: odoo
+      PASSWORD: odoo
+    expose:
+      - "8069"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8069/web/login', timeout=5).read()",
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 40
+      start_period: 30s

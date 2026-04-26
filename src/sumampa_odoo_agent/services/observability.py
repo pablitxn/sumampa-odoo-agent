@@ -82,7 +82,7 @@ class ObservabilityProvider(Protocol):
         comment: str | None = None,
         metadata: Any | None = None,
     ) -> None:
-        """Attach an out-of-band score to Langfuse-compatible entities."""
+        """Attach an out-of-band score to observability-compatible entities."""
 
     def flush(self) -> None:
         """Flush any pending telemetry."""
