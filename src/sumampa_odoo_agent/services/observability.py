@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager, ExitStack, nullcontext
 from typing import Any, Literal, Protocol
@@ -21,6 +22,16 @@ ObservationType = Literal[
     "generation",
     "embedding",
 ]
+
+_BASE64_DATA_URI_PATTERN = re.compile(
+    r"data:(?P<media_type>[-+.\w]+/[-+.\w]+);base64,(?P<payload>[A-Za-z0-9+/=_-]+)"
+)
+_ENCODED_BINARY_FIELD_PATTERN = re.compile(
+    r"(?P<prefix>"
+    r"['\"]?(?:content_base64|b64_json|(?!(?:has_))[A-Za-z0-9_]*_base64|"
+    r"(?!(?:has_))[A-Za-z0-9_]*_b64)['\"]?\s*[:=]\s*['\"]"
+    r")(?P<payload>[A-Za-z0-9+/=_-]{8,})(?P<suffix>['\"])"
+)
 
 
 class Observation(Protocol):
@@ -333,18 +344,87 @@ class CompositeObservabilityProvider:
 def to_observability_payload(value: Any) -> Any:
     """Convert app values to JSON-friendly trace payloads without raw binary blobs."""
 
+    return _to_observability_payload(value, key=None)
+
+
+def redact_binary_payload_text(value: str) -> str:
+    """Remove inline base64 binary payloads from loggable text."""
+
+    value = _BASE64_DATA_URI_PATTERN.sub(_redact_data_uri_match, value)
+    return _ENCODED_BINARY_FIELD_PATTERN.sub(_redact_encoded_field_match, value)
+
+
+def _to_observability_payload(value: Any, *, key: str | None) -> Any:
     if isinstance(value, BaseModel):
-        return to_observability_payload(value.model_dump(mode="json"))
+        return _to_observability_payload(value.model_dump(mode="json"), key=key)
     if isinstance(value, bytes):
         return {
             "kind": "bytes",
             "size_bytes": len(value),
             "sha256": hashlib.sha256(value).hexdigest(),
         }
-    if isinstance(value, str) or value is None or isinstance(value, int | float | bool):
+    if isinstance(value, str):
+        data_uri_payload = _redacted_data_uri_payload(value)
+        if data_uri_payload is not None:
+            return data_uri_payload
+        if _is_encoded_binary_key(key):
+            return _redacted_text_payload(value, kind="base64")
+        return redact_binary_payload_text(value)
+    if value is None or isinstance(value, int | float | bool):
         return value
     if isinstance(value, Mapping):
-        return {str(key): to_observability_payload(item) for key, item in value.items()}
+        return {
+            str(item_key): _to_observability_payload(item, key=str(item_key))
+            for item_key, item in value.items()
+        }
     if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
-        return [to_observability_payload(item) for item in value]
-    return str(value)
+        return [_to_observability_payload(item, key=key) for item in value]
+    return redact_binary_payload_text(str(value))
+
+
+def _redacted_data_uri_payload(value: str) -> dict[str, Any] | None:
+    match = _BASE64_DATA_URI_PATTERN.fullmatch(value)
+    if match is None:
+        return None
+    return {
+        "kind": "data_uri",
+        "media_type": match.group("media_type"),
+        "redacted": True,
+        "size_chars": len(value),
+        "payload_size_chars": len(match.group("payload")),
+        "sha256": hashlib.sha256(value.encode("utf-8")).hexdigest(),
+    }
+
+
+def _redacted_text_payload(value: str, *, kind: str) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "redacted": True,
+        "size_chars": len(value),
+        "sha256": hashlib.sha256(value.encode("utf-8")).hexdigest(),
+    }
+
+
+def _is_encoded_binary_key(key: str | None) -> bool:
+    if key is None:
+        return False
+    compact_key = key.replace("_", "").replace("-", "").casefold()
+    if compact_key.startswith("has"):
+        return False
+    return (
+        "base64" in compact_key
+        or compact_key.endswith("b64")
+        or compact_key == "b64json"
+        or compact_key in {"contentbytes", "imagebytes", "audiobytes", "videobytes"}
+    )
+
+
+def _redact_data_uri_match(match: re.Match[str]) -> str:
+    return (
+        f"data:{match.group('media_type')};base64,"
+        f"[redacted {len(match.group('payload'))} chars]"
+    )
+
+
+def _redact_encoded_field_match(match: re.Match[str]) -> str:
+    return f"{match.group('prefix')}[redacted base64 payload]{match.group('suffix')}"

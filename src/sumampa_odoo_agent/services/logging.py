@@ -5,12 +5,17 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
 from opentelemetry import trace
 
 from sumampa_odoo_agent.config import AppSettings
+from sumampa_odoo_agent.services.observability import (
+    redact_binary_payload_text,
+    to_observability_payload,
+)
 
 _MANAGED_HANDLER_ATTR = "_sumampa_managed_handler"
 
@@ -22,6 +27,20 @@ class HealthCheckLogFilter(logging.Filter):
         if record.name != "uvicorn.access":
             return True
         return not _is_health_check_access_record(record)
+
+
+class BinaryPayloadLogFilter(logging.Filter):
+    """Redact inline binary payloads before stdout or OTEL log handlers see them."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = _sanitize_log_arg(record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(_sanitize_log_arg(arg) for arg in record.args)
+        elif isinstance(record.args, Mapping):
+            record.args = {key: _sanitize_log_arg(value) for key, value in record.args.items()}
+        elif record.args:
+            record.args = _sanitize_log_arg(record.args)
+        return True
 
 
 class JsonLogFormatter(logging.Formatter):
@@ -46,7 +65,7 @@ class JsonLogFormatter(logging.Formatter):
             "severity_text": record.levelname,
             "severity_number": record.levelno,
             "logger": record.name,
-            "message": record.getMessage(),
+            "message": redact_binary_payload_text(record.getMessage()),
             "service_name": self._service_name,
             "deployment_environment": self._deployment_environment,
             "cluster": self._cluster,
@@ -57,7 +76,7 @@ class JsonLogFormatter(logging.Formatter):
             "line": record.lineno,
         }
         if record.exc_info:
-            payload["exception"] = self.formatException(record.exc_info)
+            payload["exception"] = redact_binary_payload_text(self.formatException(record.exc_info))
         return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
@@ -75,6 +94,7 @@ def configure_logging(settings: AppSettings) -> None:
     setattr(handler, _MANAGED_HANDLER_ATTR, True)
     handler.setLevel(_logging_level(settings.logging.level))
     handler.addFilter(HealthCheckLogFilter())
+    handler.addFilter(BinaryPayloadLogFilter())
     if settings.logging.format == "json":
         handler.setFormatter(
             JsonLogFormatter(
@@ -112,6 +132,18 @@ def _is_health_check_access_record(record: logging.LogRecord) -> bool:
 
 def _contains_health_path(value: str) -> bool:
     return " /health " in value or " /health?" in value or value in {"/health", "/health/"}
+
+
+def _sanitize_log_arg(value: Any) -> Any:
+    if isinstance(value, str):
+        return redact_binary_payload_text(value)
+    if isinstance(value, bytes):
+        return to_observability_payload(value)
+    if isinstance(value, Mapping):
+        return to_observability_payload(value)
+    if isinstance(value, list | tuple):
+        return to_observability_payload(value)
+    return value
 
 
 def _current_trace_ids() -> tuple[str | None, str | None]:

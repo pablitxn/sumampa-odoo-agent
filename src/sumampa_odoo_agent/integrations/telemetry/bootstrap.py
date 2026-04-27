@@ -50,6 +50,7 @@ from sumampa_odoo_agent.integrations.agent.framework import _ensure_agent_framew
 from sumampa_odoo_agent.integrations.telemetry.otel_provider import (
     OpenTelemetryObservabilityProvider,
 )
+from sumampa_odoo_agent.services.logging import BinaryPayloadLogFilter
 from sumampa_odoo_agent.services.metrics import AppMetrics
 from sumampa_odoo_agent.services.observability import (
     NoOpObservabilityProvider,
@@ -237,6 +238,7 @@ def _configure_logs(settings: AppSettings, resource: Resource) -> LoggerProvider
     ]
     handler = LoggingHandler(level=logging.NOTSET, logger_provider=provider)
     handler.addFilter(_DropOpenTelemetryInternalLogs())
+    handler.addFilter(BinaryPayloadLogFilter())
     setattr(handler, _MANAGED_OTEL_LOG_HANDLER_ATTR, True)
     root.addHandler(handler)
     return provider
@@ -246,9 +248,9 @@ def _instrument_global_libraries(settings: AppSettings) -> None:
     global _GLOBAL_INSTRUMENTATION_ENABLED
     if _GLOBAL_INSTRUMENTATION_ENABLED or not _traces_enabled(settings):
         return
-    _enable_agent_framework_observability(
-        enable_sensitive_data=settings.observability.capture_mode == "full",
-    )
+    # App-owned spans already capture sanitized prompts and attachment metadata.
+    # Agent Framework sensitive capture serializes image content as data URIs.
+    _enable_agent_framework_observability(enable_sensitive_data=False)
     for instrumentor in (
         HTTPXClientInstrumentor(),
         SQLAlchemyInstrumentor(),
@@ -300,7 +302,11 @@ def _install_openinference_auto_kind_processor(provider: Any | None) -> None:
     add_span_processor = getattr(provider, "add_span_processor", None)
     if not callable(add_span_processor):
         return
-    add_span_processor(_OpenInferenceAutoKindSpanProcessor())
+    span_processor = _OpenInferenceAutoKindSpanProcessor()
+    try:
+        add_span_processor(span_processor, replace_default_processor=False)
+    except TypeError:
+        add_span_processor(span_processor)
     setattr(provider, _OPENINFERENCE_AUTO_KIND_PROCESSOR_ATTR, True)
 
 

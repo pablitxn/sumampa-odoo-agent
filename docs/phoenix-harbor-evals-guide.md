@@ -188,8 +188,8 @@ Los spans manuales usan atributos compatibles con OpenInference/Phoenix:
 
 ### Redaccion de payloads
 
-El helper `to_observability_payload(...)` evita subir bytes crudos. Si un valor es `bytes`,
-lo transforma en:
+El helper `to_observability_payload(...)` evita subir binarios crudos. Si un valor es
+`bytes`, lo transforma en:
 
 ```json
 {
@@ -199,8 +199,9 @@ lo transforma en:
 }
 ```
 
-Esto es importante para adjuntos: Phoenix puede mostrar manifests, filenames, hashes y tamanos,
-pero no el binario original.
+Tambien redacciona campos tipo `content_base64`, `*_base64`, `b64_json` y data URIs
+`data:*;base64,...`. Esto es importante para adjuntos: Phoenix puede mostrar manifests,
+filenames, hashes y tamanos, pero no el binario original.
 
 ## 5. Operacion local end-to-end
 

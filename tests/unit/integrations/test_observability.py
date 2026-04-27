@@ -30,6 +30,7 @@ from sumampa_odoo_agent.services.observability import (
     Observation,
     ObservationLevel,
     ObservationType,
+    to_observability_payload,
 )
 
 
@@ -187,6 +188,21 @@ class SpanProcessorProvider:
         self.span_processors.append(span_processor)
 
 
+class PhoenixStyleSpanProcessorProvider:
+    def __init__(self) -> None:
+        self.span_processors: list[Any] = []
+        self.replace_default_processor: bool | None = None
+
+    def add_span_processor(
+        self,
+        span_processor: Any,
+        *,
+        replace_default_processor: bool = True,
+    ) -> None:
+        self.span_processors.append(span_processor)
+        self.replace_default_processor = replace_default_processor
+
+
 class FakeSpan:
     def __init__(
         self,
@@ -307,6 +323,15 @@ def test_openinference_auto_kind_processor_installs_once() -> None:
     assert len(provider.span_processors) == 1
 
 
+def test_openinference_auto_kind_processor_preserves_phoenix_default_processor() -> None:
+    provider = PhoenixStyleSpanProcessorProvider()
+
+    _install_openinference_auto_kind_processor(provider)
+
+    assert len(provider.span_processors) == 1
+    assert provider.replace_default_processor is False
+
+
 def test_composite_observability_fans_out_to_all_healthy_providers() -> None:
     first = RecordingObservabilityProvider()
     second = RecordingObservabilityProvider()
@@ -394,6 +419,48 @@ def test_openinference_input_output_redacts_bytes() -> None:
     assert '"kind": "bytes"' in input_value
     assert '"size_bytes": 3' in input_value
     assert "abc" not in input_value
+
+
+def test_observability_payload_redacts_base64_and_data_uri_strings() -> None:
+    encoded_image = "ZmFrZS1pbWFnZS1wYXlsb2Fk" * 4
+    payload = to_observability_payload(
+        {
+            "attachment": {
+                "filename": "factura.jpg",
+                "content_base64": encoded_image,
+                "has_content_base64": True,
+            },
+            "message": {
+                "uri": f"data:image/jpeg;base64,{encoded_image}",
+            },
+        }
+    )
+
+    assert payload["attachment"]["filename"] == "factura.jpg"
+    assert payload["attachment"]["has_content_base64"] is True
+    assert payload["attachment"]["content_base64"]["kind"] == "base64"
+    assert payload["attachment"]["content_base64"]["redacted"] is True
+    assert payload["message"]["uri"]["kind"] == "data_uri"
+    assert payload["message"]["uri"]["media_type"] == "image/jpeg"
+    assert encoded_image not in str(payload)
+
+
+def test_openinference_input_output_redacts_base64_strings() -> None:
+    span = FakeSpan()
+    encoded_image = "ZmFrZS1pbWFnZS1wYXlsb2Fk" * 4
+    _set_input_output_attributes(
+        cast(Any, span),
+        input={
+            "content_base64": encoded_image,
+            "uri": f"data:image/jpeg;base64,{encoded_image}",
+        },
+        output={"ok": True},
+    )
+
+    input_value = span.attributes["input.value"]
+    assert encoded_image not in input_value
+    assert '"kind": "base64"' in input_value
+    assert '"kind": "data_uri"' in input_value
 
 
 def test_openinference_observation_update_sets_payload_attributes() -> None:
