@@ -154,8 +154,10 @@ services:
     - 127.0.0.1:4317:4317
     - 127.0.0.1:4318:4318
     depends_on:
-    - tempo
-    - loki
+      tempo:
+        condition: service_healthy
+      loki:
+        condition: service_started
   phoenix-postgres:
     image: postgres:16
     container_name: sumampa-odoo-agent-phoenix-postgres
@@ -234,7 +236,7 @@ services:
     ports:
     - 127.0.0.1:3100:3100
   tempo:
-    image: grafana/tempo:latest
+    image: grafana/tempo:2.9.2
     container_name: sumampa-odoo-agent-tempo
     profiles:
     - observability
@@ -242,9 +244,18 @@ services:
     - -config.file=/etc/tempo/config.yml
     volumes:
     - ./observability/tempo.yml:/etc/tempo/config.yml:ro
-    - tempo_data:/tmp/tempo
+    - tempo_var_data:/var/tempo
     ports:
     - 127.0.0.1:3200:3200
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -qO-
+      - http://localhost:3200/ready
+      interval: 5s
+      timeout: 5s
+      retries: 20
   grafana:
     image: grafana/grafana:latest
     container_name: sumampa-odoo-agent-grafana
@@ -277,6 +288,6 @@ volumes:
   odoo19_data: null
   prometheus_data: null
   loki_data: null
-  tempo_data: null
+  tempo_var_data: null
   grafana_data: null
   phoenix_postgres_data: null
