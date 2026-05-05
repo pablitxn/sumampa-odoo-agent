@@ -1,0 +1,33 @@
+schema_version = "1.1"
+
+[task]
+name = "sumampa/odoo-fullstack-search-seeded-product"
+description = "Searches a seeded Odoo product through the Sumampa API and verifies the grounded response."
+keywords = ["sumampa", "odoo", "phoenix", "fullstack", "whatsapp", "product-search"]
+
+[agent]
+timeout_sec = 300.0
+
+[verifier]
+timeout_sec = 300.0
+
+[verifier.env]
+SUMAMPA_API_BASE_URL = "http://sumampa-app:8000"
+HARBOR_TASK_ID = "sumampa/odoo-fullstack-search-seeded-product"
+PHOENIX_PROJECT_NAME = "${PHOENIX_PROJECT_NAME}"
+GIT_SHA = "${GIT_SHA}"
+AGENT_MODEL = "${AGENT_MODEL}"
+OPENAI_API_KEY = "${OPENAI_API_KEY}"
+LLM_JUDGE_MODEL = "${OPENAI_EVAL_MODEL}"
+ODOO_BASE_URL = "http://odoo19:8069"
+ODOO_DATABASE = "sumampa_integration"
+ODOO_USERNAME = "admin"
+ODOO_PASSWORD = "admin"
+
+[environment]
+build_timeout_sec = 600.0
+workdir = "/app"
+cpus = 2
+memory_mb = 4096
+storage_mb = 10240
+allow_internet = true

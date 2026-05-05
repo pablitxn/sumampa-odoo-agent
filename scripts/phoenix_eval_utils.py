@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping
 from typing import Any
 
 from openai import AsyncOpenAI
@@ -26,6 +27,11 @@ DATASETS: tuple[dict[str, Any], ...] = (
         "description": "Production or development failures promoted into regression evals.",
         "metadata": {"domain": "sumampa", "stage": "dev", "kind": "regression"},
     },
+    {
+        "name": "sumampa/dev/fullstack-gate",
+        "description": "Harbor-backed full-stack gate slice for release and nightly evidence.",
+        "metadata": {"domain": "sumampa", "stage": "dev", "kind": "harbor"},
+    },
 )
 
 SCORE_NAMES: tuple[str, ...] = (
@@ -37,7 +43,22 @@ SCORE_NAMES: tuple[str, ...] = (
     "needs_human_review",
     "latency_ms",
     "error",
+    "llm_judge_pass",
 )
+
+P0_P1_PRIORITIES: tuple[str, ...] = ("p0", "p1")
+
+SCORE_DEFAULTS: dict[str, float] = {
+    "task_success": 0.0,
+    "odoo_payload_valid": 0.0,
+    "grounded_in_tool_result": 0.0,
+    "missing_data_handled": 0.0,
+    "communication_quality": 0.0,
+    "needs_human_review": 1.0,
+    "latency_ms": 0.0,
+    "error": 1.0,
+    "llm_judge_pass": 0.0,
+}
 
 
 def build_phoenix_client(settings: AppSettings) -> Any:
@@ -142,7 +163,11 @@ def conversation_quality_eval(
     ]
 
 
-def build_llm_rubric_eval(model: str) -> Any:
+def build_llm_rubric_eval(
+    model: str,
+    *,
+    required_priorities: tuple[str, ...] = P0_P1_PRIORITIES,
+) -> Any:
     client = AsyncOpenAI()
 
     async def llm_rubric_eval(
@@ -155,11 +180,15 @@ def build_llm_rubric_eval(model: str) -> Any:
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
         del kwargs
+        priority = metadata_priority(metadata)
+        judge_required = priority in {item.casefold() for item in required_priorities}
         prompt = (
             "Grade this Spanish WhatsApp Odoo assistant output from 0.0 to 1.0 on "
             "task completion, groundedness, missing-data handling, and concise operational clarity. "
             "Return JSON with keys task_success, grounded_in_tool_result, missing_data_handled, "
-            "communication_quality, needs_human_review, comment.\n\n"
+            "communication_quality, needs_human_review, llm_judge_pass, comment.\n"
+            "The llm_judge_pass key must be 1.0 only when the output is grounded, operationally "
+            "correct, concise, and safe to accept without human intervention.\n\n"
             f"Input: {input}\nExpected: {expected or expected_output}\n"
             f"Metadata: {metadata}\nOutput: {output}"
         )
@@ -179,31 +208,73 @@ def build_llm_rubric_eval(model: str) -> Any:
                     1.0,
                     label="true",
                     explanation=f"LLM judge returned invalid JSON: {content[:200]}",
-                )
+                    metadata={
+                        "source": "llm_judge",
+                        "model": model,
+                        "priority": priority,
+                        "judge_required": judge_required,
+                    },
+                ),
+                score(
+                    "llm_judge_pass",
+                    0.0,
+                    label="fail",
+                    explanation="LLM judge returned invalid JSON.",
+                    metadata={
+                        "source": "llm_judge",
+                        "model": model,
+                        "priority": priority,
+                        "judge_required": judge_required,
+                    },
+                ),
             ]
-        comment = str(scores.get("comment", "LLM rubric score."))
+        comment = str(scores.get("comment") or scores.get("reasoning") or "LLM rubric score.")
+        pass_score = llm_judge_pass_score(scores, judge_required=judge_required)
+        judge_metadata = {
+            "source": "llm_judge",
+            "model": model,
+            "priority": priority,
+            "judge_required": judge_required,
+            "judge_reasoning": comment,
+        }
         return [
-            score("task_success", float(scores.get("task_success", 0.0)), explanation=comment),
+            score(
+                "task_success",
+                bounded_float(scores.get("task_success", 0.0)),
+                explanation=comment,
+                metadata=judge_metadata,
+            ),
             score(
                 "grounded_in_tool_result",
-                float(scores.get("grounded_in_tool_result", 0.0)),
+                bounded_float(scores.get("grounded_in_tool_result", 0.0)),
                 explanation="LLM rubric score.",
+                metadata=judge_metadata,
             ),
             score(
                 "missing_data_handled",
-                float(scores.get("missing_data_handled", 0.0)),
+                bounded_float(scores.get("missing_data_handled", 0.0)),
                 explanation="LLM rubric score.",
+                metadata=judge_metadata,
             ),
             score(
                 "communication_quality",
-                float(scores.get("communication_quality", 0.0)),
+                bounded_float(scores.get("communication_quality", 0.0)),
                 explanation="LLM rubric score.",
+                metadata=judge_metadata,
             ),
             score(
                 "needs_human_review",
                 1.0 if bool(scores.get("needs_human_review", True)) else 0.0,
                 label=str(bool(scores.get("needs_human_review", True))).lower(),
                 explanation=comment,
+                metadata=judge_metadata,
+            ),
+            score(
+                "llm_judge_pass",
+                pass_score,
+                label="pass" if pass_score >= 1.0 else "fail",
+                explanation=comment,
+                metadata=judge_metadata,
             ),
         ]
 
@@ -218,6 +289,8 @@ def score(
     explanation: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if name not in SCORE_NAMES:
+        raise ValueError(f"Unknown eval score name: {name}")
     return {
         "name": name,
         "score": float(value),
@@ -225,6 +298,75 @@ def score(
         "explanation": explanation,
         "metadata": metadata or {},
     }
+
+
+def numeric_reward_payload(
+    values: Mapping[str, Any] | None = None,
+    *,
+    defaults: Mapping[str, float] | None = None,
+) -> dict[str, float]:
+    payload = dict(values or {})
+    extra_keys = sorted(set(payload) - set(SCORE_NAMES))
+    if extra_keys:
+        raise ValueError(f"Unknown reward keys: {', '.join(extra_keys)}")
+
+    base_defaults = dict(SCORE_DEFAULTS if defaults is None else defaults)
+    normalized: dict[str, float] = {}
+    for name in SCORE_NAMES:
+        value = payload.get(name, base_defaults.get(name, 0.0))
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise TypeError(f"Reward {name!r} must be numeric, got {type(value).__name__}")
+        normalized[name] = float(value)
+    return normalized
+
+
+def metadata_priority(metadata: Mapping[str, Any] | None) -> str:
+    if not isinstance(metadata, Mapping):
+        return ""
+    priority = metadata.get("priority") or metadata.get("severity")
+    if isinstance(priority, str):
+        return priority.strip().casefold()
+
+    source_metadata = metadata.get("source_metadata")
+    if isinstance(source_metadata, Mapping):
+        source_priority = source_metadata.get("priority") or source_metadata.get("severity")
+        if isinstance(source_priority, str):
+            return source_priority.strip().casefold()
+    return ""
+
+
+def priority_requires_llm_judge(
+    metadata: Mapping[str, Any] | None,
+    *,
+    required_priorities: tuple[str, ...] = P0_P1_PRIORITIES,
+) -> bool:
+    priority = metadata_priority(metadata)
+    return bool(priority and priority in {item.casefold() for item in required_priorities})
+
+
+def llm_judge_pass_score(scores: Mapping[str, Any], *, judge_required: bool) -> float:
+    explicit_score = scores.get("llm_judge_pass")
+    if isinstance(explicit_score, bool):
+        return 1.0 if explicit_score else 0.0
+    if isinstance(explicit_score, int | float):
+        return 1.0 if float(explicit_score) >= 1.0 else 0.0
+    if not judge_required:
+        return 1.0
+
+    rubric_scores = [
+        bounded_float(scores.get("task_success", 0.0)),
+        bounded_float(scores.get("grounded_in_tool_result", 0.0)),
+        bounded_float(scores.get("missing_data_handled", 0.0)),
+        bounded_float(scores.get("communication_quality", 0.0)),
+    ]
+    needs_review = bool(scores.get("needs_human_review", True))
+    return 1.0 if min(rubric_scores) >= 0.8 and not needs_review else 0.0
+
+
+def bounded_float(value: Any) -> float:
+    if not isinstance(value, int | float):
+        return 0.0
+    return max(0.0, min(float(value), 1.0))
 
 
 def heuristic_spanish_whatsapp_quality(text: str) -> float:

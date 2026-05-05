@@ -1,0 +1,17 @@
+{
+  "priority": "p1",
+  "llm_judge_required": false,
+  "required_terms": ["SUMAMPA", "30123456789"],
+  "forbidden_terms": ["traceback", "exception"],
+  "missing_fields": [],
+  "grounded_terms": ["SUMAMPA", "30123456789"],
+  "max_latency_ms": 120000,
+  "odoo_assertions": [
+    {
+      "model": "res.partner",
+      "domain": [["vat", "=", "30123456789"]],
+      "fields": ["display_name", "vat", "email"],
+      "min_count": 1
+    }
+  ]
+}

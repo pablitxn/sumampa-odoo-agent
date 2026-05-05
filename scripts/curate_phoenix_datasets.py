@@ -17,6 +17,8 @@ else:
 
 from sumampa_odoo_agent.config import load_settings
 
+DATASET_READY_TAG = "eval:dataset-ready"
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -25,6 +27,11 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=500)
     parser.add_argument("--session-id", default=None)
     parser.add_argument("--tag", action="append", dest="tags", default=[])
+    parser.add_argument(
+        "--allow-unreviewed",
+        action="store_true",
+        help="Allow curation without eval:dataset-ready. Intended only for local synthetic data.",
+    )
     parser.add_argument("--from-timestamp", type=_parse_datetime, default=None)
     parser.add_argument("--to-timestamp", type=_parse_datetime, default=None)
     parser.add_argument(
@@ -33,6 +40,9 @@ def main() -> None:
         help="Use span output as expected output for already-reviewed spans.",
     )
     args = parser.parse_args()
+    curation_error = validate_curation_tags(args.tags, allow_unreviewed=args.allow_unreviewed)
+    if curation_error:
+        parser.error(curation_error)
 
     settings = load_settings(env=args.env)
     client = build_phoenix_client(settings)
@@ -88,6 +98,12 @@ def _fetch_spans(
         end_time=to_timestamp,
     )
     return [_span_row_to_trace(row.to_dict()) for _, row in spans_df.iterrows()]
+
+
+def validate_curation_tags(tags: list[str], *, allow_unreviewed: bool) -> str | None:
+    if DATASET_READY_TAG in tags or allow_unreviewed:
+        return None
+    return f"dataset curation requires --tag {DATASET_READY_TAG} unless --allow-unreviewed is set"
 
 
 def _dataset_item_from_trace(

@@ -1,6 +1,17 @@
 {
+  "priority": "p1",
+  "llm_judge_required": false,
   "required_terms": ["JAMBO", "30644193078"],
   "forbidden_terms": ["traceback", "exception"],
   "missing_fields": [],
-  "max_latency_ms": 120000
+  "grounded_terms": ["JAMBO", "30644193078"],
+  "max_latency_ms": 120000,
+  "odoo_assertions": [
+    {
+      "model": "res.partner",
+      "domain": [["vat", "=", "30644193078"]],
+      "fields": ["display_name", "vat", "email"],
+      "min_count": 1
+    }
+  ]
 }

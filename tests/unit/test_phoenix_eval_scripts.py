@@ -1,8 +1,20 @@
 from __future__ import annotations
 
-from scripts.curate_phoenix_datasets import _dataset_item_from_trace
+import json
+from types import SimpleNamespace
+
+import pytest
+from scripts.curate_phoenix_datasets import _dataset_item_from_trace, validate_curation_tags
 from scripts.export_tagged_conversations import _conversation_exports_from_traces
-from scripts.phoenix_eval_utils import conversation_quality_eval, deterministic_eval
+from scripts.phoenix_eval_utils import (
+    DATASETS,
+    SCORE_NAMES,
+    build_llm_rubric_eval,
+    conversation_quality_eval,
+    deterministic_eval,
+    numeric_reward_payload,
+    priority_requires_llm_judge,
+)
 from scripts.run_phoenix_evals import _eval_context
 
 
@@ -24,6 +36,73 @@ def test_eval_functions_return_phoenix_score_records() -> None:
     assert all(isinstance(score, dict) for score in conversation_scores)
     assert {score["name"] for score in deterministic_scores} >= {"task_success", "error"}
     assert all(isinstance(score["score"], float) for score in deterministic_scores)
+
+
+def test_phoenix_eval_contract_includes_fullstack_gate_and_llm_judge_score() -> None:
+    dataset_names = {str(dataset["name"]) for dataset in DATASETS}
+    assert "sumampa/dev/fullstack-gate" in dataset_names
+    assert "llm_judge_pass" in SCORE_NAMES
+
+    reward = numeric_reward_payload({"task_success": 1, "error": 0, "llm_judge_pass": 1})
+
+    assert set(reward) == set(SCORE_NAMES)
+    assert reward["task_success"] == 1.0
+    assert reward["llm_judge_pass"] == 1.0
+
+
+def test_priority_requires_llm_judge_for_p0_p1_metadata() -> None:
+    assert priority_requires_llm_judge({"priority": "p0"}) is True
+    assert priority_requires_llm_judge({"source_metadata": {"severity": "P1"}}) is True
+    assert priority_requires_llm_judge({"priority": "p2"}) is False
+
+
+def test_curation_requires_dataset_ready_tag_unless_explicitly_overridden() -> None:
+    assert validate_curation_tags(["eval:dataset-ready"], allow_unreviewed=False) is None
+    assert validate_curation_tags(["eval:candidate"], allow_unreviewed=True) is None
+    assert "eval:dataset-ready" in (
+        validate_curation_tags(["eval:candidate"], allow_unreviewed=False) or ""
+    )
+
+
+@pytest.mark.asyncio
+async def test_llm_judge_eval_emits_pass_score_and_reasoning_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeCompletions:
+        async def create(self, **kwargs: object) -> SimpleNamespace:
+            del kwargs
+            content = json.dumps(
+                {
+                    "task_success": 1.0,
+                    "grounded_in_tool_result": 1.0,
+                    "missing_data_handled": 1.0,
+                    "communication_quality": 0.95,
+                    "needs_human_review": False,
+                    "llm_judge_pass": 1.0,
+                    "comment": "Grounded in the Odoo result.",
+                }
+            )
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
+            )
+
+    class FakeClient:
+        chat = SimpleNamespace(completions=FakeCompletions())
+
+    monkeypatch.setattr("scripts.phoenix_eval_utils.AsyncOpenAI", lambda: FakeClient())
+    evaluator = build_llm_rubric_eval("judge-model", required_priorities=("p0", "p1"))
+
+    scores = await evaluator(
+        input={"text": "Busca proveedor"},
+        output={"assistant_text": "JAMBO SA existe."},
+        expected_output={"grounded_terms": ["JAMBO"]},
+        metadata={"priority": "p1"},
+    )
+
+    by_name = {score["name"]: score for score in scores}
+    assert by_name["llm_judge_pass"]["score"] == 1.0
+    assert by_name["llm_judge_pass"]["metadata"]["judge_required"] is True
+    assert by_name["llm_judge_pass"]["metadata"]["judge_reasoning"] == (
+        "Grounded in the Odoo result."
+    )
 
 
 def test_curated_trace_preserves_attachment_manifests() -> None:

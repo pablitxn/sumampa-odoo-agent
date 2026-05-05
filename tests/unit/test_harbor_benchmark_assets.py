@@ -7,65 +7,90 @@ import tomllib
 from pathlib import Path
 from types import ModuleType
 
-TASK_ROOT = (
-    Path(__file__).resolve().parents[2]
-    / "benchmarks/harbor/sumampa-odoo-fullstack/search-seeded-supplier"
-)
-EXPECTED_REWARD_KEYS = {
-    "task_success",
-    "odoo_payload_valid",
-    "grounded_in_tool_result",
-    "missing_data_handled",
-    "communication_quality",
-    "needs_human_review",
-    "latency_ms",
-    "error",
+from scripts.phoenix_eval_utils import SCORE_NAMES, numeric_reward_payload
+
+BENCHMARK_ROOT = Path(__file__).resolve().parents[2] / "benchmarks/harbor/sumampa-odoo-fullstack"
+TASK_ROOTS = tuple(sorted(path for path in BENCHMARK_ROOT.iterdir() if path.is_dir()))
+EXPECTED_SCENARIOS = {
+    "search-seeded-supplier",
+    "search-seeded-customer",
+    "search-seeded-product",
+    "validate-invoice-draft",
+    "argentina-fiscal-warning",
+    "validate-delivery-draft",
+    "safe-create-product",
+    "attachment-assisted-product-search",
 }
+EXPECTED_REWARD_KEYS = set(SCORE_NAMES)
 
 
 def test_harbor_task_layout_and_metadata() -> None:
-    assert (TASK_ROOT / "instruction.md").exists()
-    assert (TASK_ROOT / "environment/Dockerfile").exists()
-    assert (TASK_ROOT / "environment/docker-compose.yaml").exists()
-    assert (TASK_ROOT / "solution/solve.sh").exists()
-    assert (TASK_ROOT / "tests/test.sh").exists()
-    assert (TASK_ROOT / "tests/verify.py").exists()
-    assert os.access(TASK_ROOT / "solution/solve.sh", os.X_OK)
-    assert os.access(TASK_ROOT / "tests/test.sh", os.X_OK)
+    assert {path.name for path in TASK_ROOTS} == EXPECTED_SCENARIOS
 
-    task = tomllib.loads((TASK_ROOT / "task.toml").read_text(encoding="utf-8"))
-    assert task["task"]["name"] == "sumampa/odoo-fullstack-search-seeded-supplier"
-    assert task["environment"]["workdir"] == "/app"
-    assert task["verifier"]["env"]["SUMAMPA_API_BASE_URL"] == "http://sumampa-app:8000"
+    for task_root in TASK_ROOTS:
+        assert (task_root / "instruction.md").exists()
+        assert (task_root / "environment/Dockerfile").exists()
+        assert (task_root / "environment/docker-compose.yaml").exists()
+        assert (task_root / "solution/solve.sh").exists()
+        assert (task_root / "tests/test.sh").exists()
+        assert (task_root / "tests/verify.py").exists()
+        assert os.access(task_root / "solution/solve.sh", os.X_OK)
+        assert os.access(task_root / "tests/test.sh", os.X_OK)
+
+        task = tomllib.loads((task_root / "task.toml").read_text(encoding="utf-8"))
+        assert task["task"]["name"] == f"sumampa/odoo-fullstack-{task_root.name}"
+        assert task["environment"]["workdir"] == "/app"
+        assert task["verifier"]["env"]["SUMAMPA_API_BASE_URL"] == "http://sumampa-app:8000"
+        assert task["verifier"]["env"]["HARBOR_TASK_ID"] == task["task"]["name"]
+        assert "LLM_JUDGE_MODEL" in task["verifier"]["env"]
+        assert "ODOO_BASE_URL" in task["verifier"]["env"]
 
 
 def test_harbor_compose_declares_required_sidecars() -> None:
-    compose = (TASK_ROOT / "environment/docker-compose.yaml").read_text(encoding="utf-8")
+    for task_root in TASK_ROOTS:
+        compose = (task_root / "environment/docker-compose.yaml").read_text(encoding="utf-8")
 
-    assert "sumampa-app:" in compose
-    assert "odoo19:" in compose
-    assert "odoo-postgres:" in compose
-    assert "PHOENIX_COLLECTOR_ENDPOINT" in compose
+        assert "sumampa-app:" in compose
+        assert "odoo19:" in compose
+        assert "odoo-postgres:" in compose
+        assert "PHOENIX_COLLECTOR_ENDPOINT" in compose
+        assert f"HARBOR_TASK_ID: sumampa/odoo-fullstack-{task_root.name}" in compose
 
 
 def test_harbor_fixtures_and_reward_schema_are_numeric() -> None:
-    request = json.loads((TASK_ROOT / "tests/fixtures/request.json").read_text(encoding="utf-8"))
-    expected = json.loads((TASK_ROOT / "tests/fixtures/expected.json").read_text(encoding="utf-8"))
-    verifier = _load_verifier_module()
+    for task_root in TASK_ROOTS:
+        request = json.loads((task_root / "tests/fixtures/request.json").read_text(encoding="utf-8"))
+        expected = json.loads((task_root / "tests/fixtures/expected.json").read_text(encoding="utf-8"))
+        verifier = _load_verifier_module(task_root)
 
-    reward = verifier._empty_reward(error=1.0)
+        reward = verifier._empty_reward(error=1.0)
 
-    assert request["conversation_id"] == "harbor-search-seeded-supplier"
-    assert "JAMBO" in request["text"]
-    assert expected["required_terms"] == ["JAMBO", "30644193078"]
-    assert set(reward) == EXPECTED_REWARD_KEYS
-    assert all(isinstance(value, int | float) for value in reward.values())
+        assert request["conversation_id"] == f"harbor-{task_root.name}"
+        assert request["context"]["scenario"] == task_root.name
+        assert expected["priority"] in {"p0", "p1", "p2"}
+        assert isinstance(expected["llm_judge_required"], bool)
+        assert isinstance(expected["required_terms"], list)
+        assert set(reward) == EXPECTED_REWARD_KEYS
+        assert numeric_reward_payload(reward) == reward
+        assert all(isinstance(value, int | float) for value in reward.values())
 
 
-def _load_verifier_module() -> ModuleType:
+def test_harbor_reward_schema_rejects_non_numeric_values() -> None:
+    reward: dict[str, object] = {name: 1.0 for name in SCORE_NAMES}
+    reward["task_success"] = "1.0"
+
+    try:
+        numeric_reward_payload(reward)
+    except TypeError as exc:
+        assert "task_success" in str(exc)
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("numeric_reward_payload accepted a string score")
+
+
+def _load_verifier_module(task_root: Path) -> ModuleType:
     spec = importlib.util.spec_from_file_location(
-        "sumampa_harbor_verify",
-        TASK_ROOT / "tests/verify.py",
+        f"sumampa_harbor_verify_{task_root.name.replace('-', '_')}",
+        task_root / "tests/verify.py",
     )
     assert spec is not None
     assert spec.loader is not None

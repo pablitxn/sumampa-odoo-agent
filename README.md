@@ -280,7 +280,9 @@ PYTHONPATH=src uv run python scripts/run_harbor_benchmarks.py
 The Harbor task under `benchmarks/harbor/sumampa-odoo-fullstack` starts the app, Odoo 19,
 and Odoo Postgres as Docker sidecars, calls `/api/v1/messages`, writes
 `/logs/verifier/reward.json`, and imports numeric rewards into Phoenix when the matching
-conversation span is present.
+conversation span is present. The V1 suite covers seeded supplier/customer/product search,
+invoice and delivery validation, Argentina fiscal warnings, safe create, and attachment-assisted
+workflows.
 
 Useful variants:
 
@@ -290,10 +292,16 @@ PYTHONPATH=src uv run python scripts/run_harbor_benchmarks.py --no-upload-phoeni
 
 # Reuse an already-built image and already-running Phoenix.
 PYTHONPATH=src uv run python scripts/run_harbor_benchmarks.py --skip-build --skip-phoenix
+
+# Apply the nightly reward gate after Harbor finishes.
+PYTHONPATH=src uv run python scripts/run_harbor_benchmarks.py --gate nightly
 ```
 
 Artifacts are written under `benchmark_runs/harbor/<git-sha>`. The runner also
 writes `reward-index.json` when it finds one or more Harbor `reward.json` files.
+The shared numeric score contract is `task_success`, `odoo_payload_valid`,
+`grounded_in_tool_result`, `missing_data_handled`, `communication_quality`,
+`needs_human_review`, `latency_ms`, `error`, and `llm_judge_pass`.
 
 ### Readiness Checklist
 

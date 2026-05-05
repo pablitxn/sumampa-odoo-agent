@@ -1,0 +1,10 @@
+{
+  "priority": "p1",
+  "llm_judge_required": false,
+  "required_terms": ["picking_type_id", "location_id", "location_dest_id", "moves"],
+  "forbidden_terms": ["traceback", "exception"],
+  "missing_fields": ["picking_type_id", "location_id", "location_dest_id", "moves"],
+  "grounded_terms": ["picking_type_id", "location_id", "location_dest_id", "moves"],
+  "max_latency_ms": 120000,
+  "odoo_assertions": []
+}

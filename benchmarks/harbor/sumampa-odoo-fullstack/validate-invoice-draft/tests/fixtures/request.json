@@ -1,0 +1,12 @@
+{
+  "conversation_id": "harbor-validate-invoice-draft",
+  "channel": "whatsapp",
+  "user_id": "harbor-user",
+  "text": "Validá si puedo crear una factura de venta, pero todavía no tengo cliente, diario ni líneas cargadas.",
+  "attachments": [],
+  "context": {
+    "benchmark": "harbor",
+    "scenario": "validate-invoice-draft"
+  },
+  "eval_tags": ["eval:harbor", "eval:odoo-jsonrpc", "eval:invoice-validation"]
+}

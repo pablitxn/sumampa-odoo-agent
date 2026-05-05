@@ -1,0 +1,10 @@
+{
+  "priority": "p1",
+  "llm_judge_required": false,
+  "required_terms": ["document_letter_mismatch", "email_to_missing"],
+  "forbidden_terms": ["traceback", "exception"],
+  "missing_fields": [],
+  "grounded_terms": ["document_letter_mismatch", "email_to_missing"],
+  "max_latency_ms": 120000,
+  "odoo_assertions": []
+}

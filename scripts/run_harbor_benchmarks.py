@@ -14,14 +14,18 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from scripts.curate_phoenix_datasets import _span_row_to_trace
-    from scripts.phoenix_eval_utils import build_phoenix_client
+    from scripts.phoenix_eval_utils import SCORE_NAMES, build_phoenix_client, numeric_reward_payload
 else:
     try:
         from scripts.curate_phoenix_datasets import _span_row_to_trace
-        from scripts.phoenix_eval_utils import build_phoenix_client
+        from scripts.phoenix_eval_utils import (
+            SCORE_NAMES,
+            build_phoenix_client,
+            numeric_reward_payload,
+        )
     except ModuleNotFoundError:  # pragma: no cover - direct script execution
         from curate_phoenix_datasets import _span_row_to_trace
-        from phoenix_eval_utils import build_phoenix_client
+        from phoenix_eval_utils import SCORE_NAMES, build_phoenix_client, numeric_reward_payload
 
 from sumampa_odoo_agent.config import load_settings
 
@@ -37,6 +41,12 @@ def main() -> None:
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--skip-phoenix", action="store_true")
     parser.add_argument("--no-upload-phoenix", action="store_true")
+    parser.add_argument(
+        "--gate",
+        choices=("none", "nightly", "release"),
+        default="none",
+        help="Apply local reward thresholds after Harbor finishes.",
+    )
     parser.add_argument("--artifacts-dir", type=Path, default=Path("benchmark_runs/harbor"))
     parser.add_argument("--phoenix-base-url", default=os.environ.get("PHOENIX_BASE_URL", "http://localhost:6006"))
     parser.add_argument(
@@ -82,6 +92,7 @@ def main() -> None:
     reward_paths = sorted(run_dir.rglob("reward.json"))
     if reward_paths:
         _write_reward_index(run_dir, reward_paths)
+        _enforce_gate(reward_paths, args.gate)
     if reward_paths and not args.no_upload_phoenix:
         _upload_rewards_to_phoenix(
             reward_paths,
@@ -137,7 +148,7 @@ def _upload_rewards_to_phoenix(
     )
     client = build_phoenix_client(settings)
     for reward_path in reward_paths:
-        rewards = _read_json(reward_path)
+        rewards = numeric_reward_payload(_read_json(reward_path))
         correlation = _read_correlation(reward_path)
         span_id = _find_conversation_span_id(
             client,
@@ -148,9 +159,8 @@ def _upload_rewards_to_phoenix(
         if not span_id:
             print(f"reward {reward_path} has no matching Phoenix span; skipping upload")
             continue
-        for name, value in rewards.items():
-            if not isinstance(value, int | float):
-                continue
+        for name in SCORE_NAMES:
+            value = rewards[name]
             metadata = {
                 **correlation,
                 "harbor.reward_path": str(reward_path),
@@ -198,7 +208,7 @@ def _write_reward_index(run_dir: Path, reward_paths: list[Path]) -> None:
     index = [
         {
             "reward_path": str(path),
-            "reward": _read_json(path),
+            "reward": numeric_reward_payload(_read_json(path)),
             "correlation": _read_correlation(path),
         }
         for path in reward_paths
@@ -207,6 +217,37 @@ def _write_reward_index(run_dir: Path, reward_paths: list[Path]) -> None:
         json.dumps(index, indent=2, sort_keys=True),
         encoding="utf-8",
     )
+
+
+def _enforce_gate(reward_paths: list[Path], gate: str) -> None:
+    if gate == "none":
+        return
+
+    failures: list[str] = []
+    for reward_path in reward_paths:
+        reward = numeric_reward_payload(_read_json(reward_path))
+        correlation = _read_correlation(reward_path)
+        priority = str(correlation.get("priority") or "").casefold()
+        task_id = str(correlation.get("harbor.task_id") or reward_path)
+        if priority in {"p0", "p1"}:
+            if reward["task_success"] < 1.0:
+                failures.append(f"{task_id}: task_success < 1")
+            if reward["error"] > 0.0:
+                failures.append(f"{task_id}: error > 0")
+            if reward["grounded_in_tool_result"] < 0.9:
+                failures.append(f"{task_id}: grounded_in_tool_result < 0.9")
+            if reward["llm_judge_pass"] < 1.0:
+                failures.append(f"{task_id}: llm_judge_pass < 1")
+
+        human_review_status = str(correlation.get("human_review_status") or "").casefold()
+        human_review_accepted = human_review_status in {"accepted", "reviewed", "approved"}
+        if gate == "release" and reward["needs_human_review"] >= 1.0 and not human_review_accepted:
+            failures.append(f"{task_id}: needs_human_review=1 without accepted human review")
+
+    if failures:
+        formatted = "\n".join(f"- {failure}" for failure in failures)
+        raise SystemExit(f"Harbor {gate} gate failed:\n{formatted}")
+    print(f"Harbor {gate} gate passed for {len(reward_paths)} reward file(s).")
 
 
 def _read_correlation(reward_path: Path) -> dict[str, Any]:

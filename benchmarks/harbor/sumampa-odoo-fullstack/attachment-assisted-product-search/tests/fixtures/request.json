@@ -1,0 +1,18 @@
+{
+  "conversation_id": "harbor-attachment-assisted-product-search",
+  "channel": "whatsapp",
+  "user_id": "harbor-user",
+  "text": "Usá el adjunto para buscar el producto en Odoo y respondeme si existe.",
+  "attachments": [
+    {
+      "filename": "product-search.txt",
+      "mime_type": "text/plain",
+      "content_base64": "UHJvZHVjdG86IEhBUi0wMDA4Ck5lY2VzaXRvIHZlcmlmaWNhciBzaSBleGlzdGUgZW4gT2Rvby4K"
+    }
+  ],
+  "context": {
+    "benchmark": "harbor",
+    "scenario": "attachment-assisted-product-search"
+  },
+  "eval_tags": ["eval:harbor", "eval:odoo-jsonrpc", "eval:attachment", "eval:search-product"]
+}

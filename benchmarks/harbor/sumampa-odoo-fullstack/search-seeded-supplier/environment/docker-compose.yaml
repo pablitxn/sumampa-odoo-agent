@@ -9,6 +9,12 @@ services:
       PHOENIX_PROJECT_NAME: ${PHOENIX_PROJECT_NAME:-sumampa-odoo-agent}
       GIT_SHA: ${GIT_SHA:-unknown}
       AGENT_MODEL: ${AGENT_MODEL:-gpt-5.4-mini}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_JUDGE_MODEL: ${OPENAI_EVAL_MODEL:-}
+      ODOO_BASE_URL: http://odoo19:8069
+      ODOO_DATABASE: sumampa_integration
+      ODOO_USERNAME: admin
+      ODOO_PASSWORD: admin
 
   sumampa-app:
     image: ${SUMAMPA_APP_IMAGE:-sumampa-odoo-agent:harbor}

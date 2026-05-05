@@ -1,0 +1,17 @@
+{
+  "priority": "p1",
+  "llm_judge_required": false,
+  "required_terms": ["HAR-0008", "BREAD FLOUR"],
+  "forbidden_terms": ["traceback", "exception"],
+  "missing_fields": [],
+  "grounded_terms": ["HAR-0008", "BREAD FLOUR"],
+  "max_latency_ms": 120000,
+  "odoo_assertions": [
+    {
+      "model": "product.template",
+      "domain": [["default_code", "=", "HAR-0008"]],
+      "fields": ["display_name", "default_code", "list_price"],
+      "min_count": 1
+    }
+  ]
+}

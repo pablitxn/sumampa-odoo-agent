@@ -1,0 +1,10 @@
+{
+  "priority": "p1",
+  "llm_judge_required": false,
+  "required_terms": ["partner_id", "journal_id", "lines"],
+  "forbidden_terms": ["traceback", "exception"],
+  "missing_fields": ["partner_id", "journal_id", "lines"],
+  "grounded_terms": ["partner_id", "journal_id", "lines"],
+  "max_latency_ms": 120000,
+  "odoo_assertions": []
+}

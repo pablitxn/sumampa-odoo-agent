@@ -1,0 +1,17 @@
+{
+  "priority": "p1",
+  "llm_judge_required": false,
+  "required_terms": ["Harbor Safe Product", "HARBOR-SAFE-001"],
+  "forbidden_terms": ["traceback", "exception"],
+  "missing_fields": [],
+  "grounded_terms": ["Harbor Safe Product", "HARBOR-SAFE-001"],
+  "max_latency_ms": 120000,
+  "odoo_assertions": [
+    {
+      "model": "product.template",
+      "domain": [["default_code", "=", "HARBOR-SAFE-001"]],
+      "fields": ["display_name", "default_code", "list_price", "standard_price"],
+      "min_count": 1
+    }
+  ]
+}

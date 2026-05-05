@@ -10,6 +10,7 @@ from uuid import uuid4
 
 if TYPE_CHECKING:
     from scripts.phoenix_eval_utils import (
+        P0_P1_PRIORITIES,
         build_llm_rubric_eval,
         build_phoenix_client,
         conversation_quality_eval,
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
 else:
     try:
         from scripts.phoenix_eval_utils import (
+            P0_P1_PRIORITIES,
             build_llm_rubric_eval,
             build_phoenix_client,
             conversation_quality_eval,
@@ -25,6 +27,7 @@ else:
         )
     except ModuleNotFoundError:  # pragma: no cover - direct script execution
         from phoenix_eval_utils import (
+            P0_P1_PRIORITIES,
             build_llm_rubric_eval,
             build_phoenix_client,
             conversation_quality_eval,
@@ -46,15 +49,37 @@ def main() -> None:
     parser.add_argument("--description", default="Sumampa Odoo agent regression eval")
     parser.add_argument("--repetitions", type=int, default=1)
     parser.add_argument("--llm-judge-model", default=os.environ.get("OPENAI_EVAL_MODEL"))
+    parser.add_argument(
+        "--require-llm-judge-for-p0-p1",
+        action="store_true",
+        help="Fail argument parsing unless an LLM judge model is configured for P0/P1 examples.",
+    )
+    parser.add_argument(
+        "--llm-judge-priority",
+        action="append",
+        dest="llm_judge_priorities",
+        default=[],
+        help="Priority label that requires llm_judge_pass in judge metadata. Repeatable.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
+    if args.require_llm_judge_for_p0_p1 and not args.llm_judge_model:
+        parser.error("--require-llm-judge-for-p0-p1 requires --llm-judge-model or OPENAI_EVAL_MODEL")
 
     settings = _eval_settings(load_settings(env=args.env))
     client = build_phoenix_client(settings)
     dataset = client.datasets.get_dataset(dataset=args.dataset_name)
     evaluators: list[Any] = [deterministic_eval, conversation_quality_eval]
+    required_priorities = tuple(args.llm_judge_priorities) or (
+        P0_P1_PRIORITIES if args.require_llm_judge_for_p0_p1 else ()
+    )
     if args.llm_judge_model:
-        evaluators.append(build_llm_rubric_eval(args.llm_judge_model))
+        evaluators.append(
+            build_llm_rubric_eval(
+                args.llm_judge_model,
+                required_priorities=required_priorities,
+            )
+        )
 
     result = client.experiments.run_experiment(
         dataset=dataset,
@@ -66,6 +91,8 @@ def main() -> None:
             "agent_mode": settings.agent.mode,
             "agent_model": settings.agent.model,
             "odoo_mode": settings.odoo.mode,
+            "llm_judge_model": args.llm_judge_model,
+            "llm_judge_required_priorities": list(required_priorities),
         },
         repetitions=max(args.repetitions, 1),
         dry_run=args.dry_run,

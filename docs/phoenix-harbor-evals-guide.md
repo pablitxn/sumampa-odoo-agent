@@ -487,6 +487,7 @@ Los datasets base estan definidos en `scripts/phoenix_eval_utils.py`:
 | `sumampa/dev/conversation-turns` | Conversaciones WhatsApp curadas, calidad conversacional |
 | `sumampa/dev/odoo-ops` | Casos Odoo con expectativas deterministicas |
 | `sumampa/dev/regression-failures` | Fallos reales/dev promovidos a regresion |
+| `sumampa/dev/fullstack-gate` | Slice respaldado por Harbor para evidencia nightly/release |
 
 Crear datasets base:
 
@@ -572,6 +573,7 @@ Si queres usar el output observado como expected output:
 ```bash
 PYTHONPATH=src uv run python scripts/curate_phoenix_datasets.py \
   sumampa/dev/conversation-turns \
+  --tag eval:dataset-ready \
   --tag eval:reviewed-good \
   --use-output-as-expected
 ```
@@ -678,7 +680,8 @@ Con LLM judge:
 ```bash
 OPENAI_EVAL_MODEL=gpt-5.4-mini \
 PYTHONPATH=src uv run python scripts/run_phoenix_evals.py \
-  sumampa/dev/conversation-turns
+  sumampa/dev/conversation-turns \
+  --require-llm-judge-for-p0-p1
 ```
 
 O explicitamente:
@@ -712,6 +715,7 @@ Scores actuales:
 | `needs_human_review` | heuristic / LLM / Harbor | 1.0 si conviene revisar |
 | `latency_ms` | deterministic / Harbor | Latencia end-to-end |
 | `error` | deterministic / Harbor | 1.0 si fallo |
+| `llm_judge_pass` | LLM / Harbor | 1.0 si el judge acepta el caso para gate P0/P1 |
 
 Interpretacion:
 
@@ -819,10 +823,17 @@ Nuestro dataset local:
 benchmarks/harbor/sumampa-odoo-fullstack
 ```
 
-Task actual:
+Tasks V1:
 
 ```text
 benchmarks/harbor/sumampa-odoo-fullstack/search-seeded-supplier
+benchmarks/harbor/sumampa-odoo-fullstack/search-seeded-customer
+benchmarks/harbor/sumampa-odoo-fullstack/search-seeded-product
+benchmarks/harbor/sumampa-odoo-fullstack/validate-invoice-draft
+benchmarks/harbor/sumampa-odoo-fullstack/argentina-fiscal-warning
+benchmarks/harbor/sumampa-odoo-fullstack/validate-delivery-draft
+benchmarks/harbor/sumampa-odoo-fullstack/safe-create-product
+benchmarks/harbor/sumampa-odoo-fullstack/attachment-assisted-product-search
 ```
 
 Estructura:
@@ -942,6 +953,17 @@ PYTHONPATH=src uv run python scripts/run_harbor_benchmarks.py \
   --no-upload-phoenix
 ```
 
+Aplicar gate local despues del run:
+
+```bash
+PYTHONPATH=src uv run python scripts/run_harbor_benchmarks.py \
+  --gate nightly
+```
+
+`--gate nightly` falla tasks `p0`/`p1` si `task_success < 1`, `error > 0`,
+`grounded_in_tool_result < 0.9` o `llm_judge_pass < 1`. `--gate release` agrega el bloqueo
+cuando `needs_human_review=1` y no hay metadata de revision humana aceptada.
+
 Usar Phoenix remoto/self-host distinto:
 
 ```bash
@@ -970,7 +992,8 @@ Con valores numericos:
   "communication_quality": 0.95,
   "needs_human_review": 0.0,
   "latency_ms": 1234.0,
-  "error": 0.0
+  "error": 0.0,
+  "llm_judge_pass": 1.0
 }
 ```
 
@@ -1046,6 +1069,8 @@ Workflow recomendado:
    - Comprobar respuesta HTTP.
    - Comprobar texto de assistant.
    - Si se agrega consulta directa a Odoo, escribir artifacts de esa consulta.
+   - Si `llm_judge_required=true`, escribir el razonamiento del judge en artifacts o metadata,
+     nunca en `reward.json`.
    - Mantener todos los rewards numericos.
 
 7. Si agregas estructura nueva, sumar o adaptar tests unitarios en
@@ -1181,6 +1206,14 @@ uv run ruff check .
 uv run mypy src tests
 uv run pytest
 ```
+
+Gates:
+
+- PR/local: unit tests, fixture schema validation y smoke Phoenix dry-run chico. No requiere
+  Harbor full-stack.
+- Nightly: Harbor con `--gate nightly` sobre tasks prioritarias y upload de rewards a Phoenix.
+- Release: Harbor con `--gate release` mas Phoenix experiments sobre datasets estables; todo
+  `needs_human_review=1` requiere revision humana aceptada antes de aceptar la evidencia.
 
 Smoke Phoenix local:
 

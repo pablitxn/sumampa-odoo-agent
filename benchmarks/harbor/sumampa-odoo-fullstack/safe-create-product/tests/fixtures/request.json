@@ -1,0 +1,12 @@
+{
+  "conversation_id": "harbor-safe-create-product",
+  "channel": "whatsapp",
+  "user_id": "harbor-user",
+  "text": "Creá en Odoo el producto Harbor Safe Product con código interno HARBOR-SAFE-001, precio de venta 1234.50 y costo 900.25. No inventes datos que no te di.",
+  "attachments": [],
+  "context": {
+    "benchmark": "harbor",
+    "scenario": "safe-create-product"
+  },
+  "eval_tags": ["eval:harbor", "eval:odoo-jsonrpc", "eval:safe-create"]
+}

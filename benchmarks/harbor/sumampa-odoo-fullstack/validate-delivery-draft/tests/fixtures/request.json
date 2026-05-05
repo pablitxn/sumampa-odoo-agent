@@ -1,0 +1,12 @@
+{
+  "conversation_id": "harbor-validate-delivery-draft",
+  "channel": "whatsapp",
+  "user_id": "harbor-user",
+  "text": "Validá si puedo crear un remito para SUMAMPA SRL, pero todavía no tengo tipo de operación, ubicaciones ni movimientos.",
+  "attachments": [],
+  "context": {
+    "benchmark": "harbor",
+    "scenario": "validate-delivery-draft"
+  },
+  "eval_tags": ["eval:harbor", "eval:odoo-jsonrpc", "eval:delivery-validation"]
+}
