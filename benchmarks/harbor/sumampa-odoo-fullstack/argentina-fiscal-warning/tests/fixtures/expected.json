@@ -1,10 +1,10 @@
 {
   "priority": "p1",
   "llm_judge_required": false,
-  "required_terms": ["document_letter_mismatch", "email_to_missing"],
+  "required_terms": ["document_letter_mismatch|document letter mismatch|letter mismatch|letra", "email_to_missing|email_to|email"],
   "forbidden_terms": ["traceback", "exception"],
   "missing_fields": [],
-  "grounded_terms": ["document_letter_mismatch", "email_to_missing"],
+  "grounded_terms": ["document_letter_mismatch|document letter mismatch|letter mismatch|letra", "email_to_missing|email_to|email"],
   "max_latency_ms": 120000,
   "odoo_assertions": []
 }

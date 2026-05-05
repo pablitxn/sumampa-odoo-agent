@@ -2,7 +2,7 @@
   "conversation_id": "harbor-validate-delivery-draft",
   "channel": "whatsapp",
   "user_id": "harbor-user",
-  "text": "Validá si puedo crear un remito para SUMAMPA SRL, pero todavía no tengo tipo de operación, ubicaciones ni movimientos.",
+  "text": "Validá si puedo crear un remito para DEMO CUSTOMER SRL, pero todavía no tengo tipo de operación, ubicaciones ni movimientos.",
   "attachments": [],
   "context": {
     "benchmark": "harbor",

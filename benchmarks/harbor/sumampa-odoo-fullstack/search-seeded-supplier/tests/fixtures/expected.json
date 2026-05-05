@@ -1,15 +1,15 @@
 {
   "priority": "p1",
   "llm_judge_required": false,
-  "required_terms": ["JAMBO", "30644193078"],
+  "required_terms": ["DEMO SUPPLIER", "30999999999"],
   "forbidden_terms": ["traceback", "exception"],
   "missing_fields": [],
-  "grounded_terms": ["JAMBO", "30644193078"],
+  "grounded_terms": ["DEMO SUPPLIER", "30999999999"],
   "max_latency_ms": 120000,
   "odoo_assertions": [
     {
       "model": "res.partner",
-      "domain": [["vat", "=", "30644193078"]],
+      "domain": [["vat", "=", "30999999999"]],
       "fields": ["display_name", "vat", "email"],
       "min_count": 1
     }

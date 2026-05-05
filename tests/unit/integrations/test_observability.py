@@ -483,9 +483,9 @@ async def test_odoo_wrapper_records_tool_span() -> None:
         mode="dry-run",
     )
 
-    result = await gateway.search_partners(SearchInput(query="Sumampa"))
+    result = await gateway.search_partners(SearchInput(query="Demo Customer"))
 
-    assert result.hits[0].display_name == "Sumampa SRL"
+    assert result.hits[0].display_name == "Demo Customer SRL"
     assert observability.records[0]["name"] == "odoo.search_partners"
     assert observability.records[0]["as_type"] == "tool"
     assert observability.records[0]["updates"][0]["output"]["mode"] == "dry-run"

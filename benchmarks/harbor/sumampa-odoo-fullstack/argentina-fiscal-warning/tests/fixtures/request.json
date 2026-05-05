@@ -2,7 +2,7 @@
   "conversation_id": "harbor-argentina-fiscal-warning",
   "channel": "whatsapp",
   "user_id": "harbor-user",
-  "text": "Validá una factura argentina: emisor registered taxpayer CUIT 30711223349, punto de venta 3, receptor simplified regime SUMAMPA SRL CUIT 30123456789, letra A, una línea y sin email.",
+  "text": "Validá una factura argentina: emisor registered taxpayer CUIT 30700000000, punto de venta 3, receptor simplified regime DEMO CUSTOMER SRL CUIT 30000000000, letra A, una línea y sin email.",
   "attachments": [],
   "context": {
     "benchmark": "harbor",

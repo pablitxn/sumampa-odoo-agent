@@ -391,7 +391,7 @@ Se pueden enviar directamente en `/api/v1/messages`:
   "conversation_id": "conv-123",
   "channel": "whatsapp",
   "user_id": "u-1",
-  "text": "Busca el proveedor JAMBO SA",
+  "text": "Busca el proveedor DEMO SUPPLIER SA",
   "attachments": [],
   "context": {},
   "eval_tags": ["eval:candidate", "eval:odoo-jsonrpc"]
@@ -507,7 +507,7 @@ Input:
   "conversation_id": "eval-case-001",
   "channel": "whatsapp",
   "user_id": "eval-user",
-  "text": "Busca si existe el proveedor JAMBO SA y dame el CUIT.",
+  "text": "Busca si existe el proveedor DEMO SUPPLIER SA y dame el CUIT.",
   "context": {
     "source": "manual"
   },
@@ -520,10 +520,10 @@ Expected output / reference:
 
 ```json
 {
-  "required_substrings": ["JAMBO", "30644193078"],
+  "required_substrings": ["DEMO SUPPLIER", "30999999999"],
   "forbidden_substrings": ["traceback", "exception"],
   "missing_fields": [],
-  "grounded_terms": ["JAMBO", "30644193078"]
+  "grounded_terms": ["DEMO SUPPLIER", "30999999999"]
 }
 ```
 
@@ -616,16 +616,16 @@ client.datasets.add_examples_to_dataset(
             "conversation_id": "manual-supplier-jambo",
             "channel": "whatsapp",
             "user_id": "eval-user",
-            "text": "Busca en Odoo si existe el proveedor JAMBO SA y respondeme con el CUIT.",
+            "text": "Busca en Odoo si existe el proveedor DEMO SUPPLIER SA y respondeme con el CUIT.",
             "attachments": [],
             "context": {"case": "manual"},
         }
     ],
     outputs=[
         {
-            "required_substrings": ["JAMBO", "30644193078"],
+            "required_substrings": ["DEMO SUPPLIER", "30999999999"],
             "forbidden_substrings": ["traceback", "exception"],
-            "grounded_terms": ["JAMBO", "30644193078"],
+            "grounded_terms": ["DEMO SUPPLIER", "30999999999"],
             "missing_fields": [],
         }
     ],
@@ -738,7 +738,7 @@ records Phoenix-compatible:
 ```python
 def my_eval(*, input, output, expected=None, expected_output=None, metadata=None, **kwargs):
     assistant_text = str((output or {}).get("assistant_text") or "")
-    passed = "JAMBO" in assistant_text
+    passed = "DEMO SUPPLIER" in assistant_text
     return [
         {
             "name": "mentions_supplier",

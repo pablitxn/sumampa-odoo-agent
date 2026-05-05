@@ -11,6 +11,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 if TYPE_CHECKING:
     from scripts.curate_phoenix_datasets import _span_row_to_trace
@@ -74,8 +75,10 @@ def main() -> None:
             "SUMAMPA_APP_IMAGE": image,
             "GIT_SHA": git_sha,
             "AGENT_MODEL": args.model,
-            "PHOENIX_BASE_URL": args.phoenix_base_url,
-            "PHOENIX_COLLECTOR_ENDPOINT": args.phoenix_collector_endpoint,
+            "PHOENIX_BASE_URL": _container_reachable_url(args.phoenix_base_url),
+            "PHOENIX_COLLECTOR_ENDPOINT": _container_reachable_url(
+                args.phoenix_collector_endpoint
+            ),
             "PHOENIX_PROJECT_NAME": args.phoenix_project_name,
         }
     )
@@ -86,10 +89,13 @@ def main() -> None:
         artifacts_dir=run_dir,
         cwd=repo_root,
     )
+    existing_reward_paths = {path.resolve() for path in run_dir.rglob("reward.json")}
     run_started_at = datetime.now(UTC)
     _run(harbor_cmd, cwd=repo_root, env=harbor_env)
 
-    reward_paths = sorted(run_dir.rglob("reward.json"))
+    reward_paths = sorted(
+        path for path in run_dir.rglob("reward.json") if path.resolve() not in existing_reward_paths
+    )
     if reward_paths:
         _write_reward_index(run_dir, reward_paths)
         _enforce_gate(reward_paths, args.gate)
@@ -113,11 +119,29 @@ def _harbor_run_command(
 ) -> list[str]:
     cmd = ["harbor", "run", "-p", str(dataset_path), "-a", agent, "-m", model, "--env", "docker"]
     help_text = _harbor_run_help(cwd)
+    if "--yes" in help_text:
+        cmd.append("--yes")
     if "--jobs-dir" in help_text:
         cmd.extend(["--jobs-dir", str(artifacts_dir)])
     elif "--output-dir" in help_text:
         cmd.extend(["--output-dir", str(artifacts_dir)])
     return cmd
+
+
+def _container_reachable_url(url: str) -> str:
+    parsed = urlsplit(url)
+    if parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
+        return url
+    port = f":{parsed.port}" if parsed.port else ""
+    netloc = f"host.docker.internal{port}"
+    if parsed.username or parsed.password:
+        userinfo = parsed.username or ""
+        if parsed.password:
+            userinfo = f"{userinfo}:{parsed.password}"
+        netloc = f"{userinfo}@{netloc}"
+    return urlunsplit(
+        SplitResult(parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment)
+    )
 
 
 def _harbor_run_help(cwd: Path) -> str:
@@ -155,6 +179,7 @@ def _upload_rewards_to_phoenix(
             project_name=project_name,
             conversation_id=str(correlation.get("conversation_id") or ""),
             run_started_at=run_started_at,
+            timeout_seconds=30,
         )
         if not span_id:
             print(f"reward {reward_path} has no matching Phoenix span; skipping upload")
@@ -184,24 +209,29 @@ def _find_conversation_span_id(
     project_name: str,
     conversation_id: str,
     run_started_at: datetime,
+    timeout_seconds: float = 0.0,
 ) -> str | None:
     if not conversation_id:
         return None
-    spans_df = client.spans.get_spans_dataframe(
-        project_identifier=project_name,
-        limit=500,
-        root_spans_only=False,
-        start_time=run_started_at,
-    )
-    matching_spans: list[dict[str, Any]] = []
-    for _, row in spans_df.iterrows():
-        span = _span_row_to_trace(row.to_dict())
-        if span.get("session_id") == conversation_id and span.get("name") == "conversation.turn":
-            matching_spans.append(span)
-    matching_spans.sort(key=lambda span: str(span.get("timestamp") or ""))
-    if not matching_spans:
-        return None
-    return str(matching_spans[-1].get("span_id") or "")
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        spans_df = client.spans.get_spans_dataframe(
+            project_identifier=project_name,
+            limit=5000,
+            root_spans_only=False,
+            start_time=run_started_at,
+        )
+        matching_spans: list[dict[str, Any]] = []
+        for _, row in spans_df.iterrows():
+            span = _span_row_to_trace(row.to_dict())
+            if span.get("session_id") == conversation_id and span.get("name") == "conversation.turn":
+                matching_spans.append(span)
+        matching_spans.sort(key=lambda span: str(span.get("timestamp") or ""))
+        if matching_spans:
+            return str(matching_spans[-1].get("span_id") or "")
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(2)
 
 
 def _write_reward_index(run_dir: Path, reward_paths: list[Path]) -> None:

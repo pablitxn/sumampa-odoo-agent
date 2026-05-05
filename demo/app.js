@@ -379,7 +379,7 @@ async function handleSubmit(event) {
 function buildPayload({ text, attachment }) {
   const now = new Date();
   const conversationId = els.conversationInput.value.trim() || buildConversationId();
-  const userId = els.userInput.value.trim() || "5491123456789";
+  const userId = els.userInput.value.trim() || "demo-user-001";
   els.conversationInput.value = conversationId;
   els.userInput.value = userId;
   persistControls();
@@ -449,7 +449,7 @@ function syncEvalTags() {
 
 function buildTagsPayload() {
   const conversationId = els.conversationInput.value.trim() || buildConversationId();
-  const userId = els.userInput.value.trim() || "5491123456789";
+  const userId = els.userInput.value.trim() || "demo-user-001";
   els.conversationInput.value = conversationId;
   els.userInput.value = userId;
   persistControls();
@@ -752,9 +752,9 @@ function buildMockInvoiceDataUrl() {
 
   ctx.fillStyle = "#1d2a26";
   ctx.font = "700 26px Arial";
-  ctx.fillText("Cliente: Sumampa Agro", 50, 178);
+  ctx.fillText("Cliente: Demo Agro", 50, 178);
   ctx.font = "400 20px Arial";
-  ctx.fillText("CUIT: 30-71122334-9", 50, 214);
+  ctx.fillText("CUIT: 30-70000000-0", 50, 214);
   ctx.fillText("Fecha: 2026-04-25", 50, 246);
 
   const rows = [

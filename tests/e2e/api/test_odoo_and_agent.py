@@ -60,7 +60,7 @@ def test_messages_endpoint_delegates_to_agent() -> None:
         context = request.context.to_agent_context()
         assert request.prompt == "review the products"
         assert context["transport"]["channel"] == "whatsapp"
-        assert context["transport"]["user_id"] == "5491112345678"
+        assert context["transport"]["user_id"] == "demo-user-001"
         return AgentRunResult(
             mode="microsoft-agent-framework-openai",
             session_id=request.session_id or "conversation-1",
@@ -76,7 +76,7 @@ def test_messages_endpoint_delegates_to_agent() -> None:
                 json={
                     "conversation_id": "conversation-1",
                     "channel": "whatsapp",
-                    "user_id": "5491112345678",
+                    "user_id": "demo-user-001",
                     "text": "review the products",
                 },
             )
@@ -113,9 +113,9 @@ def test_messages_endpoint_serializes_attachments_for_agent() -> None:
                 json={
                     "conversation_id": "attachment-session",
                     "channel": "whatsapp",
-                    "user_id": "5491112345678",
+                    "user_id": "demo-user-001",
                     "attachments": [_image_attachment()],
-                    "context": {"customer_name": "Sumampa SRL"},
+                    "context": {"customer_name": "Demo Customer SRL"},
                 },
             )
 
@@ -142,7 +142,7 @@ def test_messages_endpoint_fails_before_agent_for_unsupported_video(
             json={
                 "conversation_id": "video-session",
                 "channel": "whatsapp",
-                "user_id": "5491112345678",
+                "user_id": "demo-user-001",
                 "attachments": [_video_attachment()],
             },
         )
@@ -179,7 +179,7 @@ def test_messages_endpoint_contract_is_unchanged_with_observability(
             json={
                 "conversation_id": "observed-session",
                 "channel": "whatsapp",
-                "user_id": "5491112345678",
+                "user_id": "demo-user-001",
                 "text": "hola",
             },
         )
@@ -228,7 +228,7 @@ def test_messages_endpoint_records_operational_metrics_and_traces(
             json={
                 "conversation_id": "metrics-session",
                 "channel": "whatsapp",
-                "user_id": "5491112345678",
+                "user_id": "demo-user-001",
                 "text": "hola",
             },
         )
@@ -257,7 +257,7 @@ def test_conversation_tags_endpoint_records_tag_update(
             json={
                 "conversation_id": "tag-session",
                 "channel": "whatsapp",
-                "user_id": "5491112345678",
+                "user_id": "demo-user-001",
                 "eval_tags": ["eval:discarded"],
                 "context": {"demo": True},
             },

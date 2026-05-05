@@ -7,7 +7,9 @@ import tomllib
 from pathlib import Path
 from types import ModuleType
 
+import pytest
 from scripts.phoenix_eval_utils import SCORE_NAMES, numeric_reward_payload
+from scripts.run_harbor_benchmarks import _container_reachable_url, _harbor_run_command
 
 BENCHMARK_ROOT = Path(__file__).resolve().parents[2] / "benchmarks/harbor/sumampa-odoo-fullstack"
 TASK_ROOTS = tuple(sorted(path for path in BENCHMARK_ROOT.iterdir() if path.is_dir()))
@@ -75,6 +77,19 @@ def test_harbor_fixtures_and_reward_schema_are_numeric() -> None:
         assert all(isinstance(value, int | float) for value in reward.values())
 
 
+def test_harbor_verifier_matches_user_facing_aliases_and_formatted_ids() -> None:
+    verifier = _load_verifier_module(BENCHMARK_ROOT / "search-seeded-customer")
+
+    assert verifier._contains_all("CUIT 30-00000000-0", ["30000000000"]) == 1.0
+    assert (
+        verifier._contains_all(
+            "Missing required data: Operation type and Source location.",
+            ["picking_type_id|operation type", "location_id|source location"],
+        )
+        == 1.0
+    )
+
+
 def test_harbor_reward_schema_rejects_non_numeric_values() -> None:
     reward: dict[str, object] = {name: 1.0 for name in SCORE_NAMES}
     reward["task_success"] = "1.0"
@@ -85,6 +100,38 @@ def test_harbor_reward_schema_rejects_non_numeric_values() -> None:
         assert "task_success" in str(exc)
     else:  # pragma: no cover - defensive assertion
         raise AssertionError("numeric_reward_payload accepted a string score")
+
+
+def test_harbor_wrapper_runs_non_interactively(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def fake_help(cwd: Path) -> str:
+        del cwd
+        return "--yes\n--jobs-dir\n"
+
+    monkeypatch.setattr("scripts.run_harbor_benchmarks._harbor_run_help", fake_help)
+
+    command = _harbor_run_command(
+        dataset_path=BENCHMARK_ROOT,
+        agent="oracle",
+        model="gpt-5.4-mini",
+        artifacts_dir=tmp_path,
+        cwd=BENCHMARK_ROOT,
+    )
+
+    assert "--yes" in command
+    assert command[command.index("--jobs-dir") + 1] == str(tmp_path)
+
+
+def test_harbor_wrapper_rewrites_local_phoenix_urls_for_task_containers() -> None:
+    assert _container_reachable_url("http://localhost:6006/v1/traces") == (
+        "http://host.docker.internal:6006/v1/traces"
+    )
+    assert _container_reachable_url("http://127.0.0.1:6006") == (
+        "http://host.docker.internal:6006"
+    )
+    assert _container_reachable_url("http://phoenix:6006") == "http://phoenix:6006"
 
 
 def _load_verifier_module(task_root: Path) -> ModuleType:

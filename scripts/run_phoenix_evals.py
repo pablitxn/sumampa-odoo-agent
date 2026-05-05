@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
 import time
 from typing import TYPE_CHECKING, Any
@@ -34,7 +35,13 @@ else:
             deterministic_eval,
         )
 
-from sumampa_odoo_agent.config import AppSettings, load_settings
+from sumampa_odoo_agent.config import (
+    AppSettings,
+    AttachmentStoreMode,
+    OdooMode,
+    SessionStoreMode,
+    load_settings,
+)
 from sumampa_odoo_agent.integrations.telemetry import bootstrap_telemetry
 from sumampa_odoo_agent.services import build_app_services
 from sumampa_odoo_agent.services.conversation import ConversationTurnInput
@@ -48,6 +55,24 @@ def main() -> None:
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--description", default="Sumampa Odoo agent regression eval")
     parser.add_argument("--repetitions", type=int, default=1)
+    parser.add_argument(
+        "--odoo-mode",
+        choices=("dry-run", "jsonrpc"),
+        default="dry-run",
+        help="Odoo mode used by eval task execution. Defaults to dry-run for safe local repeats.",
+    )
+    parser.add_argument(
+        "--session-store-mode",
+        choices=("memory", "hybrid"),
+        default="memory",
+        help="Session store mode used by eval task execution.",
+    )
+    parser.add_argument(
+        "--attachment-store-mode",
+        choices=("memory", "s3"),
+        default="memory",
+        help="Attachment store mode used by eval task execution.",
+    )
     parser.add_argument("--llm-judge-model", default=os.environ.get("OPENAI_EVAL_MODEL"))
     parser.add_argument(
         "--require-llm-judge-for-p0-p1",
@@ -66,7 +91,12 @@ def main() -> None:
     if args.require_llm_judge_for_p0_p1 and not args.llm_judge_model:
         parser.error("--require-llm-judge-for-p0-p1 requires --llm-judge-model or OPENAI_EVAL_MODEL")
 
-    settings = _eval_settings(load_settings(env=args.env))
+    settings = _eval_settings(
+        load_settings(env=args.env),
+        odoo_mode=args.odoo_mode,
+        session_store_mode=args.session_store_mode,
+        attachment_store_mode=args.attachment_store_mode,
+    )
     client = build_phoenix_client(settings)
     dataset = client.datasets.get_dataset(dataset=args.dataset_name)
     evaluators: list[Any] = [deterministic_eval, conversation_quality_eval]
@@ -83,7 +113,7 @@ def main() -> None:
 
     result = client.experiments.run_experiment(
         dataset=dataset,
-        task=lambda item: _run_item(settings, item),
+        task=lambda item: _run_item_sync(settings, item),
         evaluators=evaluators,
         experiment_name=args.run_name or f"{args.dataset_name}/agent",
         experiment_description=args.description,
@@ -98,6 +128,12 @@ def main() -> None:
         dry_run=args.dry_run,
     )
     print(result)
+
+
+def _run_item_sync(settings: AppSettings, item: Any) -> dict[str, Any]:
+    """Bridge the async app runtime into Phoenix client's synchronous experiment runner."""
+
+    return asyncio.run(_run_item(settings, item))
 
 
 async def _run_item(settings: AppSettings, item: Any) -> dict[str, Any]:
@@ -143,12 +179,20 @@ async def _run_item(settings: AppSettings, item: Any) -> dict[str, Any]:
         await telemetry_runtime.aclose()
 
 
-def _eval_settings(settings: AppSettings) -> AppSettings:
+def _eval_settings(
+    settings: AppSettings,
+    *,
+    odoo_mode: OdooMode = "dry-run",
+    session_store_mode: SessionStoreMode = "memory",
+    attachment_store_mode: AttachmentStoreMode = "memory",
+) -> AppSettings:
     return settings.model_copy(
         update={
-            "odoo": settings.odoo.model_copy(update={"mode": "dry-run"}),
-            "session_store": settings.session_store.model_copy(update={"mode": "memory"}),
-            "attachments": settings.attachments.model_copy(update={"store_mode": "memory"}),
+            "odoo": settings.odoo.model_copy(update={"mode": odoo_mode}),
+            "session_store": settings.session_store.model_copy(update={"mode": session_store_mode}),
+            "attachments": settings.attachments.model_copy(
+                update={"store_mode": attachment_store_mode}
+            ),
         }
     )
 

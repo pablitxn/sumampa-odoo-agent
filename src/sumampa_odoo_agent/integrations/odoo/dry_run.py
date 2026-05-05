@@ -38,15 +38,15 @@ class DryRunOdooClient:
         {"id": 101, "display_name": "Final Consumer", "vat": None, "email": None},
         {
             "id": 102,
-            "display_name": "Sumampa SRL",
-            "vat": "30-12345678-9",
-            "email": "admin@sumampa.test",
+            "display_name": "Demo Customer SRL",
+            "vat": "30-00000000-0",
+            "email": "admin@example-customer.test",
         },
         {
             "id": 103,
-            "display_name": "John Perez",
-            "vat": "20-33444555-6",
-            "email": "juan@example.com",
+            "display_name": "Demo Individual",
+            "vat": "20-00000000-0",
+            "email": "person@example.test",
         },
     ]
     _seed_products: ClassVar[list[dict[str, Any]]] = [

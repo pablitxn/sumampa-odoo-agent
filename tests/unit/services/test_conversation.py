@@ -58,7 +58,7 @@ async def test_conversation_service_passes_empty_text_and_runtime_context() -> N
         ConversationTurnInput(
             conversation_id="conv-1",
             channel="whatsapp",
-            user_id="5491112345678",
+            user_id="demo-user-001",
             text="",
             attachments=[
                 AttachmentSource(
@@ -67,7 +67,7 @@ async def test_conversation_service_passes_empty_text_and_runtime_context() -> N
                     content_base64=base64.b64encode(b"fake-image").decode("ascii"),
                 )
             ],
-            context={"customer_name": "Sumampa SRL"},
+            context={"customer_name": "Demo Customer SRL"},
         )
     )
 
@@ -78,7 +78,7 @@ async def test_conversation_service_passes_empty_text_and_runtime_context() -> N
     runtime_context = runtime.last_call["context"]
     assert isinstance(runtime_context, dict)
     assert runtime_context["transport"]["channel"] == "whatsapp"
-    assert runtime_context["context"]["customer_name"] == "Sumampa SRL"
+    assert runtime_context["context"]["customer_name"] == "Demo Customer SRL"
     assert len(runtime_context["attachments"]) == 1
     assert runtime_context["attachments"][0]["storage_uri"].startswith("memory://")
     runtime_attachments = runtime.last_call["attachments"]
@@ -105,10 +105,10 @@ async def test_conversation_service_records_eval_tags_without_agent_context() ->
         ConversationTurnInput(
             conversation_id="conv-1",
             channel="whatsapp",
-            user_id="5491112345678",
+            user_id="demo-user-001",
             text="hola",
             attachments=[],
-            context={"customer_name": "Sumampa SRL"},
+            context={"customer_name": "Demo Customer SRL"},
             eval_tags=[" eval:candidate ", "eval:candidate"],
         )
     )
@@ -155,7 +155,7 @@ async def test_conversation_service_records_tag_update_without_runtime_call() ->
         ConversationTagsInput(
             conversation_id="conv-1",
             channel="whatsapp",
-            user_id="5491112345678",
+            user_id="demo-user-001",
             eval_tags=["eval:discarded"],
             context={"demo": True},
         )

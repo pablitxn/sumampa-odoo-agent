@@ -2,7 +2,7 @@
   "conversation_id": "harbor-search-seeded-supplier",
   "channel": "whatsapp",
   "user_id": "harbor-user",
-  "text": "Busca en Odoo si existe el proveedor JAMBO SA y respondeme con el CUIT si lo encontrás.",
+  "text": "Busca en Odoo si existe el proveedor DEMO SUPPLIER SA y respondeme con el CUIT si lo encontrás.",
   "attachments": [],
   "context": {
     "benchmark": "harbor",

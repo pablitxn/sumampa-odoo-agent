@@ -72,7 +72,7 @@ def test_load_settings_applies_declarative_environment_overrides(
     monkeypatch.setenv("TELEMETRY_SERVICE_NAME", "sumampa-odoo-agent")
     monkeypatch.setenv("TELEMETRY_ENVIRONMENT", "production")
     monkeypatch.setenv("TELEMETRY_CLUSTER", "production")
-    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "https://otel.orchid-labs.xyz:443")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "https://otel.example.com:443")
 
     settings = load_settings(config_dir=config_dir, env="test")
 
@@ -93,7 +93,7 @@ def test_load_settings_applies_declarative_environment_overrides(
     assert settings.telemetry.service_name == "sumampa-odoo-agent"
     assert settings.telemetry.environment == "production"
     assert settings.telemetry.cluster == "production"
-    assert settings.telemetry.otlp_endpoint == "https://otel.orchid-labs.xyz:443"
+    assert settings.telemetry.otlp_endpoint == "https://otel.example.com:443"
 
 
 def test_settings_reject_langfuse_mode() -> None:

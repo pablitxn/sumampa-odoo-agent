@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from scripts.curate_phoenix_datasets import _dataset_item_from_trace, validate_curation_tags
@@ -15,7 +16,9 @@ from scripts.phoenix_eval_utils import (
     numeric_reward_payload,
     priority_requires_llm_judge,
 )
-from scripts.run_phoenix_evals import _eval_context
+from scripts.run_phoenix_evals import _eval_context, _eval_settings, _run_item_sync
+
+from sumampa_odoo_agent.config import AppSettings
 
 
 def test_eval_functions_return_phoenix_score_records() -> None:
@@ -92,8 +95,8 @@ async def test_llm_judge_eval_emits_pass_score_and_reasoning_metadata(monkeypatc
 
     scores = await evaluator(
         input={"text": "Busca proveedor"},
-        output={"assistant_text": "JAMBO SA existe."},
-        expected_output={"grounded_terms": ["JAMBO"]},
+        output={"assistant_text": "DEMO SUPPLIER SA existe."},
+        expected_output={"grounded_terms": ["DEMO SUPPLIER"]},
         metadata={"priority": "p1"},
     )
 
@@ -151,13 +154,46 @@ def test_curated_trace_preserves_attachment_manifests() -> None:
 def test_eval_context_includes_curated_attachment_manifests() -> None:
     context = _eval_context(
         {
-            "context": {"customer_name": "Sumampa SRL"},
+            "context": {"customer_name": "Demo Customer SRL"},
             "attachment_manifests": [{"manifest": {"storage_uri": "s3://file"}}],
         }
     )
 
-    assert context["customer_name"] == "Sumampa SRL"
+    assert context["customer_name"] == "Demo Customer SRL"
     assert context["attachment_manifests"] == [{"manifest": {"storage_uri": "s3://file"}}]
+
+
+def test_run_item_sync_executes_async_eval_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_run_item(settings: object, item: object) -> dict[str, object]:
+        return {"settings": settings, "item": item, "error": None}
+
+    monkeypatch.setattr("scripts.run_phoenix_evals._run_item", fake_run_item)
+
+    result = _run_item_sync(settings=cast(AppSettings, "settings"), item={"text": "hola"})
+
+    assert result == {"settings": "settings", "item": {"text": "hola"}, "error": None}
+
+
+def test_eval_settings_can_use_real_jsonrpc_mode() -> None:
+    settings = AppSettings.model_validate(
+        {
+            "service": {"name": "sumampa-test", "version": "0.1.0"},
+            "odoo": {"mode": "dry-run"},
+            "session_store": {"mode": "memory"},
+            "attachments": {"store_mode": "memory"},
+        }
+    )
+
+    eval_settings = _eval_settings(
+        settings,
+        odoo_mode="jsonrpc",
+        session_store_mode="memory",
+        attachment_store_mode="memory",
+    )
+
+    assert eval_settings.odoo.mode == "jsonrpc"
+    assert eval_settings.session_store.mode == "memory"
+    assert eval_settings.attachments.store_mode == "memory"
 
 
 def test_tagged_conversation_export_reconstructs_messages_and_postgres_summary() -> None:
@@ -179,7 +215,7 @@ def test_tagged_conversation_export_reconstructs_messages_and_postgres_summary()
             "id": "trace-2",
             "session_id": "conversation-1",
             "timestamp": "2026-04-26T10:01:00+00:00",
-            "input": {"text": "CUIT 30-71122334-9", "eval_tags": ["eval:candidate"]},
+            "input": {"text": "CUIT 30-70000000-0", "eval_tags": ["eval:candidate"]},
             "output": {"assistant_text": "Listo, valide el borrador."},
             "metadata": {"evalTags": "eval:candidate"},
             "tags": ["conversation", "eval:candidate"],

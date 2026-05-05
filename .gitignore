@@ -22,6 +22,8 @@ wheels/
 
 # Virtual environments
 .env
+.env.*
+!.env.example
 .venv
 env/
 venv/
@@ -49,6 +51,21 @@ data/
 !/config/appsettings.production.json
 !/config/enabled_modules.json
 
+# Private credentials and local auth material
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.kubeconfig
+kubeconfig*
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+*.agekey
+
 # Logs
 *.log
 
@@ -58,3 +75,5 @@ Thumbs.db
 google_token.json
 canva_token.json
 test_outputs/
+benchmark_runs/
+jobs/

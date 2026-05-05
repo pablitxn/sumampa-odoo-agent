@@ -1,10 +1,10 @@
 {
   "priority": "p1",
   "llm_judge_required": false,
-  "required_terms": ["partner_id", "journal_id", "lines"],
+  "required_terms": ["partner_id|customer|cliente", "journal_id|sales journal|diario de ventas|diario", "lines|invoice lines|lineas|líneas"],
   "forbidden_terms": ["traceback", "exception"],
-  "missing_fields": ["partner_id", "journal_id", "lines"],
-  "grounded_terms": ["partner_id", "journal_id", "lines"],
+  "missing_fields": ["partner_id|customer|cliente", "journal_id|sales journal|diario de ventas|diario", "lines|invoice lines|lineas|líneas"],
+  "grounded_terms": ["partner_id|customer|cliente", "journal_id|sales journal|diario de ventas|diario", "lines|invoice lines|lineas|líneas"],
   "max_latency_ms": 120000,
   "odoo_assertions": []
 }

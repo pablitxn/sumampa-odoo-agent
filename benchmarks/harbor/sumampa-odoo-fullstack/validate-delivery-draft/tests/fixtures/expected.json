@@ -1,10 +1,10 @@
 {
   "priority": "p1",
   "llm_judge_required": false,
-  "required_terms": ["picking_type_id", "location_id", "location_dest_id", "moves"],
+  "required_terms": ["picking_type_id|operation type|tipo de operacion|tipo de operación", "location_id|source location|ubicacion origen|ubicación origen", "location_dest_id|destination location|ubicacion destino|ubicación destino", "moves|stock moves|movimientos"],
   "forbidden_terms": ["traceback", "exception"],
-  "missing_fields": ["picking_type_id", "location_id", "location_dest_id", "moves"],
-  "grounded_terms": ["picking_type_id", "location_id", "location_dest_id", "moves"],
+  "missing_fields": ["picking_type_id|operation type|tipo de operacion|tipo de operación", "location_id|source location|ubicacion origen|ubicación origen", "location_dest_id|destination location|ubicacion destino|ubicación destino", "moves|stock moves|movimientos"],
+  "grounded_terms": ["picking_type_id|operation type|tipo de operacion|tipo de operación", "location_id|source location|ubicacion origen|ubicación origen", "location_dest_id|destination location|ubicacion destino|ubicación destino", "moves|stock moves|movimientos"],
   "max_latency_ms": 120000,
   "odoo_assertions": []
 }

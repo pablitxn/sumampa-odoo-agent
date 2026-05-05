@@ -1,12 +1,7 @@
 name: CodeQL
 
+# Paused: manual dispatch only while the GitHub repo is being prepared.
 on:
-  push:
-    branches: [main, dev]
-  pull_request:
-    branches: [main, dev]
-  schedule:
-    - cron: "18 6 * * 1" # Weekly on Monday at 06:18 UTC
   workflow_dispatch:
 
 permissions:

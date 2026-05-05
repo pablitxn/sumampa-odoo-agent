@@ -1,14 +1,7 @@
 name: Qodana Code Quality
+# Paused: manual dispatch only while the GitHub repo is being prepared.
 on:
   workflow_dispatch:
-  pull_request:
-    branches:
-      - main
-      - dev
-  push:
-    branches:
-      - main
-      - dev
 
 jobs:
   qodana:

@@ -29,7 +29,7 @@ El demo envia el contrato actual de la API:
 {
   "conversation_id": "whatsapp-demo-...",
   "channel": "whatsapp",
-  "user_id": "5491123456789",
+  "user_id": "demo-user-001",
   "text": "Necesito cargar esta factura en Odoo.",
   "eval_tags": ["eval:candidate", "eval:invoice-upload"],
   "attachments": [

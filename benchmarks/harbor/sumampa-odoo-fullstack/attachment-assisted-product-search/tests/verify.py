@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import traceback
 import urllib.error
@@ -170,13 +171,41 @@ def _communication_quality(text: str) -> float:
 
 
 def _contains_all(text: str, terms: list[str]) -> float:
-    normalized = text.casefold()
-    return float(all(term.casefold() in normalized for term in terms))
+    normalized = _normalize_text(text)
+    normalized_digits = _digits_only(text)
+    return float(all(_term_matches(normalized, normalized_digits, term) for term in terms))
 
 
 def _contains_any(text: str, terms: list[str]) -> bool:
-    normalized = text.casefold()
-    return any(term.casefold() in normalized for term in terms)
+    normalized = _normalize_text(text)
+    normalized_digits = _digits_only(text)
+    return any(_term_matches(normalized, normalized_digits, term) for term in terms)
+
+
+def _term_matches(normalized_text: str, normalized_digits: str, term: str) -> bool:
+    variants = [variant.strip() for variant in term.split("|") if variant.strip()]
+    if not variants:
+        return True
+    return any(_variant_matches(normalized_text, normalized_digits, variant) for variant in variants)
+
+
+def _variant_matches(normalized_text: str, normalized_digits: str, variant: str) -> bool:
+    normalized_variant = _normalize_text(variant)
+    if normalized_variant in normalized_text:
+        return True
+    variant_digits = _digits_only(variant)
+    return len(variant_digits) >= 6 and variant_digits in normalized_digits
+
+
+def _normalize_text(value: str) -> str:
+    normalized = value.casefold()
+    normalized = normalized.replace("á", "a").replace("é", "e").replace("í", "i")
+    normalized = normalized.replace("ó", "o").replace("ú", "u")
+    return normalized
+
+
+def _digits_only(value: str) -> str:
+    return re.sub(r"\D+", "", value)
 
 
 def _odoo_assertions_score(expected: dict[str, Any]) -> float:

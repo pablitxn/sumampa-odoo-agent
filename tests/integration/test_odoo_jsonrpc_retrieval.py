@@ -28,7 +28,7 @@ async def test_jsonrpc_search_partners_finds_seeded_supplier(odoo19_env: dict[st
         await client.aclose()
 
     assert result.mode == "jsonrpc"
-    assert any(hit.display_name == "JULIO M PALACIOS" for hit in result.hits)
+    assert any(hit.display_name == "DEMO RETAIL CUSTOMER" for hit in result.hits)
 
 
 @pytest.mark.integration

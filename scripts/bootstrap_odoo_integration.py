@@ -19,37 +19,37 @@ DEFAULT_MASTER_PASSWORD = ""
 
 PARTNERS = (
     {
-        "name": "JULIO M PALACIOS",
-        "vat": "20179786151",
-        "email": "julio.palacios@example.test",
+        "name": "DEMO RETAIL CUSTOMER",
+        "vat": "20999999999",
+        "email": "retail.customer@example.test",
     },
     {
-        "name": "JAMBO SA",
-        "vat": "30644193078",
-        "email": "purchases@jambo.test",
+        "name": "DEMO SUPPLIER SA",
+        "vat": "30999999999",
+        "email": "purchases@example-supplier.test",
     },
     {
-        "name": "MOLINOS MARIMBO SAIC",
-        "vat": "30537582916",
-        "email": "sales@marimbo.test",
+        "name": "DEMO MILL SAIC",
+        "vat": "30888888888",
+        "email": "sales@example-mill.test",
     },
     {
-        "name": "SUMAMPA SRL",
-        "vat": "30123456789",
-        "email": "admin@sumampa.test",
+        "name": "DEMO CUSTOMER SRL",
+        "vat": "30000000000",
+        "email": "admin@example-customer.test",
     },
 )
 
 BASE_PRODUCTS = (
     {
-        "name": "ARCOR TOMATO PUREE 520 G",
-        "default_code": "ARCOR-520",
+        "name": "DEMO TOMATO PUREE 520 G",
+        "default_code": "DEMO-PUREE-520",
         "list_price": 900.0,
         "standard_price": 620.0,
     },
     {
-        "name": "CRISTAL MINT 810 G",
-        "default_code": "CRISTAL-810",
+        "name": "DEMO MINT 810 G",
+        "default_code": "DEMO-MINT-810",
         "list_price": 10400.0,
         "standard_price": 7600.0,
     },
@@ -67,7 +67,7 @@ BASE_PRODUCTS = (
     },
     {
         "name": "PASTRY VEGETABLE SHORTENING 20 KG",
-        "default_code": "PASTELGRAS-20",
+        "default_code": "DEMO-SHORTENING-20",
         "list_price": 129000.0,
         "standard_price": 102400.0,
     },
@@ -99,35 +99,35 @@ BASE_PRODUCTS = (
 
 SUPPLIERINFO = (
     {
-        "partner_name": "JULIO M PALACIOS",
-        "product_code": "ARCOR-520",
-        "supplier_product_name": "ARCOR TOMATO PUREE 520 G",
+        "partner_name": "DEMO RETAIL CUSTOMER",
+        "product_code": "DEMO-PUREE-520",
+        "supplier_product_name": "DEMO TOMATO PUREE 520 G",
     },
     {
-        "partner_name": "JULIO M PALACIOS",
-        "product_code": "CRISTAL-810",
-        "supplier_product_name": "CRISTAL MINT 810 G",
+        "partner_name": "DEMO RETAIL CUSTOMER",
+        "product_code": "DEMO-MINT-810",
+        "supplier_product_name": "DEMO MINT 810 G",
     },
     {
-        "partner_name": "JAMBO SA",
-        "product_code": "PASTELGRAS-20",
-        "supplier_product_name": "Pastelgras shortening 20 KG",
+        "partner_name": "DEMO SUPPLIER SA",
+        "product_code": "DEMO-SHORTENING-20",
+        "supplier_product_name": "Demo shortening 20 KG",
         "supplier_product_code": "54353",
     },
     {
-        "partner_name": "JAMBO SA",
+        "partner_name": "DEMO SUPPLIER SA",
         "product_code": "54602",
         "supplier_product_name": "54602",
         "supplier_product_code": "54602",
     },
     {
-        "partner_name": "JAMBO SA",
+        "partner_name": "DEMO SUPPLIER SA",
         "product_code": "54676",
         "supplier_product_name": "54676",
         "supplier_product_code": "54676",
     },
     {
-        "partner_name": "MOLINOS MARIMBO SAIC",
+        "partner_name": "DEMO MILL SAIC",
         "product_code": "HAR-0008",
         "supplier_product_name": "000 COMMON FLOUR 25 KG - 0008",
     },

@@ -69,7 +69,7 @@ async def test_argentina_invoice_validation_reports_fiscal_warnings() -> None:
 
     result = await client.validate_argentina_invoice_draft(
         ArgentinaInvoiceValidationInput(
-            emitter_vat="30123456789",
+            emitter_vat="30000000000",
             emitter_taxpayer_type="registered_taxpayer",
             point_of_sale=1,
             document_letter="C",

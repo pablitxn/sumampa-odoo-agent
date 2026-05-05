@@ -1,5 +1,6 @@
 name: Publish to GitHub Container Registry
 
+# Paused: manual dispatch only while the GitHub repo is being prepared.
 on:
   workflow_dispatch:
     inputs:
