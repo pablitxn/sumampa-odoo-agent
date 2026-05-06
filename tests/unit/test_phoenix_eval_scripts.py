@@ -151,6 +151,69 @@ def test_curated_trace_preserves_attachment_manifests() -> None:
     assert item["metadata"]["attachment_manifests"] == [manifest]
 
 
+def test_curated_demo_sales_trace_preserves_state_and_tool_ledger() -> None:
+    item = _dataset_item_from_trace(
+        {
+            "id": "trace-demo-1",
+            "trace_id": "trace-demo-1",
+            "session_id": "conversation-demo-1",
+            "user_id": "demo-user",
+            "input": {
+                "conversation_id": "conversation-demo-1",
+                "channel": "whatsapp",
+                "user_id": "demo-user",
+                "text": "No me llego el link.",
+                "scenario_id": "activation-link-missing",
+                "scenario_version": "2026-05-06.1",
+                "scenario_params": {"activation_link_status": "missing"},
+                "initial_state": {"lead": {"lead_id": "lead-1002"}},
+                "state_before_turn": {"activation": {"link_status": "missing"}},
+                "transcript_before_turn": [],
+                "transcript_current_turn": {"role": "user", "text": "No me llego el link."},
+                "eval_tags": ["eval:dataset-ready"],
+            },
+            "output": {
+                "assistant_messages": ["Te ayudo con el link."],
+                "tool_calls": [
+                    {
+                        "tool": "execute_sales_tool",
+                        "arguments": {"action": "request_human_review"},
+                        "mutations": [
+                            {
+                                "path": "lead.human_review_requested",
+                                "before": False,
+                                "after": True,
+                            }
+                        ],
+                    }
+                ],
+                "state_mutations": [
+                    {"path": "lead.human_review_requested", "before": False, "after": True}
+                ],
+                "transcript_after_turn": [
+                    {"role": "user", "text": "No me llego el link."},
+                    {"role": "assistant", "text": "Te ayudo con el link."},
+                ],
+            },
+            "metadata": {"transport.channel": "whatsapp"},
+            "tags": ["conversation", "eval:dataset-ready"],
+        },
+        spans=[],
+        use_output_as_expected=False,
+    )
+
+    assert item["input"]["scenario_id"] == "activation-link-missing"
+    assert item["input"]["initial_state"] == {"lead": {"lead_id": "lead-1002"}}
+    assert item["input"]["transcript_current_turn"]["role"] == "user"
+    assert item["expected_output"] is None
+    assert item["metadata"]["requires_expected_output_review"] is True
+    assert item["metadata"]["tool_ledger"][0]["tool"] == "execute_sales_tool"
+    assert item["metadata"]["state_mutations"][0]["path"] == "lead.human_review_requested"
+    assert item["metadata"]["candidate_output"]["assistant_messages"] == [
+        "Te ayudo con el link."
+    ]
+
+
 def test_eval_context_includes_curated_attachment_manifests() -> None:
     context = _eval_context(
         {

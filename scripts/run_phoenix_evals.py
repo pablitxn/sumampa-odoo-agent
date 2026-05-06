@@ -45,6 +45,7 @@ from sumampa_odoo_agent.config import (
 from sumampa_odoo_agent.integrations.telemetry import bootstrap_telemetry
 from sumampa_odoo_agent.services import build_app_services
 from sumampa_odoo_agent.services.conversation import ConversationTurnInput
+from sumampa_odoo_agent.services.demo_sales import DemoSalesTurnInput
 from sumampa_odoo_agent.services.models.attachments import AttachmentSource
 
 
@@ -146,7 +147,34 @@ async def _run_item(settings: AppSettings, item: Any) -> dict[str, Any]:
         metrics=telemetry_runtime.metrics,
     )
     try:
-        result = await services.conversation.run_turn(
+        if _is_demo_sales_item(item_input):
+            demo_result = await services.demo_sales.run_turn(
+                DemoSalesTurnInput(
+                    conversation_id=str(item_input.get("conversation_id") or f"eval-{uuid4()}"),
+                    channel=str(item_input.get("channel") or "whatsapp"),
+                    user_id=str(item_input.get("user_id") or "eval-user"),
+                    text=str(item_input.get("text") or ""),
+                    scenario_id=str(item_input.get("scenario_id")),
+                    scenario_params=_scenario_params(item_input),
+                    context=_eval_context(item_input),
+                    eval_tags=_string_list(item_input.get("eval_tags")),
+                )
+            )
+            return {
+                "assistant_text": "\n".join(demo_result.messages),
+                "conversation_id": demo_result.conversation_id,
+                "latency_ms": int((time.perf_counter() - start) * 1000),
+                "error": None,
+                "scenario": demo_result.scenario,
+                "state_after_turn": demo_result.trace_output.get("state_after_turn"),
+                "tool_calls": demo_result.trace_output.get("tool_calls", []),
+                "state_mutations": demo_result.trace_output.get("state_mutations", []),
+                "transcript_after_turn": demo_result.trace_output.get(
+                    "transcript_after_turn",
+                    [],
+                ),
+            }
+        conversation_result = await services.conversation.run_turn(
             ConversationTurnInput(
                 conversation_id=f"eval-{uuid4()}",
                 channel=str(item_input.get("channel") or "whatsapp"),
@@ -162,8 +190,8 @@ async def _run_item(settings: AppSettings, item: Any) -> dict[str, Any]:
             )
         )
         return {
-            "assistant_text": result.assistant_text,
-            "conversation_id": result.conversation_id,
+            "assistant_text": conversation_result.assistant_text,
+            "conversation_id": conversation_result.conversation_id,
             "latency_ms": int((time.perf_counter() - start) * 1000),
             "error": None,
         }
@@ -208,7 +236,38 @@ def _eval_context(item_input: dict[str, Any]) -> dict[str, Any]:
     attachment_manifests = item_input.get("attachment_manifests")
     if isinstance(attachment_manifests, list) and attachment_manifests:
         context["attachment_manifests"] = attachment_manifests
+    for key in (
+        "initial_state",
+        "state_before_turn",
+        "transcript_before_turn",
+        "transcript_current_turn",
+        "scenario_version",
+        "scenario_params",
+    ):
+        if key in item_input:
+            context[key] = item_input[key]
     return context
+
+
+def _is_demo_sales_item(item_input: dict[str, Any]) -> bool:
+    return isinstance(item_input.get("scenario_id"), str) and bool(item_input["scenario_id"])
+
+
+def _scenario_params(item_input: dict[str, Any]) -> dict[str, str]:
+    raw_params = item_input.get("scenario_params")
+    if not isinstance(raw_params, dict):
+        return {}
+    return {str(key): str(value) for key, value in raw_params.items()}
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        raw_values = [value]
+    elif isinstance(value, list):
+        raw_values = value
+    else:
+        raw_values = []
+    return [str(item) for item in raw_values if str(item).strip()]
 
 
 def _get_attr(value: Any, name: str, default: Any = None) -> Any:

@@ -115,8 +115,19 @@
           </div>
           <label class="field">
             <span>Endpoint</span>
-            <input id="endpointInput" type="url" value="http://127.0.0.1:8000/api/v1/messages">
+            <input id="endpointInput" type="url" value="http://127.0.0.1:8000/demo/api/messages">
           </label>
+        </section>
+
+        <section class="panel-section">
+          <div class="section-title">
+            <span>Estados iniciales Odoo mock</span>
+          </div>
+          <label class="field">
+            <span>Sales fixture</span>
+            <select id="scenarioSelect"></select>
+          </label>
+          <div id="scenarioParamList" class="param-list" aria-live="polite"></div>
         </section>
 
         <section class="panel-section compact-grid">
@@ -129,15 +140,46 @@
               <svg aria-hidden="true"><use href="#icon-refresh"></use></svg>
               <span>Nueva conversacion</span>
             </button>
+            <button id="exportJsonlButton" class="tool-button" type="button">
+              <span>Export JSONL</span>
+            </button>
           </div>
           <label class="field">
             <span>WhatsApp user</span>
             <input id="userInput" type="text" value="demo-user-001">
           </label>
-          <div class="tag-manager">
-            <span class="tag-manager-title">Eval tags</span>
+          <div class="tag-manager" id="evalPresetManager">
+            <div class="tag-manager-header">
+              <span class="tag-manager-title">Evals preset</span>
+              <strong id="evalPresetStatus">required</strong>
+            </div>
             <div id="evalTagList" class="tag-list" aria-live="polite"></div>
           </div>
+        </section>
+
+        <section class="panel-section feedback-section">
+          <div class="section-title">
+            <span>Manual feedback</span>
+          </div>
+          <div id="feedbackTagList" class="tag-list" aria-live="polite"></div>
+          <label class="field">
+            <span>Notes</span>
+            <textarea id="feedbackText" rows="3" placeholder="Optional evaluator note"></textarea>
+          </label>
+          <button id="submitFeedbackButton" class="tool-button" type="button">
+            <span>Save feedback</span>
+          </button>
+        </section>
+
+        <section class="panel-section state-section">
+          <div class="section-title">
+            <span>Mock state</span>
+          </div>
+          <div id="mockStatePanel" class="state-grid" aria-live="polite"></div>
+          <div class="section-title subtle">
+            <span>Tools</span>
+          </div>
+          <div id="toolLedgerPanel" class="tool-ledger" aria-live="polite"></div>
         </section>
 
         <section class="panel-section">
@@ -147,51 +189,17 @@
           <div class="quick-groups">
             <div class="quick-group">
               <div class="quick-group-title align-end">
-                <strong>Facturas</strong>
-              </div>
-              <div class="invoice-preview" aria-label="Preview de factura mock">
-                <div class="invoice-paper">
-                  <div class="invoice-bar"></div>
-                  <div class="invoice-row strong"></div>
-                  <div class="invoice-row short"></div>
-                  <div class="invoice-table">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                  <div class="invoice-total"></div>
-                </div>
-              </div>
-              <div class="quick-actions">
-                <button
-                  type="button"
-                  data-mock-attachment="invoice"
-                  data-message="Necesito cargar esta factura en Odoo."
-                >
-                  Cargar factura adjunta
-                </button>
-                <button
-                  type="button"
-                  data-mock-attachment="invoice"
-                  data-message="Lee esta factura y decime que datos faltan antes de cargarla."
-                >
-                  Revisar factura
-                </button>
-              </div>
-            </div>
-            <div class="quick-group">
-              <div class="quick-group-title align-end">
                 <strong>Mas ejemplos</strong>
               </div>
-              <div class="quick-actions">
-                <button type="button" data-message="Confirmo, cargala como borrador.">
-                  Confirmar borrador
+              <div id="scenarioQuickActions" class="quick-actions">
+                <button type="button" data-message="Ya pague, me confirmas?">
+                  Pago realizado
                 </button>
-                <button type="button" data-message="Que datos faltan para avanzar?">
-                  Datos faltantes
+                <button type="button" data-message="No me escriban mas por favor.">
+                  Opt-out
                 </button>
-                <button type="button" data-message="Buscala por proveedor y fecha.">
-                  Buscar en Odoo
+                <button type="button" data-message="Necesito hablar con una persona.">
+                  Humano
                 </button>
                 <button type="button" data-message="Mostrame el estado de esta conversacion.">
                   Estado del caso

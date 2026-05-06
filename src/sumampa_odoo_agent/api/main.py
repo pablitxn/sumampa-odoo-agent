@@ -4,14 +4,17 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
 from sumampa_odoo_agent.api.error_handler import register_exception_handlers
 from sumampa_odoo_agent.api.routes import (
     core_router,
+    demo_router,
     messages_router,
 )
 from sumampa_odoo_agent.config import AppSettings, load_settings, resolve_environment
@@ -64,9 +67,18 @@ def create_app(*, settings: AppSettings | None = None, env: str | None = None) -
 
     app.include_router(core_router)
     app.include_router(messages_router)
+    app.include_router(demo_router)
+    _mount_demo_static(app)
     _add_http_metrics_middleware(app)
     instrument_fastapi_app(app, resolved_settings)
     return app
+
+
+def _mount_demo_static(app: FastAPI) -> None:
+    demo_dir = Path(__file__).resolve().parents[3] / "demo"
+    if demo_dir.exists():
+        app.mount("/demo", StaticFiles(directory=demo_dir, html=True), name="demo")
+
 
 def _add_http_metrics_middleware(app: FastAPI) -> None:
     @app.middleware("http")

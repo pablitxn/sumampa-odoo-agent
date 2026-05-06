@@ -106,3 +106,27 @@ class OdooGateway(Protocol):
 class AgentRuntime(Protocol):
     async def run(self, request: AgentRunInput) -> AgentRunResult:
         """Run one agent turn and return a structured payload."""
+
+
+class SalesBridgePort(Protocol):
+    async def read_lead_state(self) -> dict[str, Any]:
+        """Return the current mutable sales lead state."""
+
+    async def read_reader_output(self, name: str) -> dict[str, Any]:
+        """Return a scenario-backed reader output."""
+
+    async def read_transcript(self) -> dict[str, Any]:
+        """Return the current demo transcript."""
+
+    async def execute_sales_tool(
+        self,
+        action: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Execute a write-safe sales action against the mock state."""
+
+    async def add_private_note(self, note: str) -> dict[str, Any]:
+        """Capture an internal Chatwoot-style private note."""
+
+    async def send_public_message(self, text: str) -> dict[str, Any]:
+        """Capture an outbound WhatsApp-style public message."""

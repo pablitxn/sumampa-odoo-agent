@@ -16,6 +16,7 @@ from sumampa_odoo_agent.integrations.sessions import build_session_store
 from sumampa_odoo_agent.integrations.storage import build_attachment_store
 from sumampa_odoo_agent.services.attachments import AttachmentIngestionService
 from sumampa_odoo_agent.services.conversation import ConversationService
+from sumampa_odoo_agent.services.demo_sales import DemoSalesService
 from sumampa_odoo_agent.services.metrics import AppMetrics
 from sumampa_odoo_agent.services.observability import (
     CompositeObservabilityProvider,
@@ -30,6 +31,7 @@ class AppServices:
 
     settings: AppSettings
     conversation: ConversationService
+    demo_sales: DemoSalesService
     closers: tuple[Callable[[], Awaitable[None]], ...] = ()
 
     async def aclose(self) -> None:
@@ -86,9 +88,24 @@ async def build_app_services(
             "odoo.mode": settings.odoo.mode,
         },
     )
+    demo_sales = DemoSalesService.from_settings(
+        model=settings.agent.model,
+        api_key_env_var=settings.agent.api_key_env_var,
+        base_url=settings.agent.base_url,
+        session_store=session_store,
+        observability=observability,
+        trace_metadata={
+            "service.name": settings.service.name,
+            "service.version": settings.service.version,
+            "agent.mode": settings.agent.mode,
+            "agent.model": settings.agent.model,
+            "demo.mode": "sales",
+        },
+    )
     return AppServices(
         settings=settings,
         conversation=conversation,
+        demo_sales=demo_sales,
         closers=(
             observability.aclose,
             session_store.aclose,

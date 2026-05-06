@@ -18,6 +18,16 @@ else:
 from sumampa_odoo_agent.config import load_settings
 
 DATASET_READY_TAG = "eval:dataset-ready"
+DEMO_SALES_INPUT_KEYS = (
+    "scenario_id",
+    "scenario_version",
+    "scenario_params",
+    "initial_state",
+    "state_before_turn",
+    "transcript_before_turn",
+    "transcript_current_turn",
+    "eval_tags",
+)
 
 
 def main() -> None:
@@ -119,6 +129,7 @@ def _dataset_item_from_trace(
     tags = _get_attr(trace, "tags", []) or []
     attachment_manifests = _attachment_manifests_from_trace(trace, spans=spans or [])
     expected_output = trace_output if use_output_as_expected else None
+    candidate_output = trace_output if isinstance(trace_output, dict) else {}
     return {
         "id": trace_id or None,
         "input": _normalize_conversation_input(
@@ -137,6 +148,10 @@ def _dataset_item_from_trace(
             "source_metadata": metadata,
             "attachment_manifests": attachment_manifests,
             "requires_expected_output_review": not use_output_as_expected,
+            "candidate_output": trace_output if not use_output_as_expected else None,
+            "tool_ledger": candidate_output.get("tool_calls", []),
+            "state_mutations": candidate_output.get("state_mutations", []),
+            "transcript_after_turn": candidate_output.get("transcript_after_turn", []),
             "rubric": {
                 "task_success": "The assistant completes or correctly blocks the requested Odoo task.",
                 "grounded_in_tool_result": "Claims about Odoo records are supported by tool output.",
@@ -172,7 +187,7 @@ def _normalize_conversation_input(
         for attachment in trace_attachments
         if attachment.get("content_base64") or attachment.get("download_url")
     ]
-    return {
+    normalized = {
         "conversation_id": str(trace_input.get("conversation_id") or _trace_conversation_id(trace)),
         "channel": str(trace_input.get("channel") or _trace_channel(trace)),
         "user_id": str(trace_input.get("user_id") or _get_attr(trace, "user_id", None) or "curated-user"),
@@ -182,6 +197,24 @@ def _normalize_conversation_input(
         "attachment_placeholders": trace_attachments,
         "attachment_manifests": attachment_manifests,
     }
+    _copy_demo_sales_trace_fields(trace_input, normalized)
+    return normalized
+
+
+def _copy_demo_sales_trace_fields(source: dict[str, Any], target: dict[str, Any]) -> None:
+    for key in DEMO_SALES_INPUT_KEYS:
+        if key in source:
+            target[key] = source[key]
+    scenario = source.get("scenario")
+    if isinstance(scenario, dict):
+        if "scenario_id" in scenario:
+            target.setdefault("scenario_id", scenario["scenario_id"])
+        if "scenario_version" in scenario:
+            target.setdefault("scenario_version", scenario["scenario_version"])
+        if "params" in scenario:
+            target.setdefault("scenario_params", scenario["params"])
+    if "mock_state" in source:
+        target.setdefault("state_before_turn", source["mock_state"])
 
 
 def _attachment_manifests_from_trace(

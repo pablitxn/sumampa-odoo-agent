@@ -13,27 +13,59 @@ const els = {
   pendingMeta: document.querySelector("#pendingMeta"),
   removeAttachmentButton: document.querySelector("#removeAttachmentButton"),
   endpointInput: document.querySelector("#endpointInput"),
+  scenarioSelect: document.querySelector("#scenarioSelect"),
+  scenarioParamList: document.querySelector("#scenarioParamList"),
   conversationInput: document.querySelector("#conversationInput"),
   userInput: document.querySelector("#userInput"),
+  evalPresetManager: document.querySelector("#evalPresetManager"),
+  evalPresetStatus: document.querySelector("#evalPresetStatus"),
   evalTagList: document.querySelector("#evalTagList"),
+  feedbackTagList: document.querySelector("#feedbackTagList"),
+  feedbackText: document.querySelector("#feedbackText"),
+  submitFeedbackButton: document.querySelector("#submitFeedbackButton"),
   newConversationButton: document.querySelector("#newConversationButton"),
+  exportJsonlButton: document.querySelector("#exportJsonlButton"),
   connectionPill: document.querySelector("#connectionPill"),
   phoneStatus: document.querySelector("#phoneStatus"),
+  mockStatePanel: document.querySelector("#mockStatePanel"),
+  toolLedgerPanel: document.querySelector("#toolLedgerPanel"),
+  scenarioQuickActions: document.querySelector("#scenarioQuickActions"),
 };
 
 const evalTagOptions = [
-  { value: "eval:candidate", label: "Candidate" },
-  { value: "eval:dataset-ready", label: "Dataset ready" },
-  { value: "eval:regression", label: "Regression" },
-  { value: "eval:invoice-upload", label: "Invoice upload" },
-  { value: "eval:invoice-review", label: "Invoice review" },
-  { value: "eval:missing-data", label: "Missing data" },
-  { value: "eval:odoo-search", label: "Odoo search" },
-  { value: "eval:confirmation", label: "Confirmation" },
-  { value: "eval:attachment", label: "Attachment" },
-  { value: "eval:multi-turn", label: "Multi-turn" },
-  { value: "eval:error-recovery", label: "Error recovery" },
-  { value: "eval:discarded", label: "Discarded" },
+  { value: "eval:candidate", label: "Candidate", group: "Curation" },
+  { value: "eval:needs-review", label: "Needs review", group: "Curation" },
+  { value: "eval:dataset-ready", label: "Dataset ready", group: "Curation" },
+  { value: "eval:regression", label: "Regression", group: "Curation" },
+  { value: "eval:discarded", label: "Discarded", group: "Curation" },
+  { value: "sales:new-lead", label: "New lead", group: "Sales task" },
+  { value: "sales:qualification", label: "Qualification", group: "Sales task" },
+  { value: "sales:activation", label: "Activation", group: "Sales task" },
+  { value: "sales:payment", label: "Payment", group: "Sales task" },
+  { value: "sales:follow-up", label: "Follow-up", group: "Sales task" },
+  { value: "sales:opt-out", label: "Opt-out", group: "Sales task" },
+  { value: "sales:human-review", label: "Human review", group: "Sales task" },
+  { value: "risk:prompt-injection", label: "Prompt injection", group: "Risk" },
+  { value: "quality:state-mutation", label: "State mutation", group: "Evidence" },
+  { value: "quality:multi-turn", label: "Multi-turn", group: "Evidence" },
+];
+
+const legacyEvalTagAliases = {
+  "eval:missing-data": "sales:qualification",
+  "eval:confirmation": "quality:state-mutation",
+  "eval:multi-turn": "quality:multi-turn",
+  "eval:error-recovery": "eval:needs-review",
+};
+
+const feedbackTagOptions = [
+  { value: "manual:pass", label: "Pass" },
+  { value: "manual:partial", label: "Partial" },
+  { value: "manual:fail", label: "Fail" },
+  { value: "manual:needs-review", label: "Needs review" },
+  { value: "manual:wrong-state", label: "Wrong state" },
+  { value: "manual:missing-data", label: "Missing data" },
+  { value: "manual:good-handoff", label: "Good handoff" },
+  { value: "manual:unsafe", label: "Unsafe" },
 ];
 
 const storageKeys = {
@@ -43,6 +75,18 @@ const storageKeys = {
   evalTag: "sumampa-demo-eval-tag",
   evalTags: "sumampa-demo-eval-tags",
   evalTagsByConversation: "sumampa-demo-eval-tags-by-conversation",
+  scenarioId: "sumampa-demo-scenario-id",
+  scenarioParams: "sumampa-demo-scenario-params",
+};
+
+const scenarioParamLabels = {
+  control_state: "Control",
+  commercial_state: "Odoo commercial",
+  payment_state: "Odoo payment",
+  subscription_state: "Odoo subscription",
+  activation_link_status: "Activation link",
+  contact_role: "Contact role",
+  followup_state: "Follow-up",
 };
 
 const state = {
@@ -51,19 +95,34 @@ const state = {
   healthTimer: null,
   resizeTimer: null,
   evalTags: [],
+  feedbackTags: [],
+  presetLocked: false,
+  conversationStarted: false,
   transcript: [],
+  scenarioCatalog: null,
+  selectedScenarioId: "",
+  scenarioParams: {},
+  mockState: null,
+  toolLedger: [],
 };
 
-function init() {
-  els.endpointInput.value =
-    localStorage.getItem(storageKeys.endpoint) || els.endpointInput.value;
+async function init() {
+  els.endpointInput.value = normalizeEndpoint(
+    localStorage.getItem(storageKeys.endpoint) || defaultMessagesEndpoint(),
+  );
   els.conversationInput.value =
     localStorage.getItem(storageKeys.conversationId) || buildConversationId();
   els.userInput.value = localStorage.getItem(storageKeys.userId) || els.userInput.value;
-  state.evalTags = loadEvalTagsForConversation(els.conversationInput.value.trim());
+  state.scenarioParams = readScenarioParams();
+  state.evalTags = [];
+  localStorage.removeItem(storageKeys.evalTag);
+  localStorage.removeItem(storageKeys.evalTags);
   renderEvalTags();
+  renderFeedbackTags();
+  renderMockState();
 
   bindEvents();
+  await loadScenarios();
   startConversation();
   checkBackendHealth();
   state.healthTimer = window.setInterval(checkBackendHealth, 8000);
@@ -75,12 +134,16 @@ function bindEvents() {
   els.fileInput.addEventListener("change", handleFileInput);
   els.removeAttachmentButton.addEventListener("click", clearPendingAttachment);
   els.newConversationButton.addEventListener("click", startNewConversation);
+  els.exportJsonlButton.addEventListener("click", exportConversationJsonl);
+  els.submitFeedbackButton.addEventListener("click", submitManualFeedback);
+  els.scenarioSelect.addEventListener("change", handleScenarioChange);
 
   [els.endpointInput, els.userInput].forEach((input) => {
     input.addEventListener("input", () => {
       persistControls();
       if (input === els.endpointInput) {
         checkBackendHealth();
+        loadScenarios();
       }
     });
   });
@@ -89,19 +152,16 @@ function bindEvents() {
     localStorage.setItem(storageKeys.conversationId, els.conversationInput.value.trim());
   });
   els.conversationInput.addEventListener("change", () => {
-    state.evalTags = loadEvalTagsForConversation(els.conversationInput.value.trim());
+    state.evalTags = [];
     renderEvalTags();
     persistControls();
   });
 
   document.querySelectorAll("[data-message]").forEach((button) => {
-    button.addEventListener("click", async () => {
+    button.addEventListener("click", () => {
       els.messageInput.value = button.dataset.message;
       autoSizeComposer();
       els.messageInput.focus();
-      if (button.dataset.mockAttachment === "invoice") {
-        await setMockInvoiceAttachment();
-      }
     });
   });
 
@@ -140,48 +200,174 @@ function bindEvents() {
 }
 
 function persistControls() {
+  els.endpointInput.value = normalizeEndpoint(els.endpointInput.value.trim());
   localStorage.setItem(storageKeys.endpoint, els.endpointInput.value.trim());
   localStorage.setItem(storageKeys.conversationId, els.conversationInput.value.trim());
   localStorage.setItem(storageKeys.userId, els.userInput.value.trim());
-  saveEvalTagsForConversation(els.conversationInput.value.trim());
+  localStorage.setItem(storageKeys.scenarioId, state.selectedScenarioId);
+  localStorage.setItem(storageKeys.scenarioParams, JSON.stringify(state.scenarioParams));
   localStorage.removeItem(storageKeys.evalTag);
   localStorage.removeItem(storageKeys.evalTags);
+  localStorage.removeItem(storageKeys.evalTagsByConversation);
 }
 
-function loadEvalTagsForConversation(conversationId) {
-  const tagsByConversation = readEvalTagsByConversation();
-  const storedConversationTags = tagsByConversation[conversationId];
-  if (Array.isArray(storedConversationTags)) {
-    return normalizeEvalTags(storedConversationTags);
+function defaultMessagesEndpoint() {
+  if (window.location.protocol === "http:" || window.location.protocol === "https:") {
+    return `${window.location.origin}/demo/api/messages`;
   }
+  return els.endpointInput.value;
+}
 
-  const storedTags = localStorage.getItem(storageKeys.evalTags);
-  if (storedTags) {
-    try {
-      const parsed = JSON.parse(storedTags);
-      if (Array.isArray(parsed)) {
-        return normalizeEvalTags(parsed);
+function normalizeEndpoint(value) {
+  const fallback = defaultMessagesEndpoint();
+  const rawValue = String(value || "").trim() || fallback;
+  try {
+    const url = new URL(rawValue);
+    if (url.pathname.replace(/\/+$/, "") === "/api/v1/messages") {
+      if (window.location.protocol === "http:" || window.location.protocol === "https:") {
+        return `${window.location.origin}/demo/api/messages`;
       }
-    } catch {
-      localStorage.removeItem(storageKeys.evalTags);
+      url.pathname = "/demo/api/messages";
+      return url.toString();
     }
+    return rawValue;
+  } catch {
+    return fallback;
   }
-
-  const legacyTag = localStorage.getItem(storageKeys.evalTag);
-  return normalizeEvalTags([legacyTag || "eval:candidate"]);
 }
 
-function saveEvalTagsForConversation(conversationId) {
-  if (!conversationId) {
+async function loadScenarios() {
+  const scenariosUrl = buildScenariosUrl();
+  if (!scenariosUrl) {
+    renderScenarioFallback("Endpoint invalido");
     return;
   }
-  const tagsByConversation = readEvalTagsByConversation();
-  tagsByConversation[conversationId] = normalizeEvalTags(state.evalTags);
-  localStorage.setItem(storageKeys.evalTagsByConversation, JSON.stringify(tagsByConversation));
+
+  try {
+    const response = await fetch(scenariosUrl, { method: "GET", cache: "no-store" });
+    const body = await readJsonBody(response);
+    if (!response.ok || !body) {
+      throw new Error(body?.message || body?.detail || `HTTP ${response.status}`);
+    }
+    state.scenarioCatalog = body;
+    const storedScenario = localStorage.getItem(storageKeys.scenarioId);
+    const firstScenario = body.scenarios?.[0]?.scenario_id || "";
+    state.selectedScenarioId = body.scenarios?.some(
+      (scenario) => scenario.scenario_id === storedScenario,
+    )
+      ? storedScenario
+      : firstScenario;
+    normalizeScenarioParams();
+    renderScenarioControls();
+    renderQuickMessages();
+    persistControls();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    renderScenarioFallback(message);
+  }
 }
 
-function readEvalTagsByConversation() {
-  const stored = localStorage.getItem(storageKeys.evalTagsByConversation);
+function renderScenarioFallback(message) {
+  els.scenarioSelect.textContent = "";
+  const option = document.createElement("option");
+  option.value = "";
+  option.textContent = "Sin escenarios";
+  els.scenarioSelect.append(option);
+  els.scenarioParamList.textContent = "";
+  appendMessage({ role: "system", text: `No pude cargar escenarios: ${message}` });
+}
+
+function renderScenarioControls() {
+  const catalog = state.scenarioCatalog;
+  if (!catalog) {
+    return;
+  }
+  els.scenarioSelect.textContent = "";
+  catalog.scenarios.forEach((scenario) => {
+    const option = document.createElement("option");
+    option.value = scenario.scenario_id;
+    option.textContent = scenario.label;
+    option.selected = scenario.scenario_id === state.selectedScenarioId;
+    els.scenarioSelect.append(option);
+  });
+
+  els.scenarioParamList.textContent = "";
+  Object.entries(catalog.params || {}).forEach(([name, definition]) => {
+    const label = document.createElement("label");
+    label.className = "field";
+
+    const labelText = document.createElement("span");
+    labelText.textContent = scenarioParamLabels[name] || definition.label || name;
+
+    const select = document.createElement("select");
+    select.dataset.scenarioParam = name;
+    (definition.options || []).forEach((optionDef) => {
+      const option = document.createElement("option");
+      option.value = optionDef.value;
+      option.textContent = optionDef.label;
+      option.selected = state.scenarioParams[name] === optionDef.value;
+      select.append(option);
+    });
+    select.addEventListener("change", () => {
+      state.scenarioParams[name] = select.value;
+      persistControls();
+      resetConversationForScenarioChange();
+    });
+
+    label.append(labelText, select);
+    els.scenarioParamList.append(label);
+  });
+}
+
+function handleScenarioChange() {
+  state.selectedScenarioId = els.scenarioSelect.value;
+  state.scenarioParams = {};
+  normalizeScenarioParams();
+  renderScenarioControls();
+  renderQuickMessages();
+  persistControls();
+  resetConversationForScenarioChange();
+}
+
+function normalizeScenarioParams() {
+  const scenario = selectedScenario();
+  if (!scenario || !state.scenarioCatalog) {
+    return;
+  }
+  const params = { ...(scenario.default_params || {}), ...state.scenarioParams };
+  Object.entries(state.scenarioCatalog.params || {}).forEach(([name, definition]) => {
+    const allowed = (definition.options || []).map((option) => option.value);
+    if (!allowed.includes(params[name])) {
+      params[name] = scenario.default_params?.[name] || allowed[0] || "";
+    }
+  });
+  state.scenarioParams = params;
+}
+
+function selectedScenario() {
+  return state.scenarioCatalog?.scenarios?.find(
+    (scenario) => scenario.scenario_id === state.selectedScenarioId,
+  );
+}
+
+function renderQuickMessages() {
+  const scenario = selectedScenario();
+  const messages = scenario?.quick_messages?.length
+    ? scenario.quick_messages
+    : [
+        "Me interesa comprar por mayor, como seguimos?",
+        "Cual es el proximo paso?",
+      ];
+  const buttons = Array.from(els.scenarioQuickActions.querySelectorAll("button"));
+  buttons.forEach((button, index) => {
+    const message = messages[index % messages.length];
+    button.dataset.message = message;
+    button.textContent = message;
+  });
+}
+
+function readScenarioParams() {
+  const stored = localStorage.getItem(storageKeys.scenarioParams);
   if (!stored) {
     return {};
   }
@@ -189,12 +375,19 @@ function readEvalTagsByConversation() {
     const parsed = JSON.parse(stored);
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   } catch {
-    localStorage.removeItem(storageKeys.evalTagsByConversation);
+    localStorage.removeItem(storageKeys.scenarioParams);
     return {};
   }
 }
 
+function resetConversationForScenarioChange() {
+  startNewConversation();
+}
+
 function toggleEvalTag(tag) {
+  if (state.presetLocked) {
+    return;
+  }
   if (state.evalTags.includes(tag)) {
     state.evalTags = state.evalTags.filter((item) => item !== tag);
   } else {
@@ -202,13 +395,57 @@ function toggleEvalTag(tag) {
   }
   renderEvalTags();
   persistControls();
-  syncEvalTags();
 }
 
 function renderEvalTags() {
   els.evalTagList.textContent = "";
+  els.evalPresetManager.dataset.locked = String(state.presetLocked);
+  els.evalPresetStatus.textContent = state.presetLocked
+    ? "locked"
+    : state.evalTags.length
+      ? "selected"
+      : "required";
+  els.evalPresetStatus.dataset.status = state.presetLocked
+    ? "locked"
+    : state.evalTags.length
+      ? "ok"
+      : "required";
+  let currentGroup = "";
   evalTagOptions.forEach((option) => {
+    if (option.group !== currentGroup) {
+      currentGroup = option.group;
+      const group = document.createElement("span");
+      group.className = "tag-group-label";
+      group.textContent = currentGroup;
+      els.evalTagList.append(group);
+    }
     const selected = state.evalTags.includes(option.value);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tag-pill";
+    button.dataset.selected = String(selected);
+    button.setAttribute("aria-pressed", String(selected));
+    button.disabled = state.presetLocked;
+    button.title = option.value;
+    button.textContent = option.label;
+    button.addEventListener("click", () => toggleEvalTag(option.value));
+    els.evalTagList.append(button);
+  });
+}
+
+function toggleFeedbackTag(tag) {
+  if (state.feedbackTags.includes(tag)) {
+    state.feedbackTags = state.feedbackTags.filter((item) => item !== tag);
+  } else {
+    state.feedbackTags = [...state.feedbackTags, tag];
+  }
+  renderFeedbackTags();
+}
+
+function renderFeedbackTags() {
+  els.feedbackTagList.textContent = "";
+  feedbackTagOptions.forEach((option) => {
+    const selected = state.feedbackTags.includes(option.value);
     const button = document.createElement("button");
     button.type = "button";
     button.className = "tag-pill";
@@ -216,8 +453,8 @@ function renderEvalTags() {
     button.setAttribute("aria-pressed", String(selected));
     button.title = option.value;
     button.textContent = option.label;
-    button.addEventListener("click", () => toggleEvalTag(option.value));
-    els.evalTagList.append(button);
+    button.addEventListener("click", () => toggleFeedbackTag(option.value));
+    els.feedbackTagList.append(button);
   });
 }
 
@@ -233,23 +470,36 @@ function normalizeEvalTags(tags) {
 }
 
 function normalizeEvalTag(tag) {
-  const value = String(tag || "").trim().slice(0, 200);
+  const rawValue = String(tag || "").trim().slice(0, 200);
+  const value = legacyEvalTagAliases[rawValue] || rawValue;
   return evalTagOptions.some((option) => option.value === value) ? value : "";
 }
 
 function startConversation() {
   state.pendingAttachment = null;
   state.transcript = [];
+  state.conversationStarted = false;
+  state.presetLocked = false;
+  state.feedbackTags = [];
   clearPendingAttachment();
   els.messageList.textContent = "";
+  els.feedbackText.value = "";
+  renderEvalTags();
+  renderFeedbackTags();
 }
 
-function startNewConversation() {
+function startNewConversation(options = {}) {
+  if (options.syncReset !== false) {
+    resetBackendConversation(els.conversationInput.value.trim()).catch(() => {});
+  }
   els.conversationInput.value = buildConversationId();
-  state.evalTags = normalizeEvalTags(["eval:candidate"]);
+  state.evalTags = [];
+  state.mockState = null;
+  state.toolLedger = [];
   els.messageInput.value = "";
   autoSizeComposer();
   startConversation();
+  renderMockState();
   renderEvalTags();
   persistControls();
   els.messageInput.focus();
@@ -319,19 +569,6 @@ function clearPendingAttachment() {
   els.pendingAttachment.classList.add("is-hidden");
 }
 
-async function setMockInvoiceAttachment() {
-  const dataUrl = await buildMockInvoiceDataUrl();
-  const base64 = dataUrl.split(",", 2)[1] || "";
-  state.pendingAttachment = {
-    filename: "factura-mock.jpg",
-    mimeType: "image/jpeg",
-    size: Math.ceil((base64.length * 3) / 4),
-    dataUrl,
-    contentBase64: base64,
-  };
-  renderPendingAttachment();
-}
-
 async function handleSubmit(event) {
   event.preventDefault();
   if (state.sending) {
@@ -343,8 +580,18 @@ async function handleSubmit(event) {
   if (!text && !attachment) {
     return;
   }
+  if (!state.conversationStarted && !state.evalTags.length) {
+    appendMessage({
+      role: "system",
+      text: "Selecciona al menos un Evals preset antes de comenzar.",
+    });
+    return;
+  }
 
   state.sending = true;
+  state.conversationStarted = true;
+  state.presetLocked = true;
+  renderEvalTags();
   setComposerDisabled(true);
 
   appendMessage({ role: "user", text, attachment });
@@ -357,9 +604,11 @@ async function handleSubmit(event) {
   setConnectionLabel("enviando", "checking");
 
   try {
-    const replies = await sendToBackend(payload);
+    const body = await sendToBackend(payload);
     hideTyping();
+    const replies = extractReplyTexts(body);
     replies.forEach((reply) => appendMessage({ role: "assistant", text: reply }));
+    updateMockStateFromResponse(body);
     setConnectionLabel("online", "ok");
   } catch (error) {
     hideTyping();
@@ -389,6 +638,8 @@ function buildPayload({ text, attachment }) {
     channel: "whatsapp",
     user_id: userId,
     text,
+    scenario_id: state.selectedScenarioId,
+    scenario_params: { ...state.scenarioParams },
     eval_tags: state.evalTags.slice(),
     attachments: attachment
       ? [
@@ -401,6 +652,8 @@ function buildPayload({ text, attachment }) {
       : [],
     context: {
       demo: true,
+      demo_sales: true,
+      evals_preset: state.evalTags.slice(),
       transport_profile: "whatsapp-mobile",
       locale: "es-AR",
       client_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -428,60 +681,96 @@ async function sendToBackend(payload) {
     throw new Error(body?.message || body?.detail || `HTTP ${response.status}`);
   }
 
-  const messages = Array.isArray(body.messages) ? body.messages : [];
+  return body;
+}
+
+function extractReplyTexts(body) {
+  const messages = Array.isArray(body?.messages) ? body.messages : [];
   if (!messages.length) {
     return ["El backend respondio sin mensajes."];
   }
   return messages.map((message) => message.text || "").filter(Boolean);
 }
 
-function syncEvalTags() {
-  const tagsUrl = buildTagsUrl();
-  if (!tagsUrl) {
-    setConnectionLabel("endpoint invalido", "error");
+function updateMockStateFromResponse(body) {
+  if (!body || typeof body !== "object") {
+    return;
+  }
+  if (body.state) {
+    state.mockState = body.state;
+  }
+  if (Array.isArray(body.recent_tool_calls)) {
+    state.toolLedger = [...state.toolLedger, ...body.recent_tool_calls].slice(-12);
+  } else if (state.mockState?.tool_ledger) {
+    state.toolLedger = state.mockState.tool_ledger.slice(-12);
+  }
+  renderMockState();
+}
+
+function renderMockState() {
+  els.mockStatePanel.textContent = "";
+  els.toolLedgerPanel.textContent = "";
+
+  if (!state.mockState) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "Sin turnos todavia.";
+    els.mockStatePanel.append(empty);
     return;
   }
 
-  sendTagsToBackend(tagsUrl, buildTagsPayload()).catch(() => {
-    setConnectionLabel("offline", "error");
+  const lead = state.mockState.lead || {};
+  const payment = state.mockState.payment || {};
+  const subscription = state.mockState.subscription || {};
+  const activation = state.mockState.activation || {};
+  const followup = state.mockState.followup || {};
+  [
+    ["Lead", lead.name || lead.lead_id || "-"],
+    ["Control", lead.control_state || "-"],
+    ["Commercial", lead.commercial_state || "-"],
+    ["Role", lead.contact_role || "-"],
+    ["Payment", payment.state || "-"],
+    ["Subscription", subscription.state || "-"],
+    ["Activation", activation.link_status || "-"],
+    ["Follow-up", `${followup.state || "-"} (${followup.count || 0})`],
+    ["Tags", (lead.tags || []).join(", ") || "-"],
+    ["Interest", (lead.interest_tags || []).join(", ") || "-"],
+  ].forEach(([label, value]) => {
+    const item = document.createElement("div");
+    item.className = "state-item";
+    const key = document.createElement("span");
+    key.textContent = label;
+    const val = document.createElement("strong");
+    val.textContent = String(value);
+    item.append(key, val);
+    els.mockStatePanel.append(item);
   });
-}
 
-function buildTagsPayload() {
-  const conversationId = els.conversationInput.value.trim() || buildConversationId();
-  const userId = els.userInput.value.trim() || "demo-user-001";
-  els.conversationInput.value = conversationId;
-  els.userInput.value = userId;
-  persistControls();
-
-  return {
-    conversation_id: conversationId,
-    channel: "whatsapp",
-    user_id: userId,
-    eval_tags: state.evalTags.slice(),
-    context: {
-      demo: true,
-      source: "demo/static-whatsapp",
-      timestamp: new Date().toISOString(),
-      transcript: buildTranscriptSnapshot(),
-      transcript_message_count: state.transcript.length,
-    },
-  };
-}
-
-async function sendTagsToBackend(tagsUrl, payload) {
-  const response = await fetch(tagsUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-  const body = await readJsonBody(response);
-  if (!response.ok) {
-    throw new Error(body?.message || body?.detail || `HTTP ${response.status}`);
+  const toolCalls = state.toolLedger.length
+    ? state.toolLedger
+    : state.mockState.tool_ledger || [];
+  if (!toolCalls.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "Sin tools.";
+    els.toolLedgerPanel.append(empty);
+    return;
   }
-  setConnectionLabel("online", "ok");
+
+  toolCalls.slice(-8).reverse().forEach((call) => {
+    const row = document.createElement("div");
+    row.className = "tool-row";
+    const name = document.createElement("strong");
+    name.textContent = call.tool || "tool";
+    const meta = document.createElement("span");
+    const action = call.arguments?.action || call.result?.action || "";
+    const mutationCount = Array.isArray(call.mutations) ? call.mutations.length : 0;
+    meta.textContent = [action, mutationCount ? `${mutationCount} changes` : ""]
+      .filter(Boolean)
+      .join(" - ");
+    row.append(name, meta);
+    els.toolLedgerPanel.append(row);
+  });
 }
 
 async function readJsonBody(response) {
@@ -520,19 +809,165 @@ function buildHealthUrl() {
   }
 }
 
-function buildTagsUrl() {
+function buildScenariosUrl() {
   try {
     const endpoint = new URL(els.endpointInput.value.trim());
     const endpointPath = endpoint.pathname.replace(/\/+$/, "");
     endpoint.pathname = endpointPath.endsWith("/messages")
-      ? `${endpointPath.slice(0, -"/messages".length)}/conversation-tags`
-      : `${endpointPath}/conversation-tags`;
+      ? `${endpointPath.slice(0, -"/messages".length)}/scenarios`
+      : `${endpointPath}/scenarios`;
     endpoint.search = "";
     endpoint.hash = "";
     return endpoint.toString();
   } catch {
     return null;
   }
+}
+
+function buildResetUrl(conversationId) {
+  try {
+    const endpoint = new URL(els.endpointInput.value.trim());
+    const endpointPath = endpoint.pathname.replace(/\/+$/, "");
+    const basePath = endpointPath.endsWith("/messages")
+      ? endpointPath.slice(0, -"/messages".length)
+      : endpointPath;
+    endpoint.pathname = `${basePath}/conversations/${encodeURIComponent(conversationId)}/reset`;
+    endpoint.search = "";
+    endpoint.hash = "";
+    return endpoint.toString();
+  } catch {
+    return null;
+  }
+}
+
+async function resetBackendConversation(conversationId) {
+  if (!conversationId) {
+    return;
+  }
+  const resetUrl = buildResetUrl(conversationId);
+  if (!resetUrl) {
+    return;
+  }
+  await fetch(resetUrl, { method: "POST" });
+}
+
+function buildExportUrl(conversationId) {
+  try {
+    const endpoint = new URL(els.endpointInput.value.trim());
+    const endpointPath = endpoint.pathname.replace(/\/+$/, "");
+    const basePath = endpointPath.endsWith("/messages")
+      ? endpointPath.slice(0, -"/messages".length)
+      : endpointPath;
+    endpoint.pathname = `${basePath}/conversations/${encodeURIComponent(
+      conversationId,
+    )}/export.jsonl`;
+    endpoint.search = "";
+    endpoint.hash = "";
+    return endpoint.toString();
+  } catch {
+    return null;
+  }
+}
+
+function buildFeedbackUrl(conversationId) {
+  try {
+    const endpoint = new URL(els.endpointInput.value.trim());
+    const endpointPath = endpoint.pathname.replace(/\/+$/, "");
+    const basePath = endpointPath.endsWith("/messages")
+      ? endpointPath.slice(0, -"/messages".length)
+      : endpointPath;
+    endpoint.pathname = `${basePath}/conversations/${encodeURIComponent(
+      conversationId,
+    )}/feedback`;
+    endpoint.search = "";
+    endpoint.hash = "";
+    return endpoint.toString();
+  } catch {
+    return null;
+  }
+}
+
+async function exportConversationJsonl() {
+  const conversationId = els.conversationInput.value.trim();
+  const exportUrl = buildExportUrl(conversationId);
+  if (!conversationId || !exportUrl) {
+    appendMessage({ role: "system", text: "No hay conversacion valida para exportar." });
+    return;
+  }
+
+  try {
+    const response = await fetch(exportUrl, { method: "GET", cache: "no-store" });
+    const body = await response.text();
+    if (!response.ok) {
+      throw new Error(body || `HTTP ${response.status}`);
+    }
+    saveTextFile(
+      `sumampa-demo-${conversationId}.jsonl`,
+      body,
+      "application/x-ndjson;charset=utf-8",
+    );
+    appendMessage({ role: "system", text: "JSONL exportado para dataset local." });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    appendMessage({ role: "system", text: `No pude exportar JSONL: ${message}` });
+  }
+}
+
+async function submitManualFeedback() {
+  const conversationId = els.conversationInput.value.trim();
+  const feedbackUrl = buildFeedbackUrl(conversationId);
+  const feedbackText = els.feedbackText.value.trim();
+  if (!conversationId || !feedbackUrl) {
+    appendMessage({ role: "system", text: "No hay conversacion valida para feedback." });
+    return;
+  }
+  if (!state.feedbackTags.length && !feedbackText) {
+    appendMessage({
+      role: "system",
+      text: "Agrega un feedback tag o una nota antes de guardar feedback.",
+    });
+    return;
+  }
+
+  const userId = els.userInput.value.trim() || "demo-user-001";
+  try {
+    const response = await fetch(feedbackUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: userId,
+        channel: "whatsapp",
+        feedback_tags: state.feedbackTags.slice(),
+        feedback_text: feedbackText,
+        context: {
+          source: "demo/manual-feedback",
+          timestamp: new Date().toISOString(),
+          transcript: buildTranscriptSnapshot(),
+          evals_preset: state.evalTags.slice(),
+        },
+      }),
+    });
+    const body = await readJsonBody(response);
+    if (!response.ok) {
+      throw new Error(body?.message || body?.detail || `HTTP ${response.status}`);
+    }
+    appendMessage({ role: "system", text: "Manual feedback guardado." });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    appendMessage({ role: "system", text: `No pude guardar feedback: ${message}` });
+  }
+}
+
+function saveTextFile(filename, text, mimeType) {
+  const blob = new Blob([text], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function appendMessage(message) {
@@ -729,66 +1164,7 @@ function readFileAsDataUrl(file) {
   });
 }
 
-function buildMockInvoiceDataUrl() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 720;
-  canvas.height = 960;
-  const ctx = canvas.getContext("2d");
-
-  ctx.fillStyle = "#fffaf0";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "#143c33";
-  ctx.fillRect(0, 0, canvas.width, 122);
-  ctx.fillStyle = "#f2d27b";
-  ctx.fillRect(42, 32, 58, 58);
-  ctx.fillStyle = "#143c33";
-  ctx.font = "700 30px Arial";
-  ctx.fillText("A", 62, 72);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "700 38px Arial";
-  ctx.fillText("FACTURA MOCK", 128, 56);
-  ctx.font = "400 22px Arial";
-  ctx.fillText("Proveedor Demo SRL", 128, 90);
-
-  ctx.fillStyle = "#1d2a26";
-  ctx.font = "700 26px Arial";
-  ctx.fillText("Cliente: Demo Agro", 50, 178);
-  ctx.font = "400 20px Arial";
-  ctx.fillText("CUIT: 30-70000000-0", 50, 214);
-  ctx.fillText("Fecha: 2026-04-25", 50, 246);
-
-  const rows = [
-    ["Producto", "Cant.", "Subtotal"],
-    ["Insumo agricola", "3", "$82.800"],
-    ["Flete", "1", "$18.400"],
-    ["IVA 21%", "", "$21.252"],
-  ];
-  const x = 50;
-  const y = 330;
-  const w = 620;
-  const h = 56;
-  ctx.strokeStyle = "#d0c4b4";
-  rows.forEach((row, index) => {
-    const top = y + index * h;
-    ctx.fillStyle = index === 0 ? "#ead8ac" : "#fffdf8";
-    ctx.fillRect(x, top, w, h);
-    ctx.strokeRect(x, top, w, h);
-    ctx.fillStyle = "#1d2a26";
-    ctx.font = index === 0 ? "700 18px Arial" : "400 18px Arial";
-    ctx.fillText(row[0], x + 18, top + 35);
-    ctx.fillText(row[1], x + 390, top + 35);
-    ctx.fillText(row[2], x + 500, top + 35);
-  });
-
-  ctx.fillStyle = "#143c33";
-  ctx.fillRect(426, 740, 244, 92);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "700 22px Arial";
-  ctx.fillText("TOTAL", 454, 778);
-  ctx.font = "700 30px Arial";
-  ctx.fillText("$122.452", 454, 814);
-
-  return canvas.toDataURL("image/jpeg", 0.9);
-}
-
-init();
+init().catch((error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  appendMessage({ role: "system", text: `Error inicializando demo: ${message}` });
+});
