@@ -142,6 +142,8 @@ def main() -> int:
     admin_login = os.environ.get("ODOO_USERNAME", DEFAULT_ADMIN_LOGIN)
     admin_password = os.environ.get("ODOO_PASSWORD", DEFAULT_ADMIN_PASSWORD)
     master_password = os.environ.get("ODOO_MASTER_PASSWORD", DEFAULT_MASTER_PASSWORD)
+    if not admin_password.strip() or not master_password.strip():
+        raise RuntimeError("Set ODOO_PASSWORD and ODOO_MASTER_PASSWORD privately before bootstrap.")
     timeout_seconds = float(os.environ.get("ODOO_TIMEOUT_SECONDS", "30"))
     modules = tuple(
         module.strip()

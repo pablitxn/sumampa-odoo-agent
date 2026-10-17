@@ -1,56 +1,74 @@
 name: CI
-'on':
-  workflow_dispatch: ''
+
+# Paused: manual dispatch only while the GitHub repo is being prepared.
+on:
+  workflow_dispatch:
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: 'true'
+  cancel-in-progress: true
+
 jobs:
   lint:
     name: Ruff
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        version: latest
-    - name: Set up Python
-      run: uv python install 3.11
-    - name: Install dependencies
-      run: uv sync --extra dev
-    - name: Run Ruff
-      run: uv run ruff check src tests
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run Ruff
+        run: uv run ruff check src tests
+
   typecheck:
     name: Mypy
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        version: latest
-    - name: Set up Python
-      run: uv python install 3.11
-    - name: Install dependencies
-      run: uv sync --extra dev
-    - name: Run mypy
-      run: PYTHONPATH=src uv run mypy src/sackmesser
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run mypy
+        run: PYTHONPATH=src uv run mypy src/sackmesser
+
   test:
     name: Unit + E2E Coverage
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        version: latest
-    - name: Set up Python
-      run: uv python install 3.11
-    - name: Install dependencies
-      run: uv sync --extra dev
-    - name: Run unit + e2e with coverage gate
-      run: PYTHONPATH=src uv run pytest -q --cov=src/sackmesser --cov-report=term-missing
-        --cov-fail-under=85 tests/unit tests/e2e
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run unit + e2e with coverage gate
+        run: PYTHONPATH=src uv run pytest -q --cov=src/sackmesser --cov-report=term-missing --cov-fail-under=85 tests/unit tests/e2e
+
   integration:
     name: Integration (Postgres + Redis)
     runs-on: ubuntu-latest
@@ -58,46 +76,58 @@ jobs:
       redis:
         image: redis:7
         ports:
-        - 6379:6379
-        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout
-          5s --health-retries 20
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
-    - uses: actions/checkout@v4
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        version: latest
-    - name: Set up Python
-      run: uv python install 3.11
-    - name: Install dependencies
-      run: uv sync --extra dev
-    - name: Start private integration database
-      run: 'password=$(openssl rand -hex 24)
+      - uses: actions/checkout@v4
 
-        echo "::add-mask::$password"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
 
-        echo "POSTGRES_PASSWORD=$password" >> "$GITHUB_ENV"
+      - name: Set up Python
+        run: uv python install 3.11
 
-        echo "SESSION_STORE_POSTGRES_DSN=postgresql+asyncpg://orchid:$password@127.0.0.1:5432/sumampa_odoo_agent"
-        >> "$GITHUB_ENV"
+      - name: Install dependencies
+        run: uv sync --extra dev
 
-        docker run -d --name sumampa-integration-postgres -p 127.0.0.1:5432:5432 -e
-        POSTGRES_DB=sumampa_odoo_agent -e POSTGRES_USER=orchid -e POSTGRES_PASSWORD="$password"
-        postgres:16
+      - name: Start private integration database
+        run: |
+          password=$(openssl rand -hex 24)
+          echo "::add-mask::$password"
+          echo "POSTGRES_PASSWORD=$password" >> "$GITHUB_ENV"
+          echo "SESSION_STORE_POSTGRES_DSN=postgresql+asyncpg://orchid:$password@127.0.0.1:5432/sumampa_odoo_agent" >> "$GITHUB_ENV"
+          docker run -d --name sumampa-integration-postgres -p 127.0.0.1:5432:5432 -e POSTGRES_DB=sumampa_odoo_agent -e POSTGRES_USER=orchid -e POSTGRES_PASSWORD="$password" postgres:16
 
-        '
-    - name: Wait for Postgres and Redis
-      run: "python - <<'PY'\nimport socket\nimport time\n\ndef wait_for_port(host:\
-        \ str, port: int, service: str, timeout: int = 60) -> None:\n    deadline\
-        \ = time.time() + timeout\n    while time.time() < deadline:\n        with\
-        \ socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:\n           \
-        \ sock.settimeout(1)\n            try:\n                sock.connect((host,\
-        \ port))\n                print(f\"{service} ready on {host}:{port}\")\n \
-        \               return\n            except OSError:\n                time.sleep(1)\n\
-        \    raise SystemExit(f\"Timed out waiting for {service} on {host}:{port}\"\
-        )\n\nwait_for_port(\"127.0.0.1\", 5432, \"postgres\")\nwait_for_port(\"127.0.0.1\"\
-        , 6379, \"redis\")\nPY\n"
-    - name: Run integration tests
-      env:
-        REQUIRE_INTEGRATION_SERVICES: '1'
-      run: PYTHONPATH=src uv run pytest -q -m integration tests/integration
+      - name: Wait for Postgres and Redis
+        run: |
+          python - <<'PY'
+          import socket
+          import time
+
+          def wait_for_port(host: str, port: int, service: str, timeout: int = 60) -> None:
+              deadline = time.time() + timeout
+              while time.time() < deadline:
+                  with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                      sock.settimeout(1)
+                      try:
+                          sock.connect((host, port))
+                          print(f"{service} ready on {host}:{port}")
+                          return
+                      except OSError:
+                          time.sleep(1)
+              raise SystemExit(f"Timed out waiting for {service} on {host}:{port}")
+
+          wait_for_port("127.0.0.1", 5432, "postgres")
+          wait_for_port("127.0.0.1", 6379, "redis")
+          PY
+
+      - name: Run integration tests
+        env:
+          REQUIRE_INTEGRATION_SERVICES: "1"
+        run: PYTHONPATH=src uv run pytest -q -m integration tests/integration

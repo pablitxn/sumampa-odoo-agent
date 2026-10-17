@@ -15,6 +15,11 @@ def build_odoo_gateway(
     """Build the configured Odoo gateway."""
 
     if settings.odoo.mode == "jsonrpc":
+        if not settings.odoo.username.strip() or not settings.odoo.password.strip():
+            raise ConfigurationError(
+                "Set ODOO_USERNAME and ODOO_PASSWORD privately for JSON-RPC.",
+                code="odoo_credentials_missing",
+            )
         return OdooJsonRpcClient(
             base_url=settings.odoo.base_url,
             database=settings.odoo.database,

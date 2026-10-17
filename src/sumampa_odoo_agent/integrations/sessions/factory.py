@@ -16,6 +16,11 @@ async def build_session_store(settings: AppSettings) -> SessionStore:
     if mode == "memory":
         return InMemorySessionStore()
     if mode == "hybrid":
+        if not settings.session_store.postgres_dsn.strip():
+            raise ConfigurationError(
+                "Set SESSION_STORE_POSTGRES_DSN privately for hybrid sessions.",
+                code="session_store_credentials_missing",
+            )
         from sumampa_odoo_agent.integrations.sessions.postgres import PostgresSessionStore
         from sumampa_odoo_agent.integrations.sessions.redis import RedisSessionCache
 

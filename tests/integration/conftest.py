@@ -59,6 +59,9 @@ def session_store_env() -> dict[str, str]:
     if os.environ.get("RUN_SESSION_STORE_INTEGRATION") != "1":
         pytest.skip("Set RUN_SESSION_STORE_INTEGRATION=1 to run Postgres+Redis integration tests.")
 
+    if not SESSION_STORE_POSTGRES_DSN.strip():
+        pytest.fail("Set SESSION_STORE_POSTGRES_DSN privately for integration tests.")
+
     docker_info = subprocess.run(
         ["docker", "info"],
         cwd=PROJECT_ROOT,

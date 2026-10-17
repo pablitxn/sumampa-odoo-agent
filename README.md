@@ -397,3 +397,22 @@ ones, make sure:
 - `Add content roots to PYTHONPATH` and `Add source roots to PYTHONPATH` are enabled.
 - `Run with uv run` is enabled.
 - `PYTHONUNBUFFERED=1` is set.
+
+
+## Private local credentials
+
+Fill the blank credential fields in `.env` privately before starting the selected
+services. Docker Compose can render inactive profiles without their passwords;
+each password-bearing service rejects missing credentials when it starts. Ports
+bind to loopback. Existing volumes keep their initialized accounts: editing `.env`
+does not rotate them, and deleting volumes is not a rotation procedure.
+
+Provide a complete URL-encoded `SESSION_STORE_POSTGRES_DSN` for hybrid sessions.
+For the observability profile also supply `PHOENIX_SQL_DATABASE_URL` with the same
+private password as `PHOENIX_POSTGRES_PASSWORD`. The Odoo profile uses its separate
+`ODOO_DB_PASSWORD`; application login uses `ODOO_USERNAME`/`ODOO_PASSWORD` and
+bootstrap requires `ODOO_MASTER_PASSWORD`. Keep all three identities separate.
+Memory sessions and dry-run Odoo remain credential-free. S3 attachment storage
+requires its private access/secret pair; memory attachment storage does not.
+Use `uv run --env-file .env` for local commands and integration tests. Never commit
+replacement credentials or reuse the old public defaults.
